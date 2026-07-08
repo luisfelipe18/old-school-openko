@@ -267,30 +267,44 @@ manual/side-by-side (requiere base de datos SQL que CI no provee).
 **Objetivo:** ventana abierta y entrada funcionando en macOS/Linux; game loop
 portado. (Aún sin render: pantalla negra con clear color.)
 
-* [ ] Nuevo `WarFareMainSDL.cpp` (o `WarFareMain.cpp` unificado): `main()` +
-      `SDL_CreateWindow` (+ flags high-DPI); reproducir la lógica de
-      `CreateMainWindow` (modo ventana/fullscreen desde `Option.ini`;
-      `ChangeDisplaySettings` → `SDL_SetWindowFullscreen` con
-      `SDL_DisplayMode`).
-* [ ] Bucle: `SDL_PollEvent` + `TickActive()/RenderActive()` en idle,
-      replicando el patrón `PeekMessage` actual. Mapear eventos:
-      foco (`WM_ACTIVATE` → `SDL_EVENT_WINDOW_FOCUS_*`, incluida la salida en
-      fullscreen al perder foco), cierre (`WM_CLOSE` → lógica de
-      `RequestExit`/timer de combate), rueda (`WM_MOUSEWHEEL` →
-      `SDL_EVENT_MOUSE_WHEEL` con el mismo enrutado a UI/zoom de cámara).
-* [ ] Reimplementar `CLocalInput` sobre `SDL_GetKeyboardState` + eventos de
-      ratón: tabla estática `SDL_Scancode → DIK_*` (los 256 códigos), estados
-      press/pressed/repeat y detección de doble clic/drag idénticas.
-      **La API pública de `CLocalInput` no cambia** → los 150 usos de `DIK_*`
-      en gameplay quedan intactos.
-* [ ] Cursores: decodificar los `.cur` existentes (formato ICO/CUR, parser
-      trivial o `stb_image`) → `SDL_CreateColorCursor`; respetar la opción
-      `bWindowCursor` vs cursor software (`CGameCursor`).
-* [ ] `_IsKeyDown(VK_MENU)` y demás `VK_*` puntuales → PAL/SDL.
+* [x] Nuevo `WarFareMainSDL.cpp`: `main()` + `SDL_CreateWindow` (high-DPI),
+      modo ventana/fullscreen desde `Option.ini`
+      (`SDL_SetWindowFullscreen`), toggle Alt+Enter, y flag `--smoke N` que
+      corre todo el stack headless con el driver de video *dummy* (usado por
+      CI). La carga de opciones se extrajo de `WinMain` a
+      `GameOptions.cpp` (compartida por ambos entry points; cierra además el
+      pendiente de F1: `std::filesystem` + `Option.ini` por-usuario en
+      `~/Library/Application Support/OpenKO` / `$XDG_CONFIG_HOME/openko` vía
+      `Platform/PlatformPaths.h`).
+* [x] Bucle: `SDL_PollEvent` + tick en idle replicando el patrón
+      `PeekMessage`. Eventos mapeados: foco (`SDL_EVENT_WINDOW_FOCUS_*`),
+      cierre (`SDL_EVENT_QUIT`/`WINDOW_CLOSE_REQUESTED`), rueda con delta en
+      unidades `WHEEL_DELTA`. El enrutado final a
+      `RequestExit`/UI/`CameraZoom` queda marcado con `TODO(F6+)` en los
+      handlers — requiere que `CGameProcedure` compile (fases RHI); por
+      ahora el tick es un pase de diagnóstico que loguea DIK/ratón/foco.
+* [x] `CLocalInput` reimplementado sobre SDL (`LocalInputSDL.cpp`): tabla
+      `SDL_Scancode → DIK_*` (~130 teclas, valores dinput exactos), misma
+      máquina de estados press/released/doble-clic/drag que la versión
+      DirectInput, `0x80` en tecla retenida como DirectInput. **API pública
+      intacta** (el header solo gatea los miembros DirectInput); Windows
+      sigue usando `LocalInput.cpp` sin cambios.
+* [x] Cursores: `CursorDecoder` propio (CUR/ICO clásico: 1/4/8/24/32 bpp +
+      máscara AND) → `SDL_CreateColorCursor`, respetando `bWindowCursor`;
+      testeado contra los 7 `.cur` reales del repo. En runtime se cargan
+      desde el directorio del juego (en Windows siguen embebidos como
+      recursos).
+* [x] `VK_*` puntuales: sin nuevos usos en el camino POSIX (el
+      `_IsKeyDown(VK_MENU)` del WndProc es código Windows que se sustituye
+      por el chequeo DIK_LMENU del main SDL).
 
-**Aceptación:** en macOS se abre la ventana 1024×768, alterna
-ventana/fullscreen, y una build de diagnóstico registra teclado (como códigos
-DIK), ratón, rueda, foco y cierre limpio con desconexión de sockets.
+**Aceptación (estado):** en Linux (driver dummy) el ejecutable
+`KnightOnLine` crea la ventana 1024×768, procesa eventos, muestrea input y
+cierra limpio (`--smoke 30`, ahora paso de CI); los tests
+`WarFareClientTests` cubren mapeo de scancodes y decodificación de cursores
+(5/5 suites verdes). La validación visual en macOS (ventana real, toggle
+fullscreen, log de DIK al teclear) queda para la primera prueba en Mac —
+la desconexión de sockets al cerrar vuelve con `CGameProcedure` (F5/F6).
 
 ### Fase 4 — Utilidades D3DX residuales y carga de texturas (esfuerzo: ~1 sp)
 

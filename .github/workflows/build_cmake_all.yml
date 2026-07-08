@@ -195,14 +195,22 @@ jobs:
           cmake \
             --build build-client-posix \
             --target shared FileIO MathUtils Platform N3Base_client JpegFile \
-                     WarFare.Core \
-                     FileIO.Tests MathUtils.Tests Platform.Tests WarFareNet.Tests \
+                     WarFare.Core WarFare \
+                     FileIO.Tests MathUtils.Tests Platform.Tests \
+                     WarFareNet.Tests WarFareClient.Tests \
             --parallel
 
       - name: Run tests
         working-directory: build-client-posix
         run: |
           ctest --output-on-failure
+
+      # Headless end-to-end check of the SDL entry point: window creation,
+      # event pump, input sampling and clean shutdown on the dummy driver.
+      - name: Smoke-run the SDL client
+        working-directory: build-client-posix/bin/Release
+        run: |
+          SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy ./KnightOnLine --smoke 30
 
   build_macos:
     runs-on: macos-latest

@@ -77,6 +77,7 @@
     <ClCompile Include="APISocket.cpp">
       <Filter>Network</Filter>
     </ClCompile>
+    <ClCompile Include="GameOptions.cpp" />
     <ClCompile Include="BirdMng.cpp">
       <Filter>World\Birds</Filter>
     </ClCompile>
@@ -391,6 +392,7 @@
     <ClInclude Include="APISocket.h">
       <Filter>Network</Filter>
     </ClInclude>
+    <ClInclude Include="GameOptions.h" />
     <ClInclude Include="PacketDef.h">
       <Filter>Network</Filter>
     </ClInclude>

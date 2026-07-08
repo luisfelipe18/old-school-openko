@@ -15,6 +15,13 @@ CN3AlphaPrimitiveManager::~CN3AlphaPrimitiveManager()
 {
 }
 
+#ifndef _WIN32
+// POSIX port: alpha-sorted rendering comes back with the RHI (phase 5).
+void CN3AlphaPrimitiveManager::Render()
+{
+	m_nToDrawCount = 0;
+}
+#else
 void CN3AlphaPrimitiveManager::Render()
 {
 	__ASSERT(CN3Base::s_lpD3DDev, "3d device pointer is NULL!!!");
@@ -402,6 +409,8 @@ void CN3AlphaPrimitiveManager::Render()
 
 */
 }
+
+#endif // _WIN32
 
 __AlphaPrimitive* CN3AlphaPrimitiveManager::Add()
 {

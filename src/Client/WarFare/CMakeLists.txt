@@ -278,6 +278,8 @@ if(WIN32)
     GameBase.cpp
     GameBase.h
     GameDef.h
+    GameOptions.cpp
+    GameOptions.h
     GameEng.cpp
     GameEng.h
     StdAfx.h
@@ -304,10 +306,17 @@ if(WIN32)
     ${WARFARE_POPUP_NOTICE_TEXT_SOURCES}
   )
 else()
-  # POSIX port (phase 2, docs/PORT_POSIX_PLAN.md): only the network layer
-  # builds so far; the rest of the game rejoins as the SDL/RHI phases land.
+  # POSIX port (docs/PORT_POSIX_PLAN.md): network (phase 2) plus the SDL
+  # window/input layer (phase 3); the rest of the game rejoins with the RHI.
   set(WARFARE_CORE_SOURCES
+    CursorDecoder.cpp
+    CursorDecoder.h
     GameDef.h
+    GameOptions.cpp
+    GameOptions.h
+    LocalInput.h
+    LocalInputSDL.cpp
+    LocalInputSDL.h
     StdAfx.h
     ${WARFARE_NETWORK_SOURCES}
   )
@@ -318,11 +327,18 @@ add_library(WarFare.Core
   "${TARGET_CLIENT_CONFIG_HEADER}"
 )
 
-if(WIN32) # The game executable itself is still Windows-only (WinMain/WndProc); the POSIX one lands with SDL in phase 3.
+if(WIN32)
 add_executable(WarFare
   resource.h
   StdAfx.h
   WarFareMain.cpp
+)
+else()
+# POSIX entry point: SDL3 window + event loop (diagnostics-only until the
+# RHI render phases land).
+add_executable(WarFare
+  StdAfx.h
+  WarFareMainSDL.cpp
 )
 endif()
 
@@ -351,11 +367,12 @@ set_target_properties(WarFare.Core PROPERTIES
   CXX_SCAN_FOR_MODULES OFF
 )
 
+set_target_properties(WarFare PROPERTIES
+  OUTPUT_NAME          "KnightOnLine"
+  CXX_SCAN_FOR_MODULES OFF
+)
+
 if(WIN32)
-  set_target_properties(WarFare PROPERTIES
-    OUTPUT_NAME          "KnightOnLine"
-    CXX_SCAN_FOR_MODULES OFF
-  )
   set_target_properties(WarFare PROPERTIES WIN32_EXECUTABLE TRUE)
   target_sources(WarFare PRIVATE Resource.rc)
 endif()
@@ -363,9 +380,7 @@ endif()
 # Enable warnings as errors
 if(OPENKO_COMPILE_WARNINGS_AS_ERROR)
   set_property(TARGET WarFare.Core PROPERTY COMPILE_WARNING_AS_ERROR ON)
-  if(WIN32)
-    set_property(TARGET WarFare PROPERTY COMPILE_WARNING_AS_ERROR ON)
-  endif()
+  set_property(TARGET WarFare PROPERTY COMPILE_WARNING_AS_ERROR ON)
 endif()
 
 # Setup PCH
@@ -386,10 +401,17 @@ target_link_libraries(WarFare.Core PUBLIC
 # TCP transport (APISocket) runs on standalone Asio on every platform.
 target_link_libraries(WarFare.Core PRIVATE asio)
 
-if(WIN32)
-  target_link_libraries(WarFare PRIVATE
-    WarFare.Core
-  )
+if(NOT WIN32)
+  # SDL3 backs the window/input layer on POSIX platforms.
+  target_link_libraries(WarFare.Core PRIVATE SDL3::SDL3)
+endif()
+
+target_link_libraries(WarFare PRIVATE
+  WarFare.Core
+)
+
+if(NOT WIN32)
+  target_link_libraries(WarFare PRIVATE SDL3::SDL3)
 endif()
 
 # Link in the libs that we use
@@ -406,10 +428,8 @@ endif()
 target_compile_definitions(WarFare.Core PRIVATE
   _WINSOCK_DEPRECATED_NO_WARNINGS)
 
-if(WIN32)
-  target_compile_definitions(WarFare PRIVATE
-    _WINSOCK_DEPRECATED_NO_WARNINGS)
-endif()
+target_compile_definitions(WarFare PRIVATE
+  _WINSOCK_DEPRECATED_NO_WARNINGS)
 
 # Setup warning levels
 target_compile_options(WarFare.Core PRIVATE
@@ -418,13 +438,11 @@ target_compile_options(WarFare.Core PRIVATE
   $<$<CXX_COMPILER_ID:Clang>:-Wall -Wextra>
 )
 
-if(WIN32)
-  target_compile_options(WarFare PRIVATE
-    $<$<CXX_COMPILER_ID:MSVC>:/W3>
-    $<$<CXX_COMPILER_ID:GNU>:-Wall>
-    $<$<CXX_COMPILER_ID:Clang>:-Wall -Wextra>
-  )
-endif()
+target_compile_options(WarFare PRIVATE
+  $<$<CXX_COMPILER_ID:MSVC>:/W3>
+  $<$<CXX_COMPILER_ID:GNU>:-Wall>
+  $<$<CXX_COMPILER_ID:Clang>:-Wall -Wextra>
+)
 
 if(MSVC)
   set_property(TARGET WarFare PROPERTY
@@ -432,8 +450,6 @@ if(MSVC)
   )
 endif()
 
-if(WIN32)
-  add_custom_command(TARGET WarFare POST_BUILD
-    COMMAND "${CMAKE_COMMAND}" -E echo "$<TARGET_FILE:WarFare> has been built"
-  )
-endif()
+add_custom_command(TARGET WarFare POST_BUILD
+  COMMAND "${CMAKE_COMMAND}" -E echo "$<TARGET_FILE:WarFare> has been built"
+)

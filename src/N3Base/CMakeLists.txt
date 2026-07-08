@@ -197,6 +197,8 @@ set(N3BASE_POSIX_PORTABLE_SOURCES
   Material.inl
   My_3DStruct.cpp
   My_3DStruct.h
+  N3AlphaPrimitiveManager.cpp
+  N3AlphaPrimitiveManager.h
   N3AnimControl.cpp
   N3AnimControl.h
   N3AnimKey.cpp

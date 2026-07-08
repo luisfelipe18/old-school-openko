@@ -117,6 +117,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="APISocket.cpp" />
+    <ClCompile Include="GameOptions.cpp" />
     <ClCompile Include="Bird.cpp" />
     <ClCompile Include="BirdMng.cpp" />
     <ClCompile Include="ClientResourceFormatter.cpp" />
@@ -223,6 +224,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="APISocket.h" />
+    <ClInclude Include="GameOptions.h" />
     <ClInclude Include="Bird.h" />
     <ClInclude Include="BirdMng.h" />
     <ClInclude Include="Bitset.h" />
