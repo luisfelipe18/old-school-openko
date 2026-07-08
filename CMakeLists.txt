@@ -42,6 +42,7 @@ option(OPENKO_BUILD_SERVERS "Build the server projects (default on)" ON)
 option(OPENKO_BUILD_TESTS "Build the test projects (default on)" ON)
 option(OPENKO_COMPILE_WARNINGS_AS_ERROR "Enable treating warnings as errors (default on)" ON)
 option(OPENKO_FETCH_CLIENT_ASSETS "Enable fetching client assets (default on)" ON)
+option(OPENKO_CLIENT_POSIX_EXPERIMENTAL "Experimental: allow enabling the client build on POSIX platforms (macOS/Linux) while the port is in progress - see docs/PORT_POSIX_PLAN.md (default off)" OFF)
 
 # Define the bin directory; defaults to repo/bin
 set(OPENKO_BIN_DIR "${CMAKE_BINARY_DIR}/bin" CACHE PATH "Directory for final binaries")
@@ -57,7 +58,14 @@ if(WIN32)
   endif()
 else()
   # Client & tool projects are currently only supported on Windows.
-  set(OPENKO_BUILD_CLIENT OFF)
+  # The client is being ported to POSIX platforms (see docs/PORT_POSIX_PLAN.md);
+  # configuring it there can be opted into with -DOPENKO_CLIENT_POSIX_EXPERIMENTAL=ON.
+  # NOTE: only a subset of the client targets currently builds on these platforms.
+  if(OPENKO_CLIENT_POSIX_EXPERIMENTAL)
+    message(STATUS "OpenKO: OPENKO_CLIENT_POSIX_EXPERIMENTAL is ON - keeping OPENKO_BUILD_CLIENT=${OPENKO_BUILD_CLIENT} on this platform (work-in-progress port)")
+  else()
+    set(OPENKO_BUILD_CLIENT OFF)
+  endif()
   set(OPENKO_BUILD_CLIENT_TOOLS OFF)
   set(OPENKO_BUILD_TOOLS OFF)
 endif()
@@ -69,6 +77,7 @@ message(STATUS "OpenKO feature: OPENKO_BUILD_SERVERS - ${OPENKO_BUILD_SERVERS}")
 message(STATUS "OpenKO feature: OPENKO_BUILD_TESTS - ${OPENKO_BUILD_TESTS}")
 message(STATUS "OpenKO feature: OPENKO_COMPILE_WARNINGS_AS_ERROR - ${OPENKO_COMPILE_WARNINGS_AS_ERROR}")
 message(STATUS "OpenKO feature: OPENKO_FETCH_CLIENT_ASSETS - ${OPENKO_FETCH_CLIENT_ASSETS}")
+message(STATUS "OpenKO feature: OPENKO_CLIENT_POSIX_EXPERIMENTAL - ${OPENKO_CLIENT_POSIX_EXPERIMENTAL}")
 message(STATUS "OpenKO feature: OPENKO_BIN_DIR - ${OPENKO_BIN_DIR}")
 
 if(WIN32)
@@ -131,8 +140,12 @@ add_subdirectory(src/MathUtils)
 
 if(OPENKO_BUILD_CLIENT OR OPENKO_BUILD_TOOLS)
   # Dependencies
-  set(CMAKE_FOLDER "N3Base/_deps")
-  require_config_package(dx9sdk)
+  if(WIN32)
+    # The DirectX 9 SDK only applies to Windows; the POSIX client port
+    # renders through the RHI backends instead (see docs/PORT_POSIX_PLAN.md).
+    set(CMAKE_FOLDER "N3Base/_deps")
+    require_config_package(dx9sdk)
+  endif()
 
   set(CMAKE_FOLDER "N3Base/_deps/mpg123")
   require_package(Mpg123)
@@ -157,6 +170,13 @@ endif()
 
 if(OPENKO_BUILD_CLIENT)
   message(STATUS "OpenKO: Preparing to configure client...")
+
+  if(NOT WIN32)
+    # POSIX port (experimental): SDL3 provides the windowing/input/GPU layer.
+    # Prefers a system/package-manager SDL3; falls back to building from source.
+    set(CMAKE_FOLDER "Client/_deps")
+    require_package(SDL3)
+  endif()
 
   set(CMAKE_FOLDER "Client")
   add_subdirectory(src/Client/WarFare)

@@ -33,6 +33,20 @@ The following setups are tested by our GitHub workflows and are known to build:
  - macOS 15 **(only the server projects at this time)**
    - Apple Clang 15
 
+#### Experimental: POSIX (macOS/Linux) client port
+
+The client is being ported to macOS/Linux; the roadmap lives in
+[docs/PORT_POSIX_PLAN.md](docs/PORT_POSIX_PLAN.md). Configuring the client on these
+platforms is opt-in via `-DOPENKO_CLIENT_POSIX_EXPERIMENTAL=ON`, with ready-made
+presets in `CMakePresets.json` (e.g. `cmake --preset macos-arm64-debug` or
+`cmake --preset linux-clang-debug`). Only a subset of the client targets currently
+builds on these platforms; the `Client POSIX experimental` CI jobs track that subset.
+
+Suggested packages:
+* macOS: `brew install cmake ninja sdl3`
+* Ubuntu/Debian: `apt install build-essential clang cmake ninja-build`
+  (SDL3 is fetched and built from source automatically when not installed system-wide)
+
 ### Visual Studio solutions
 
 Solutions are available in the root directory:

@@ -138,23 +138,27 @@ Xcode GPU Frame Capture + Instruments (macOS), `ccache` para CI.
 **Objetivo:** que `cmake -B build` en macOS/Linux configure el cliente (aunque
 aún no compile completo) y que CI vigile la regresión.
 
-* [ ] `CMakeLists.txt` raíz: sustituir el force-OFF de `OPENKO_BUILD_CLIENT`
+* [x] `CMakeLists.txt` raíz: sustituir el force-OFF de `OPENKO_BUILD_CLIENT`
       en no-Windows por una opción experimental
       `OPENKO_CLIENT_POSIX_EXPERIMENTAL` (default OFF) que permita activarlo.
-* [ ] Presets de CMake (`CMakePresets.json`): `macos-arm64-debug`,
-      `macos-arm64-release`, `linux-clang-debug`, `linux-gcc-release`
-      (generador Ninja, `ccache` si existe).
-* [ ] Integrar deps POSIX: verificar que `deps/openal-soft`, `deps/mpg123`,
-      `deps/zlib`, `deps/asio` (variantes no-msvc con
-      `fetch-and-build-wrappers`) compilan en macOS/Linux; añadir `SDL3`,
-      `freetype` y `glad` (find_package con fallback a FetchContent, para que
-      Homebrew/apt sean opcionales).
-* [ ] GitHub Actions: job `client-macos` (macos-15, Apple Clang) y
-      `client-linux` (ubuntu-24.04, clang-18) que por ahora compilan solo los
-      targets que vayan quedando portables (empezando por `MathUtils`,
-      `FileIO`, `shared`). El job crece fase a fase.
-* [ ] Documentar setup: `brew install cmake ninja sdl3 freetype openal-soft mpg123`
-      / `apt install build-essential cmake ninja-build libsdl3-dev libfreetype-dev libopenal-dev libmpg123-dev libgl1-mesa-dev`.
+      El fetch del `dx9sdk` quedó además condicionado a `WIN32`.
+* [x] Presets de CMake (`CMakePresets.json`): `macos-arm64-{debug,release}`,
+      `linux-clang-{debug,release}`, `linux-gcc-{debug,release}` (generador
+      Ninja, flag experimental ON, assets OFF por defecto).
+* [x] Integrar deps POSIX: verificado en Linux que `asio`, `mpg123`,
+      `openal-soft` y `jpeg` configuran con el cliente activado; añadido
+      `cmake/FindSDL3.cmake` (sistema primero, fallback a FetchContent con
+      SDL 3.2.30 pineado). `freetype` y `glad` se difieren a las fases que
+      los consumen (F7 y F6) para no arrastrar dependencias muertas.
+* [x] GitHub Actions: job `Client POSIX experimental` (ubuntu-latest/clang +
+      macos-latest/AppleClang) en `build_cmake_all.yml`, que compila los
+      targets portables (`shared`, `FileIO`, `MathUtils` + tests) y ejecuta
+      ctest. El job crece fase a fase. (`JpegFile` aún requiere `windows.h`
+      → entra en F1.)
+* [x] Documentar setup en el README (sección "Experimental: POSIX client
+      port"): `brew install cmake ninja sdl3` / `apt install build-essential
+      clang cmake ninja-build`; el resto de deps se auto-obtienen por
+      FetchContent.
 
 **Aceptación:** CI verde en 3 SOs con los targets portables actuales;
 Windows intacto.

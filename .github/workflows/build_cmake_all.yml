@@ -149,6 +149,59 @@ jobs:
         run: |
           ctest -C "${{ matrix.BUILD_CONFIGURATION }}" --verbose
 
+  # Experimental POSIX client port (see docs/PORT_POSIX_PLAN.md).
+  # Only the portable subset of client targets is expected to build here;
+  # the target list below grows as the port progresses.
+  build_client_posix:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            name: "Linux - clang"
+            cc: clang
+            cxx: clang++
+          - os: macos-latest
+            name: "macOS - AppleClang"
+            cc: clang
+            cxx: clang++
+
+    runs-on: ${{ matrix.os }}
+
+    name: "Client POSIX experimental - ${{ matrix.name }}"
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: 'false'
+
+      - uses: lukka/get-cmake@latest
+
+      - name: Configure CMake
+        env:
+          CC: ${{ matrix.cc }}
+          CXX: ${{ matrix.cxx }}
+        run: |
+          cmake -S . \
+            -B build-client-posix \
+            -G "Ninja" \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DOPENKO_CLIENT_POSIX_EXPERIMENTAL=ON \
+            -DOPENKO_BUILD_SERVERS=FALSE \
+            -DOPENKO_FETCH_CLIENT_ASSETS=FALSE
+
+      - name: Build portable client targets
+        run: |
+          cmake \
+            --build build-client-posix \
+            --target shared FileIO MathUtils FileIO.Tests MathUtils.Tests \
+            --parallel
+
+      - name: Run tests
+        working-directory: build-client-posix
+        run: |
+          ctest --output-on-failure
+
   build_macos:
     runs-on: macos-latest
 
