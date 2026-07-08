@@ -255,6 +255,38 @@ public:
 	bool CheckClanGrade(int min, int max) const;
 	bool CheckKnight() const;
 
+	/// \brief Checks USER_KNIGHTS_RANKING ranking to see if a user is eligible for a stipend.
+	/// \param minRank
+	/// \param maxRank
+	/// \param type
+	/// \return true if the user's rank is within the given range;
+	/// false if the server's group is SERVER_GROUP_OVERFLOW; otherwise false
+	/// \originalName CheckClanRank
+	/// \note The logic from the official .idb for this function had many flaws and redundancies.
+	/// It is likely the case that the associated op codes were never used officially.  The
+	/// function has been refactored to align with the ranking logic actually used in the game, such
+	/// that it can be usable.
+	bool CheckUserRanking(int32_t minRank = 1, int32_t maxRank = 100,
+		e_StipendType type = STIPEND_TYPE_USER_KNIGHTS) const;
+
+	/// \brief Gets the user's rank from the USER_KNIGHTS_RANK cache.
+	/// \return User rank in USER_KNIGHTS_RANKING; RANK_INVALID if not found
+	uint8_t GetUserKnightsRank() const;
+
+	/// \brief Gets the user's rank from the USER_PERSONAL_RANK cache.
+	/// \return User rank in USER_PERSONAL_RANKING; RANK_INVALID if not found
+	uint8_t GetUserPersonalRank() const;
+
+	/// \brief Processes a user request for a USER_KNIGHTS_RANK stipend
+	void RequestReward();
+
+	/// \brief Processes a user request for a USER_PERSONAL_RANK stipend
+	void RequestPersonalRankReward();
+
+	/// \brief Handles the Aujard response for a User Stipend request
+	/// \return true when user stipend successfully paid, false otherwise
+	bool HandleUserStipendResponse(const char* buffer);
+
 	/// \brief Checks to see if a user's clan ranking is between minRank and maxRank (inclusive).  If
 	/// the user's clan is successfully loaded, syncs the user's m_byKnightsRank value with the clan's m_byRanking
 	/// \return true when a user's clan ranking is in range, false otherwise
@@ -280,9 +312,27 @@ public:
 	bool JobGroupCheck(int16_t jobgroupid) const;
 	void SelectMsg(const EXEC* pExec);
 	void SendNpcSay(const EXEC* pExec);
-	void SendSay(int16_t eventIdUp, int16_t eventIdOk, int16_t message1, int16_t message2 = -1,
-		int16_t message3 = -1, int16_t message4 = -1, int16_t message5 = -1, int16_t message6 = -1,
-		int16_t message7 = -1, int16_t message8 = -1);
+
+	/// \brief Simplified override for single message SAY
+	/// \param message Single message to send to User
+	void SendSay(int32_t message);
+
+	/// \brief Full method signature for SAY messages
+	/// \param eventIdUp eventId 'up', appears to be unused but specified in evt scripts
+	/// \param eventIdOk eventId 'ok', appears to be unused but specified in evt scripts
+	/// \param message1 First message in chain, required
+	/// \param message2 Second message in chain, optional
+	/// \param message3 Third message in chain, optional
+	/// \param message4 Fourth message in chain, optional
+	/// \param message5 Fifth message in chain, optional
+	/// \param message6 Sixth message in chain, optional
+	/// \param message7 Seventh message in chain, optional
+	/// \param message8 Eighth message in chain, optional
+	void SendSay(int32_t eventIdUp, int32_t eventIdOk, int32_t message1,
+		int32_t message2 = MSG_NULL, int32_t message3 = MSG_NULL, int32_t message4 = MSG_NULL,
+		int32_t message5 = MSG_NULL, int32_t message6 = MSG_NULL, int32_t message7 = MSG_NULL,
+		int32_t message8 = MSG_NULL);
+
 	bool CheckClass(int16_t class1, int16_t class2 = -1, int16_t class3 = -1, int16_t class4 = -1,
 		int16_t class5 = -1, int16_t class6 = -1) const;
 	bool CheckPromotionEligible();
@@ -501,6 +551,12 @@ public:
 
 	/// \brief Changes national loyalty by a set amount.
 	void ChangeLoyalty(int loyaltyChange, bool isExcludeMonthly);
+
+	/// \brief Checks if a user's manner points fall within the given range
+	/// \return true if manner point is in range; false otherwise
+	/// \note Officially, the max parameter is considered out of range.  However,
+	/// this is also never used in any official .evt scripts.
+	bool CheckManner(int32_t min, int32_t max) const;
 
 	/// \brief Changes manner loyalty by a set amount.
 	void ChangeMannerPoint(int loyaltyChange);

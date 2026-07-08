@@ -122,6 +122,9 @@ enum e_GameEventType : uint8_t
 inline constexpr int ZONE_TRAP_INTERVAL = 1;  // Interval is one second right now.
 inline constexpr int ZONE_TRAP_DAMAGE   = 10; // HP Damage is 10 for now :)
 
+/// \brief Invalid User rank - either invalid parameters or the user is not in top 100
+inline constexpr uint8_t RANK_INVALID   = 0xFF;
+
 ////////////////////////////////////////////////////////////
 
 enum e_BeefRoastVictory : uint8_t
@@ -208,6 +211,8 @@ enum e_ItemLogType : uint8_t
 	ITEM_LOG_WAREHOUSE_GET          = 8,
 	ITEM_LOG_UPGRADE                = 9,
 	ITEM_LOG_GIVE_ITEM              = 10,
+	ITEM_LOG_KNIGHTS_REWARD         = 18,
+	ITEM_LOG_PERSONAL_REWARD        = 21,
 	ITEM_LOG_GIVE_ITEM_EXCHANGE_101 = 20
 };
 
@@ -263,6 +268,12 @@ enum e_AttributeType : uint8_t
 	ATTRIBUTE_FIRE      = 1,
 	ATTRIBUTE_ICE       = 2,
 	ATTRIBUTE_LIGHTNING = 3
+};
+
+enum e_StipendClaimStatus : uint8_t
+{
+	STIPEND_UNCLAIMED = 0,
+	STIPEND_CLAIMED   = 1
 };
 
 // Bundle unit

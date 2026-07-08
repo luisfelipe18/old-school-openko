@@ -5862,6 +5862,11 @@ void CUser::ChangeLoyalty(const int loyaltyChange, const bool isExcludeMonthly)
 	Send(sendBuff, sendIndex);
 }
 
+bool CUser::CheckManner(const int32_t min, const int32_t max) const
+{
+	return m_pUserData->m_iMannerPoint >= min && m_pUserData->m_iMannerPoint <= max;
+}
+
 void CUser::ChangeMannerPoint(const int loyaltyAmount)
 {
 	static constexpr uint8_t MANNER_LEVEL_BAND_1    = 20;
@@ -9254,28 +9259,32 @@ void CUser::GivePromotionQuest()
 	{
 		case CLASS_EL_BLADE:
 		case CLASS_KA_BERSERKER:
-			SendSay(6020, 6020, 6002, 6011);
+			SendSay(EVENTID_MASTER_QUEST_WARRIOR, EVENTID_MASTER_QUEST_WARRIOR,
+				MSG_MASTER_QUEST_DESC_WARRIOR, MSG_MASTER_QUEST_ACCEPT_WARRIOR);
 			if (CheckExistEvent(QUEST_MASTER_WARRIOR, QUEST_STATE_NOT_STARTED))
 				SaveEvent(QUEST_MASTER_WARRIOR, QUEST_STATE_IN_PROGRESS);
 			break;
 
 		case CLASS_KA_HUNTER:
 		case CLASS_EL_RANGER:
-			SendSay(6012, 6012, 7002, 7011);
+			SendSay(EVENTID_MASTER_QUEST_ROGUE, EVENTID_MASTER_QUEST_ROGUE,
+				MSG_MASTER_QUEST_DESC_ROGUE, MSG_MASTER_QUEST_ACCEPT_ROGUE);
 			if (CheckExistEvent(QUEST_MASTER_ROGUE, QUEST_STATE_NOT_STARTED))
 				SaveEvent(QUEST_MASTER_ROGUE, QUEST_STATE_IN_PROGRESS);
 			break;
 
 		case CLASS_KA_SORCERER:
 		case CLASS_EL_MAGE:
-			SendSay(6014, 6014, 8002, 8011);
+			SendSay(EVENTID_MASTER_QUEST_MAGE, EVENTID_MASTER_QUEST_MAGE,
+				MSG_MASTER_QUEST_DESC_MAGE, MSG_MASTER_QUEST_ACCEPT_MAGE);
 			if (CheckExistEvent(QUEST_MASTER_MAGE, QUEST_STATE_NOT_STARTED))
 				SaveEvent(QUEST_MASTER_MAGE, QUEST_STATE_IN_PROGRESS);
 			break;
 
 		case CLASS_KA_SHAMAN:
 		case CLASS_EL_CLERIC:
-			SendSay(6020, 6020, 9002, 9011);
+			SendSay(EVENTID_MASTER_QUEST_PRIEST, EVENTID_MASTER_QUEST_PRIEST,
+				MSG_MASTER_QUEST_DESC_PRIEST, MSG_MASTER_QUEST_ACCEPT_PRIEST);
 			if (CheckExistEvent(QUEST_MASTER_PRIEST, QUEST_STATE_NOT_STARTED))
 				SaveEvent(QUEST_MASTER_PRIEST, QUEST_STATE_IN_PROGRESS);
 			break;
@@ -11956,6 +11965,10 @@ bool CUser::CheckEventLogic(const EVENT_DATA* pEventData)
 					bExact = true;
 				break;
 
+			case LOGIC_CHECK_MANNER:
+				bExact = CheckManner(pLE->m_LogicElseInt[0], pLE->m_LogicElseInt[1]);
+				break;
+
 			case LOGIC_CHECK_MONSTER_CHALLENGE_TIME:
 				if (m_pMain->_monsterChallengeActiveType == pLE->m_LogicElseInt[0]
 					&& m_pMain->_monsterChallengeState != 0)
@@ -12009,6 +12022,16 @@ bool CUser::CheckEventLogic(const EVENT_DATA* pEventData)
 					// NOTE: officially this returns true, ending check processing immediately
 					bExact = true;
 				}
+				break;
+
+			case LOGIC_CHECK_LOYALTY_RANK_MONTHLY:
+				bExact = CheckUserRanking(
+					pLE->m_LogicElseInt[0], pLE->m_LogicElseInt[1], STIPEND_TYPE_USER_PERSONAL);
+				break;
+
+			case LOGIC_CHECK_LOYALTY_RANK:
+				bExact = CheckUserRanking(
+					pLE->m_LogicElseInt[0], pLE->m_LogicElseInt[1], STIPEND_TYPE_USER_KNIGHTS);
 				break;
 
 			case LOGIC_CHECK_CLAN_RANKING:
@@ -12141,6 +12164,14 @@ bool CUser::RunEvent(const EVENT_DATA* pEventData)
 
 			case EXEC_ROB_NOAH:
 				GoldLose(pExec->m_ExecInt[0]);
+				break;
+
+			case EXEC_REQUEST_REWARD:
+				RequestReward();
+				break;
+
+			case EXEC_REQUEST_PERSONAL_RANK_REWARD:
+				RequestPersonalRankReward();
 				break;
 
 			case EXEC_RETURN:
@@ -12922,22 +12953,22 @@ bool CUser::CheckPromotionEligible()
 	{
 		case CLASS_EL_PROTECTOR:
 		case CLASS_KA_GUARDIAN:
-			SendSay(-1, -1, 6006);
+			SendSay(MSG_ALREADY_MASTER_WARRIOR);
 			return false;
 
 		case CLASS_EL_ASSASSIN:
 		case CLASS_KA_PENETRATOR:
-			SendSay(-1, -1, 7006);
+			SendSay(MSG_ALREADY_MASTER_ROGUE);
 			return false;
 
 		case CLASS_EL_ENCHANTER:
 		case CLASS_KA_NECROMANCER:
-			SendSay(-1, -1, 8006);
+			SendSay(MSG_ALREADY_MASTER_MAGE);
 			return false;
 
 		case CLASS_EL_DRUID:
 		case CLASS_KA_DARKPRIEST:
-			SendSay(-1, -1, 9006);
+			SendSay(MSG_ALREADY_MASTER_PRIEST);
 			return false;
 
 		default:
@@ -12954,7 +12985,7 @@ bool CUser::CheckPromotionEligible()
 					&& m_pUserData->m_sClass != CLASS_EL_BLADE)
 				|| m_pUserData->m_bLevel < MASTER_LVL)
 			{
-				SendSay(-1, -1, 6001);
+				SendSay(MSG_NOT_ELIGIBLE_MASTER_WARRIOR);
 				return false;
 			}
 			return true;
@@ -12964,7 +12995,7 @@ bool CUser::CheckPromotionEligible()
 					&& m_pUserData->m_sClass != CLASS_EL_RANGER)
 				|| m_pUserData->m_bLevel < MASTER_LVL)
 			{
-				SendSay(-1, -1, 7001);
+				SendSay(MSG_NOT_ELIGIBLE_MASTER_ROGUE);
 				return false;
 			}
 			return true;
@@ -12974,7 +13005,7 @@ bool CUser::CheckPromotionEligible()
 					&& m_pUserData->m_sClass != CLASS_EL_MAGE)
 				|| m_pUserData->m_bLevel < MASTER_LVL)
 			{
-				SendSay(-1, -1, 8001);
+				SendSay(MSG_NOT_ELIGIBLE_MASTER_MAGE);
 				return false;
 			}
 			return true;
@@ -12984,7 +13015,7 @@ bool CUser::CheckPromotionEligible()
 					&& m_pUserData->m_sClass != CLASS_EL_CLERIC)
 				|| m_pUserData->m_bLevel < MASTER_LVL)
 			{
-				SendSay(-1, -1, 9001);
+				SendSay(MSG_NOT_ELIGIBLE_MASTER_PRIEST);
 				return false;
 			}
 			return true;
@@ -13064,9 +13095,14 @@ void CUser::SendNpcSay(const EXEC* pExec)
 	Send(sendBuffer, sendIndex);
 }
 
-void CUser::SendSay(int16_t eventIdUp, int16_t eventIdOk, int16_t message1, int16_t message2,
-	int16_t message3, int16_t message4, int16_t message5, int16_t message6, int16_t message7,
-	int16_t message8)
+void CUser::SendSay(const int32_t message)
+{
+	SendSay(EVENTID_NULL, EVENTID_NULL, message);
+}
+
+void CUser::SendSay(const int32_t eventIdUp, const int32_t eventIdOk, const int32_t message1,
+	const int32_t message2, const int32_t message3, const int32_t message4, const int32_t message5,
+	const int32_t message6, const int32_t message7, const int32_t message8)
 {
 	int sendIndex = 0;
 	char sendBuffer[128] {};
@@ -14028,6 +14064,253 @@ bool CUser::CheckKnight() const
 	return (pKnights->m_byFlag == KNIGHTS_TYPE);
 }
 
+bool CUser::CheckUserRanking(
+	const int32_t minRank, const int32_t maxRank, const e_StipendType type) const
+{
+	static constexpr uint8_t MIN_STIPEND_RANK = 1;
+
+	// The original official function capped this at 50, however, we know that to be
+	// incorrect.  Stipend salaries are available for rank 1-100
+	static constexpr uint8_t MAX_STIPEND_RANK = 100;
+
+	// Check is not valid on overflow servers
+	if (m_pMain->m_nServerGroup == SERVER_GROUP_OVERFLOW)
+		return false;
+
+	// if inputs are out of valid range (between MIN_STIPEND_RANK and MAX_STIPEND_RANK)
+	// return false without scanning rankInfo
+	if (minRank < MIN_STIPEND_RANK || maxRank < minRank || minRank > MAX_STIPEND_RANK)
+	{
+		spdlog::warn("CUser::CheckUserRanking: Called with invalid bounds [minRank={} maxRank={}]",
+			minRank, maxRank);
+		return false;
+	}
+
+	const uint8_t rank = type == STIPEND_TYPE_USER_KNIGHTS ? GetUserKnightsRank()
+														   : GetUserPersonalRank();
+	if (rank == RANK_INVALID)
+		return false;
+
+	return rank >= minRank && rank <= maxRank;
+}
+
+uint8_t CUser::GetUserKnightsRank() const
+{
+	// rankArray is an ordered map
+	for (const auto [rank, rankInfo] : m_pMain->m_UserKnightsRankMap)
+	{
+		const auto& userId = m_pUserData->m_bNation == NATION_ELMORAD ? rankInfo->ElmoUserId
+																	  : rankInfo->KarusUserId;
+
+		if (!userId.has_value())
+			continue;
+
+		if (rankInfo != nullptr && strcmp(userId->c_str(), m_pUserData->m_id) == 0)
+			return static_cast<uint8_t>(rank);
+	}
+
+	return RANK_INVALID;
+}
+
+uint8_t CUser::GetUserPersonalRank() const
+{
+	// rankArray is an ordered map
+	for (const auto [rank, rankInfo] : m_pMain->m_UserPersonalRankMap)
+	{
+		const auto& userId = m_pUserData->m_bNation == NATION_ELMORAD ? rankInfo->ElmoUserId
+																	  : rankInfo->KarusUserId;
+
+		if (!userId.has_value())
+			continue;
+
+		if (rankInfo != nullptr && strcmp(userId->c_str(), m_pUserData->m_id) == 0)
+			return static_cast<uint8_t>(rank);
+	}
+
+	return RANK_INVALID;
+}
+
+void CUser::RequestReward()
+{
+	// Request can only be processed on the primary server
+	if (m_pMain->m_nServerGroup == SERVER_GROUP_OVERFLOW)
+		return;
+
+	const uint8_t rank = GetUserKnightsRank();
+	if (rank == RANK_INVALID)
+		return;
+
+	const model::UserKnightsRank* rankInfo = m_pMain->m_UserKnightsRankMap.GetData(rank);
+	if (rankInfo == nullptr)
+		return;
+
+	const uint8_t isClaimed = m_pUserData->m_bNation == NATION_KARUS ? rankInfo->IsClaimedKarus
+																	 : rankInfo->IsClaimedElmo;
+
+	if (isClaimed == STIPEND_CLAIMED)
+		SendSay(MSG_STIPEND_ALREADY_CLAIMED);
+	else
+	{
+		// Set up and send request to Aujard
+		char sendBuffer[128] {};
+		int sendIndex = 0;
+		SetByte(sendBuffer, DB_OPENKO_CUSTOM, sendIndex);
+		SetShort(sendBuffer, _socketId, sendIndex);
+		SetByte(sendBuffer, DB_CUSTOM_STIPEND_REQUEST, sendIndex);
+		SetByte(sendBuffer, STIPEND_TYPE_USER_KNIGHTS, sendIndex);
+		SetByte(sendBuffer, rank, sendIndex);
+		SetByte(sendBuffer, m_pUserData->m_bNation, sendIndex);
+		SetString1(sendBuffer, m_pUserData->m_id, sendIndex);
+		m_pMain->m_LoggerSendQueue.PutData(sendBuffer, sendIndex);
+
+		// Response will be handled async in HandleUserStipendResponse
+	}
+}
+
+void CUser::RequestPersonalRankReward()
+{
+	// Request can only be processed on the primary server
+	if (m_pMain->m_nServerGroup == SERVER_GROUP_OVERFLOW)
+		return;
+
+	const uint8_t rank = GetUserPersonalRank();
+	if (rank == RANK_INVALID)
+		return;
+
+	const model::UserPersonalRank* rankInfo = m_pMain->m_UserPersonalRankMap.GetData(rank);
+	if (rankInfo == nullptr)
+		return;
+
+	const uint8_t isClaimed = m_pUserData->m_bNation == NATION_KARUS ? rankInfo->IsClaimedKarus
+																	 : rankInfo->IsClaimedElmo;
+
+	if (isClaimed == STIPEND_CLAIMED)
+		SendSay(MSG_STIPEND_ALREADY_CLAIMED);
+	else
+	{
+		// Set up and send request to Aujard
+		char sendBuffer[128] {};
+		int sendIndex = 0;
+		SetByte(sendBuffer, DB_OPENKO_CUSTOM, sendIndex);
+		SetShort(sendBuffer, _socketId, sendIndex);
+		SetByte(sendBuffer, DB_CUSTOM_STIPEND_REQUEST, sendIndex);
+		SetByte(sendBuffer, STIPEND_TYPE_USER_PERSONAL, sendIndex);
+		SetByte(sendBuffer, rank, sendIndex);
+		SetByte(sendBuffer, m_pUserData->m_bNation, sendIndex);
+		SetString1(sendBuffer, m_pUserData->m_id, sendIndex);
+		m_pMain->m_LoggerSendQueue.PutData(sendBuffer, sendIndex);
+
+		// Response will be handled async in HandleUserStipendResponse
+	}
+}
+
+bool CUser::HandleUserStipendResponse(const char* buffer)
+{
+	// parse the message
+	int index                  = 0;
+	const uint8_t stipendType  = GetByte(buffer, index);
+	const uint8_t responseCode = GetByte(buffer, index);
+	const uint8_t rank         = GetByte(buffer, index);
+	const uint8_t nation       = GetByte(buffer, index);
+	const uint8_t charIdLen    = GetByte(buffer, index);
+	char charId[MAX_ID_SIZE + 1] {};
+	if (charIdLen > 0 && charIdLen < MAX_ID_SIZE + 1)
+		GetString(charId, buffer, charIdLen, index);
+	else
+	{
+		spdlog::error("User::HandleUserStipendResponse: Invalid charId length [stipendType={:X} "
+					  "charIdLen={}]",
+			stipendType, charIdLen);
+		return false;
+	}
+
+	// while unlikely, ensure that the current User is the intended character
+	if (strcmp(m_pUserData->m_id, charId) != 0)
+	{
+		spdlog::error("User::HandleUserStipendResponse: User socket mismatch, stipend unpaid "
+					  "[stipendType={:X} charId={}]",
+			stipendType, charId);
+		return false;
+	}
+
+	// This is not a replacement for restarting the servers after updating rankings.
+	// It will only be triggered if there's a change in ranking, making it obvious the
+	// cache is out of sync.
+	if (responseCode == STIPEND_RESPONSE_RESYNC)
+	{
+		spdlog::info("User::HandleUserStipendResponse: cache out of sync, reloading [cacheType={}]",
+			stipendType);
+		// Ebenezer cache is out of sync with the database, reload and re-run request.
+		if (stipendType == STIPEND_TYPE_USER_KNIGHTS)
+		{
+			m_pMain->LoadUserKnightsRank();
+			RequestReward();
+		}
+		else
+		{
+			m_pMain->LoadUserPersonalRank();
+			RequestPersonalRankReward();
+		}
+		return false;
+	}
+
+	// Set as claimed in cache
+	int32_t stipendAmount = 0;
+	uint8_t logType       = ITEM_LOG_KNIGHTS_REWARD;
+	if (stipendType == STIPEND_TYPE_USER_KNIGHTS)
+	{
+		model::UserKnightsRank* rankInfo = m_pMain->m_UserKnightsRankMap.GetData(rank);
+		if (rankInfo == nullptr)
+		{
+			spdlog::error("User::HandleUserStipendResponse: UserKnightsRank cache miss, "
+						  "stipend unpaid [stipendType={:X} charId={} rank={}]",
+				stipendType, charId, rank);
+			return false;
+		}
+		if (nation == NATION_KARUS)
+			rankInfo->IsClaimedKarus = STIPEND_CLAIMED;
+		else
+			rankInfo->IsClaimedElmo = STIPEND_CLAIMED;
+
+		stipendAmount = rankInfo->Money;
+	}
+	else
+	{
+		model::UserPersonalRank* rankInfo = m_pMain->m_UserPersonalRankMap.GetData(rank);
+		if (rankInfo == nullptr)
+		{
+			spdlog::error("User::HandleUserStipendResponse: UserPersonalRank cache miss, "
+						  "stipend unpaid [stipendType={:X} charId={} rank={}]",
+				stipendType, charId, rank);
+			return false;
+		}
+		if (nation == NATION_KARUS)
+			rankInfo->IsClaimedKarus = STIPEND_CLAIMED;
+		else
+			rankInfo->IsClaimedElmo = STIPEND_CLAIMED;
+
+		stipendAmount = rankInfo->Salary;
+		logType       = ITEM_LOG_PERSONAL_REWARD;
+	}
+
+	if (responseCode == STIPEND_RESPONSE_SUCCESS)
+	{
+		// Pay the user
+		GoldGain(stipendAmount);
+
+		ItemLogToAgent(
+			m_pUserData->m_id, m_pUserData->m_id, logType, 0, ITEM_NOAH, stipendAmount, 0);
+
+		SendSay(MSG_STIPEND_GIVE_REWARD);
+	}
+	else if (responseCode == STIPEND_RESPONSE_ALREADY_CLAIMED)
+	{
+		SendSay(MSG_STIPEND_ALREADY_CLAIMED);
+		return false;
+	}
+	return true;
+}
+
 bool CUser::CheckClanRanking(const int minRank, const int maxRank)
 {
 	CKnights* knights = m_pMain->GetKnightsPtr(m_pUserData->m_bKnights);
@@ -14086,10 +14369,12 @@ void CUser::RecvDeleteChar(const char* pBuf)
 		SetShort(sendBuffer, nLen, sendIndex);
 		SetString(sendBuffer, charId, nLen, sendIndex);
 
-		if (m_pMain->m_nServerGroup == 0)
+		if (m_pMain->m_nServerGroup == SERVER_GROUP_NONE)
 			m_pMain->Send_UDP_All(sendBuffer, sendIndex);
 		else
-			m_pMain->Send_UDP_All(sendBuffer, sendIndex, 1);
+			// TODO: Possible bug, should likely send m_pMain->m_nServerGroup
+			// Ultimately compares serverNo to serverGroup, which doesn't seem right
+			m_pMain->Send_UDP_All(sendBuffer, sendIndex, SERVER_GROUP_PRIMARY);
 	}
 
 	memset(sendBuffer, 0, sizeof(sendBuffer));
@@ -14480,7 +14765,7 @@ void CUser::PromoteUser()
 	if (!CheckPromotionEligible() || !ValidatePromotion(newClass))
 		return;
 
-	int16_t successMessage = -1;
+	int16_t successMessage = MSG_NULL;
 	e_QuestId masterQuest  = QUEST_INVALID;
 
 	switch (m_pUserData->m_sClass)
@@ -14490,11 +14775,11 @@ void CUser::PromoteUser()
 			if (!CheckAndRobItems(WARRIOR_ITEMS))
 			{
 				// Send failure message - missing items
-				SendSay(-1, -1, 6007);
+				SendSay(MSG_MISSING_ITEMS_MASTER_WARRIOR);
 				return;
 			}
 
-			successMessage = 6005;
+			successMessage = MSG_COMPLETE_MASTER_WARRIOR;
 			masterQuest    = QUEST_MASTER_WARRIOR;
 			break;
 
@@ -14503,11 +14788,11 @@ void CUser::PromoteUser()
 			if (!CheckAndRobItems(ROGUE_ITEMS))
 			{
 				// Send failure message
-				SendSay(-1, -1, 7007);
+				SendSay(MSG_MISSING_ITEMS_MASTER_ROGUE);
 				return;
 			}
 
-			successMessage = 7005;
+			successMessage = MSG_COMPLETE_MASTER_ROGUE;
 			masterQuest    = QUEST_MASTER_ROGUE;
 			break;
 
@@ -14516,11 +14801,11 @@ void CUser::PromoteUser()
 			if (!CheckAndRobItems(MAGE_ITEMS))
 			{
 				// Send failure message
-				SendSay(-1, -1, 8007);
+				SendSay(MSG_MISSING_ITEMS_MASTER_MAGE);
 				return;
 			}
 
-			successMessage = 8005;
+			successMessage = MSG_COMPLETE_MASTER_MAGE;
 			masterQuest    = QUEST_MASTER_MAGE;
 			break;
 
@@ -14529,11 +14814,11 @@ void CUser::PromoteUser()
 			if (!CheckAndRobItems(PRIEST_ITEMS, PRIEST_GOLD_REQ))
 			{
 				// Send failure message
-				SendSay(-1, -1, 9007);
+				SendSay(MSG_MISSING_ITEMS_MASTER_PRIEST);
 				return;
 			}
 
-			successMessage = 9005;
+			successMessage = MSG_COMPLETE_MASTER_PRIEST;
 			masterQuest    = QUEST_MASTER_PRIEST;
 			break;
 
@@ -14543,7 +14828,7 @@ void CUser::PromoteUser()
 	}
 
 	// Send success message
-	SendSay(-1, -1, successMessage);
+	SendSay(successMessage);
 
 	if (!SaveEvent(masterQuest, QUEST_STATE_COMPLETE))
 	{
