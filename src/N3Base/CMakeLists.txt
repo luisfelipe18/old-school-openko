@@ -105,6 +105,14 @@ set(N3BASE_TOOL_WEATHER_SOURCES
   N3GlobalEffectMng.h
 )
 
+set(N3BASE_COMMON_RHI_SOURCES
+  RHI/RHIDevice.h
+  RHI/RHIDeviceD3D9.h
+  RHI/RHIDeviceNull.cpp
+  RHI/RHIDeviceNull.h
+  RHI/RHIStateKey.h
+)
+
 set(N3BASE_COMMON_SOURCES
   BitMapFile.cpp
   BitMapFile.h
@@ -179,6 +187,7 @@ set(N3BASE_COMMON_SOURCES
   WinCrypt.h
   VertexTypes.inl
   ${N3BASE_COMMON_AUDIO_SOURCES}
+  ${N3BASE_COMMON_RHI_SOURCES}
   ${N3BASE_COMMON_EFFECT_SOURCES}
   ${N3BASE_COMMON_SKY_SOURCES}
   ${N3BASE_COMMON_UI_SOURCES}
@@ -215,11 +224,16 @@ set(N3BASE_POSIX_PORTABLE_SOURCES
   N3Transform.h
   N3TransformCollision.cpp
   N3TransformCollision.h
+  N3VMesh.cpp
+  N3VMesh.h
   StdAfxBase.h
   WaveFormat.cpp
   WaveFormat.h
+  WinCrypt.cpp
+  WinCrypt.h
   VertexTypes.inl
   ${N3BASE_COMMON_AUDIO_SOURCES}
+  ${N3BASE_COMMON_RHI_SOURCES}
 )
 
 if(WIN32)

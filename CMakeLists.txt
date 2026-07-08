@@ -254,6 +254,7 @@ if(OPENKO_BUILD_TESTS)
   add_subdirectory(tests/Platform)
 
   if(OPENKO_BUILD_CLIENT)
+    add_subdirectory(tests/N3Base)
     add_subdirectory(tests/WarFare)
   endif()
   

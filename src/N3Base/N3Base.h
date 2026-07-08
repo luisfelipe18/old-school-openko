@@ -149,10 +149,27 @@ struct __Options
 	bool bVSyncEnabled    = true;
 };
 
+#include "RHI/RHIDevice.h"
+
 class CN3Base
 {
 public:
 	static LPDIRECT3DDEVICE9 s_lpD3DDev;     // Device 참조 포인터.. 멋대로 해제하면 안된다..
+
+	// Render backend (docs/PORT_POSIX_PLAN.md, phase 5): RHIDeviceD3D9 wraps
+	// s_lpD3DDev on Windows; other platforms install Null/GL backends.
+	// Render code migrates from s_lpD3DDev-> to RHIDevice()->.
+	static IRHIDevice* s_pRHIDev;
+
+	static IRHIDevice* RHIDevice()
+	{
+		return s_pRHIDev;
+	}
+
+	static void RHIDeviceSet(IRHIDevice* pDevice)
+	{
+		s_pRHIDev = pDevice;
+	}
 	static D3DPRESENT_PARAMETERS s_DevParam; // Device 생성 Present Parameter
 	static D3DCAPS9 s_DevCaps;               // Device 호환성...
 	static uint32_t s_dwTextureCaps;         // Texture 지원.. DXT1 ~ DXT5, Square Only

@@ -197,7 +197,7 @@ jobs:
             --target shared FileIO MathUtils Platform N3Base_client JpegFile \
                      WarFare.Core WarFare \
                      FileIO.Tests MathUtils.Tests Platform.Tests \
-                     WarFareNet.Tests WarFareClient.Tests \
+                     N3Base.Tests WarFareNet.Tests WarFareClient.Tests \
             --parallel
 
       - name: Run tests

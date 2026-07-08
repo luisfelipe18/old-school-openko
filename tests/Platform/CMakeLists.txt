@@ -1,4 +1,5 @@
 add_executable(Platform.Tests
+  PlatformCrypto_test.cpp
   PlatformEncoding_test.cpp
   PlatformTime_test.cpp)
 

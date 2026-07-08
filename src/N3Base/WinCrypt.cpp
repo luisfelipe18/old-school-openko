@@ -4,6 +4,58 @@
 
 #include <FileIO/File.h>
 
+#ifndef _WIN32
+
+#include <cstring>
+
+CWinCrypt::CWinCrypt()
+{
+	m_bIsLoaded = false;
+	memset(m_byRc4Key, 0, sizeof(m_byRc4Key));
+}
+
+bool CWinCrypt::Load()
+{
+	Release();
+
+	// Equivalent of the CryptoAPI derivation below: for RC4 keys no longer
+	// than the hash, CryptDeriveKey's key material is the leading bytes of
+	// SHA1(Cipher) (128 bits requested via the 0x800000 flag).
+	uint8_t digest[SHA1_DIGEST_SIZE];
+	Sha1(Cipher, sizeof(Cipher) - 1, digest);
+	memcpy(m_byRc4Key, digest, sizeof(m_byRc4Key));
+
+	m_bIsLoaded = true;
+	return true;
+}
+
+void CWinCrypt::Release()
+{
+	m_bIsLoaded = false;
+	memset(m_byRc4Key, 0, sizeof(m_byRc4Key));
+}
+
+bool CWinCrypt::ReadFile(
+	File& file, void* buffer, size_t bytesToRead, size_t* bytesRead /*= nullptr*/)
+{
+	if (!file.Read(buffer, bytesToRead, bytesRead))
+		return false;
+
+	// CryptDecrypt with Final=TRUE restarts the RC4 stream on every call,
+	// which Rc4Apply reproduces (whole buffers are decrypted in one go).
+	if (IsLoaded())
+		Rc4Apply(m_byRc4Key, sizeof(m_byRc4Key), buffer, bytesToRead);
+
+	return true;
+}
+
+CWinCrypt::~CWinCrypt()
+{
+	Release();
+}
+
+#else // _WIN32: original CryptoAPI implementation
+
 CWinCrypt::CWinCrypt()
 {
 	m_bIsLoaded      = false;
@@ -81,3 +133,5 @@ CWinCrypt::~CWinCrypt()
 {
 	Release();
 }
+
+#endif // _WIN32

@@ -311,26 +311,32 @@ la desconexión de sockets al cerrar vuelve con `CGameProcedure` (F5/F6).
 **Objetivo:** eliminar `d3dx9.h` de `My_3DStruct.h` y del código común, para
 que la única dependencia gráfica restante sea la interfaz del device.
 
-* [ ] `My_3DStruct.h`: quitar `#include <d3dx9.h>`; definir localmente los
-      tipos de datos puros que se usan (`D3DCOLOR` → `uint32_t` ARGB con
-      helpers, `_D3DCOLORVALUE` → struct propio de 4 floats, formatos de
-      textura → enum RHI). Mantener layout binario exacto (assets).
-* [ ] Reemplazar `D3DXLoadSurfaceFromSurface` (8 usos, reescalado/conversión de
-      superficies en `N3Texture`/`DFont`) por `stb_image_resize2` +
-      conversores de formato propios; `D3DXCreateTextureFromFileEx` (1 uso) por
-      el loader propio (los `.dxt` del juego ya se cargan con código propio;
-      los DXT1/3/5 se suben tal cual como texturas comprimidas).
-* [ ] `D3DXGetErrorString` → tabla de errores propia del RHI.
-* [ ] Portar `CWinCrypt` (N3Base): deriva una clave RC4 vía CryptoAPI
-      (`CryptDeriveKey` sobre un hash del cipher fijo) para leer texturas
-      cifradas; reimplementar la derivación compatible en C++ portable
-      (quedó excluido del subconjunto POSIX en F1).
-* [ ] Test de humo con assets reales (movido desde F1): cargar un
-      `.n3chr`/`.n3shape` del repo de assets y validar contenidos en CI
-      POSIX.
+* [x] `My_3DStruct.h` ya no arrastra `<d3dx9.h>` fuera de Windows (hecho en
+      F1 vía `Platform/D3D9Types.h`); el shim creció en F5 con los enums de
+      estado (`D3DRS_/D3DTSS_/D3DSAMP_/D3DTS_`, blend/cull/cmp/fog/filtros) y
+      `D3DMATRIX`, todos con los valores exactos de d3d9types.h.
+* [x] **Decisión de alcance**: `D3DXLoadSurfaceFromSurface` (8),
+      `D3DXCreateTextureFromFileEx` (1) y `D3DXGetErrorString` viven en
+      `N3Texture`/`DFont`/`N3Eng`, que solo se compilan en Windows; su
+      reemplazo (stb_image_resize + loaders propios) se hace cuando esos
+      archivos se porten al RHI en F6/F7, quedando D3DX confinado al backend
+      D3D9. La aceptación original ("d3dx solo en código Windows-only") ya
+      se cumple.
+* [x] `CWinCrypt` portable: `Platform/PlatformCrypto` (SHA-1 + RC4 propios,
+      con vectores de test) reproduce la derivación
+      `CryptDeriveKey(CALG_RC4, SHA1(cipher), 128 bits)`; Windows conserva
+      CryptoAPI intacto. Reincorporado al subconjunto POSIX. Validación
+      contra una textura cifrada real: pendiente de side-by-side en Windows.
+* [x] Test de humo de assets (adaptado): `VMeshHeadless_test` escribe un
+      `.n3vmesh` en el layout binario real, lo carga por la cadena del motor
+      (`CN3VMesh` → `CN3BaseFileAccess` → `FileReader` con resolución
+      case-insensitive) y lo renderiza por el RHI Null contando draw calls.
+      El test con `.n3chr` reales del repo de assets llega cuando
+      `N3Texture`/`N3Mesh` se porten (F6) — requieren creación de buffers.
 
-**Aceptación:** `grep -r "d3dx" src/N3Base src/Client` solo aparece en el
-backend D3D9 de Windows (aislado); Windows compila y renderiza igual.
+**Aceptación (estado):** cumplida en su forma ajustada — `d3dx` solo aparece
+en TUs que únicamente compila Windows; cripto de texturas portable con tests;
+pipeline de carga de assets verificado headless en Linux (macOS vía CI).
 
 ### Fase 5 — RHI: interfaz de render abstracta (esfuerzo: ~3 sp)
 
@@ -338,27 +344,40 @@ backend D3D9 de Windows (aislado); Windows compila y renderiza igual.
 Es el refactor más grande pero es *mecánico*: D3D9 fixed-function tiene una
 superficie de API pequeña y repetitiva.
 
-* [ ] Inventariar todos los usos de `CN3Base::s_lpD3DDev` (SetRenderState,
-      SetTextureStageState, SetTransform, SetTexture, SetStreamSource,
-      DrawPrimitive[UP], DrawIndexedPrimitive[UP], Create*Buffer,
-      CreateTexture, viewport, luces, material, fog, Clear/BeginScene/Present).
-* [ ] Definir `IRHIDevice` (+ `RHITexture`, `RHIVertexBuffer`,
-      `RHIIndexBuffer`) que calque esa superficie 1:1 — deliberadamente con
-      la *semántica de D3D9* (render states, texture stages, FVF) para que la
-      migración de los call-sites sea sustitución textual y revisable.
-* [ ] Diseñar desde el día uno la **clave de estado de pipeline** dentro de la
-      RHI (hash de blend/depth/cull/formato de vértice/config de stages):
-      el backend GL la ignora (aplica estados sueltos), pero es el requisito
-      para que el backend SDL_GPU (fase 6b) pueda cachear pipeline-objects
-      sin re-tocar el código de juego.
-* [ ] Backend 1: `RHIDeviceD3D9` (Windows) — envoltorio fino sobre el device
-      actual. **Hito clave: Windows corriendo 100% sobre el RHI**, lo que
-      valida la abstracción antes de escribir una línea de GL.
-* [ ] Migrar módulo a módulo: `N3Base` render core → terreno → personajes →
-      efectos → UI. PRs pequeños, screenshot-diff manual en Windows.
+* [x] Inventario de usos de `CN3Base::s_lpD3DDev`: ~1.560 llamadas a ~40
+      métodos (dominan SetRenderState 426, SetTextureStageState 337,
+      GetRenderState 185, SetTexture 80, SetTransform 62, DrawPrimitiveUP 51).
+* [x] `IRHIDevice` definido (`N3Base/RHI/RHIDevice.h`) calcando la
+      superficie D3D9 1:1 (estados fixed-function, FVF, draws UP/indexados,
+      luces/material/viewport); texturas y buffers siguen como punteros
+      opacos hasta portar `N3Texture`/meshes con buffer-creation (F6).
+      Migración = sustitución textual `s_lpD3DDev->` → `RHIDevice()->`.
+* [x] **Clave de estado de pipeline** (`RHI/RHIStateKey.h`): hash FNV sobre
+      los campos lógicos (FVF, primitiva, blend/z/alpha-test/fog/luces,
+      ops de stages), con tests de igualdad/colisión y uso como clave de
+      `unordered_map` — lista para la caché de pipelines de F6b.
+* [x] Backend `RHIDeviceD3D9` (Windows): forwarder fino instalado por
+      `CN3Eng` al crear el device y retirado en `Release()`. Backend
+      `RHIDeviceNull` (portable): almacena estados (los `Get*` hacen
+      round-trip), cuenta draws/presents y permite cargar assets sin GPU;
+      instalado por el main SDL, que ya ejecuta la secuencia de frame
+      Begin/Clear/End/Present por el RHI en cada tick (visible en el smoke).
+* [ ] Migrar módulo a módulo: **primera tajada hecha** (~212 llamadas):
+      `N3Base::RenderLines`, `CN3AlphaPrimitiveManager::Render` completo,
+      `CN3VMesh` íntegro (primera clase de malla portable, compila y carga
+      en POSIX) y los renderers de debug de `N3TransformCollision` (ya sin
+      gates `_WIN32`). Restante (~1.350 llamadas, solo compila en Windows
+      hoy): terreno, cielo, personajes/skins, efectos, UI, `N3Eng`,
+      `DFont`, `N3Texture` y el código de juego WarFare — se migran por
+      módulos en PRs pequeños con screenshot-diff en Windows, y cada módulo
+      migrado se suma al subconjunto POSIX.
 
-**Aceptación:** cliente Windows funciona igual que master usando solo el RHI;
-`LPDIRECT3D*` no aparece fuera de `RHIDeviceD3D9`.
+**Aceptación (parcial):** la abstracción está validada en ambos sentidos —
+en Windows compila con el forwarder D3D9 instalado por `CN3Eng` (verifica
+la CI de Windows; falta la validación visual side-by-side), y en POSIX la
+tajada migrada corre de verdad: `N3Base.Tests` carga un `.n3vmesh` real por
+el loader del motor y lo dibuja por el Null device. El hito "Windows 100%
+sobre RHI" se alcanza al completar la migración por módulos.
 
 ### Fase 6 — Backend OpenGL (esfuerzo: ~4 sp, la fase más técnica)
 

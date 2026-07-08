@@ -139,12 +139,12 @@ int CN3TransformCollision::CheckCollisionPrecisely(
 		return 0;
 }
 
-#if (defined(_DEBUG) || defined(_N3TOOL)) && defined(_WIN32) // POSIX: back with the RHI
+#if defined(_DEBUG) || defined(_N3TOOL)
 void CN3TransformCollision::RenderCollisionMesh()
 {
 	if (nullptr == m_pMeshCollision)
 		return;
-	s_lpD3DDev->SetTransform(D3DTS_WORLD, m_Matrix.toD3D());
+	RHIDevice()->SetTransform(D3DTS_WORLD, m_Matrix.toD3D());
 
 	m_pMeshCollision->Render(0xffff0000); // 빨간색.
 }
@@ -153,7 +153,7 @@ void CN3TransformCollision::RenderClimbMesh()
 {
 	if (nullptr == m_pMeshClimb)
 		return;
-	s_lpD3DDev->SetTransform(D3DTS_WORLD, m_Matrix.toD3D());
+	RHIDevice()->SetTransform(D3DTS_WORLD, m_Matrix.toD3D());
 
 	m_pMeshClimb->Render(0xff0000ff); // 파란색..
 }

@@ -1,5 +1,6 @@
 ﻿#include "StdAfxBase.h"
 #include "N3Eng.h"
+#include "RHI/RHIDeviceD3D9.h"
 #include "N3Light.h"
 #include "LogWriter.h"
 
@@ -50,6 +51,9 @@ CN3Eng::~CN3Eng()
 	CN3Base::ReleaseResrc();
 	delete[] m_DeviceInfo.pModes;
 
+	delete s_pRHIDev;
+	RHIDeviceSet(nullptr);
+
 	if (s_lpD3DDev)
 	{
 		int nRefCount = s_lpD3DDev->Release();
@@ -80,6 +84,9 @@ void CN3Eng::Release()
 
 	delete[] m_DeviceInfo.pModes;
 	memset(&m_DeviceInfo, 0, sizeof(m_DeviceInfo));
+
+	delete s_pRHIDev;
+	RHIDeviceSet(nullptr);
 
 	if (s_lpD3DDev)
 	{
@@ -409,6 +416,12 @@ bool CN3Eng::Init(
 		CLogWriter::Write("CNEng::Init - Not supported HardWare TnL");
 #endif
 	}
+
+	// Install the RHI backend over the freshly created device
+	// (docs/PORT_POSIX_PLAN.md, phase 5): render code migrates from
+	// s_lpD3DDev-> to RHIDevice()->.
+	delete s_pRHIDev;
+	RHIDeviceSet(new RHIDeviceD3D9(s_lpD3DDev));
 
 	// Device 지원 항목은??
 	// DXT 지원 여부..

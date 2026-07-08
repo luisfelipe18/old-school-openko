@@ -19,6 +19,7 @@
 
 #include <N3Base/LogWriter.h>
 #include <N3Base/N3Base.h>
+#include <N3Base/RHI/RHIDeviceNull.h>
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
@@ -162,6 +163,11 @@ int main(int argc, char* argv[])
 
 	SetupWindowCursor();
 
+	// Headless RHI backend until the GL/SDL_GPU ones land (phases 6/6b):
+	// render code runs and is counted, pixels come later.
+	RHIDeviceNull rhiDevice;
+	CN3Base::RHIDeviceSet(&rhiDevice);
+
 	CLocalInput localInput;
 	localInput.Init(nullptr, nullptr);
 
@@ -186,9 +192,11 @@ int main(int argc, char* argv[])
 		localInput.Tick();
 		LogInputDiagnostics(localInput);
 
-		// Alt+Enter toggles windowed/fullscreen (ChangeDisplaySettings
-		// equivalent; the SDL smoke path proves the plumbing).
-		if (localInput.IsKeyDown(DIK_LMENU) && localInput.IsKeyPress(DIK_RETURN))
+		// Alt+Enter (Option+Enter or Cmd+Enter on macOS) toggles
+		// windowed/fullscreen (ChangeDisplaySettings equivalent).
+		if ((localInput.IsKeyDown(DIK_LMENU) || localInput.IsKeyDown(DIK_RMENU)
+				|| localInput.IsKeyDown(DIK_LWIN) || localInput.IsKeyDown(DIK_RWIN))
+			&& localInput.IsKeyPress(DIK_RETURN))
 		{
 			CN3Base::s_Options.bWindowMode = !CN3Base::s_Options.bWindowMode;
 			SDL_SetWindowFullscreen(g_pWindow, !CN3Base::s_Options.bWindowMode);
@@ -198,8 +206,13 @@ int main(int argc, char* argv[])
 		if (localInput.IsKeyPressed(DIK_ESCAPE))
 			g_bQuitRequested = true;
 
-		// TODO(F5/F6): CGameProcedure::TickActive() + RenderActive() replace
-		// the diagnostics + delay below.
+		// TODO(F6): CGameProcedure::TickActive() + RenderActive() replace the
+		// diagnostics below; the RHI frame sequence already runs here.
+		rhiDevice.BeginScene();
+		rhiDevice.Clear(D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, 0xFF000000, 1.0f, 0);
+		rhiDevice.EndScene();
+		rhiDevice.Present();
+
 		SDL_Delay(g_bWindowInFocus ? 10 : 50);
 
 		++frame;
@@ -212,6 +225,8 @@ int main(int argc, char* argv[])
 
 	// Clean shutdown (the WndProc used to disconnect the game sockets here;
 	// that returns with CGameProcedure in the render phases).
+	CN3Base::RHIDeviceSet(nullptr);
+	spdlog::info("frames presented through the RHI: {}", rhiDevice.PresentCount());
 	if (g_pCursor != nullptr)
 		SDL_DestroyCursor(g_pCursor);
 	SDL_DestroyWindow(g_pWindow);
