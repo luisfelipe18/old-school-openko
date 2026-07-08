@@ -14,6 +14,7 @@
   </Folder>
   <Folder Name="/client/">
     <Project Path="src/Client/WarFare/WarFare.Core.vcxproj" Id="02a7c2de-6db6-477a-977a-adf0bf2204a6">
+      <BuildDependency Project="deps/fetch-and-build-wrappers/fetch-asio.vcxproj" />
       <BuildDependency Project="src/Client/JpegFile/JpegFile.vcxproj" />
       <BuildDependency Project="src/N3Base/N3Base_client.vcxproj" />
       <BuildDependency Project="deps/fetch-and-build-wrappers/fetch-ko-client-assets.vcxproj" />

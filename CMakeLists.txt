@@ -252,6 +252,10 @@ if(OPENKO_BUILD_TESTS)
   add_subdirectory(tests/FileIO)
   add_subdirectory(tests/MathUtils)
   add_subdirectory(tests/Platform)
+
+  if(OPENKO_BUILD_CLIENT)
+    add_subdirectory(tests/WarFare)
+  endif()
   
   if(OPENKO_BUILD_SERVERS)
     add_subdirectory(tests/Server/Ebenezer)

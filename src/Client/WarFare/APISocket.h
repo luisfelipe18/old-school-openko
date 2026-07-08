@@ -18,11 +18,11 @@
 #include <shared/JvCryption.h>
 #endif
 
+#include <memory>
 #include <queue>
 #include <string>
 #include <vector>
 
-inline constexpr int WM_SOCKETMSG  = (WM_USER + 1);
 inline constexpr int SEND_BUF_SIZE = 262144; // 최대 버퍼..
 inline constexpr int RECV_BUF_SIZE = 262144; // 최대 버퍼..
 
@@ -53,11 +53,17 @@ public:
 	}
 };
 
+// Asio-backed TCP transport, defined in APISocket.cpp. Kept out of this
+// header so the ~40 game translation units including it don't pull asio in.
+class CAPISocketTransport;
+
 class CAPISocket
 {
 protected:
-	SOCKET m_hSocket;
+	std::unique_ptr<CAPISocketTransport> m_pTransport;
 
+	// Legacy parameter, kept so the Connect() signature (and its many call
+	// sites) stay untouched; the asio transport doesn't use it.
 	HWND m_hWndTarget;
 	std::string m_szIP;
 	uint32_t m_dwPort;
@@ -66,6 +72,7 @@ protected:
 	std::vector<char> m_RecvBuf;
 
 	BOOL m_bConnected;
+	BOOL m_bConnectionLost; // set when the transport detects a close/error
 
 	ExpandableCircularBuffer m_CB;
 
@@ -96,6 +103,14 @@ public:
 	}
 
 	void Release();
+
+	// Pumps the socket once: drains readable data into the packet queue and
+	// detects disconnects. Call once per game tick (this replaces the old
+	// WSAAsyncSelect window-message notifications).
+	// Returns FALSE exactly once when the connection was lost since the last
+	// poll, so the caller can run its connection-closed handling.
+	BOOL Poll();
+
 	void Receive();
 	BOOL ReceiveProcess();
 	void Send(uint8_t* pData, int nSize);

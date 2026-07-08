@@ -270,45 +270,61 @@ set(WARFARE_POPUP_NOTICE_TEXT_SOURCES
   WarMessage.h
 )
 
+if(WIN32)
+  set(WARFARE_CORE_SOURCES
+    Bitset.h
+    ClientResourceFormatter.cpp
+    ClientResourceFormatter.h
+    GameBase.cpp
+    GameBase.h
+    GameDef.h
+    GameEng.cpp
+    GameEng.h
+    StdAfx.h
+    WarFareMain.cpp
+    ${WARFARE_SCENE_SOURCES}
+    ${WARFARE_SCENE_LOGIN_SOURCES}
+    ${WARFARE_SCENE_NATION_SELECTION_SOURCES}
+    ${WARFARE_SCENE_CHARACTER_SELECTION_SOURCES}
+    ${WARFARE_SCENE_CHARACTER_CREATION_SOURCES}
+    ${WARFARE_SCENE_INGAME_SOURCES}
+    ${WARFARE_SCENE_INGAME_UI_SOURCES}
+    ${WARFARE_INPUT_SOURCES}
+    ${WARFARE_NETWORK_SOURCES}
+    ${WARFARE_PLAYERS_SOURCES}
+    ${WARFARE_WORLD_SOURCES}
+    ${WARFARE_WORLD_BIRDS_SOURCES}
+    ${WARFARE_WORLD_EFFECTS_SOURCES}
+    ${WARFARE_WORLD_INDOOR_SOURCES}
+    ${WARFARE_WORLD_LIGHTING_SOURCES}
+    ${WARFARE_WORLD_OBJECTS_SOURCES}
+    ${WARFARE_WORLD_TERRAIN_SOURCES}
+    ${WARFARE_WORLD_WATER_SOURCES}
+    ${WARFARE_CORE_UIS_SOURCES}
+    ${WARFARE_POPUP_NOTICE_TEXT_SOURCES}
+  )
+else()
+  # POSIX port (phase 2, docs/PORT_POSIX_PLAN.md): only the network layer
+  # builds so far; the rest of the game rejoins as the SDL/RHI phases land.
+  set(WARFARE_CORE_SOURCES
+    GameDef.h
+    StdAfx.h
+    ${WARFARE_NETWORK_SOURCES}
+  )
+endif()
+
 add_library(WarFare.Core
-  Bitset.h
-  ClientResourceFormatter.cpp
-  ClientResourceFormatter.h
-  GameBase.cpp
-  GameBase.h
-  GameDef.h
-  GameEng.cpp
-  GameEng.h
-  StdAfx.h
-  WarFareMain.cpp
-  ${WARFARE_SCENE_SOURCES}
-  ${WARFARE_SCENE_LOGIN_SOURCES}
-  ${WARFARE_SCENE_NATION_SELECTION_SOURCES}
-  ${WARFARE_SCENE_CHARACTER_SELECTION_SOURCES}
-  ${WARFARE_SCENE_CHARACTER_CREATION_SOURCES}
-  ${WARFARE_SCENE_INGAME_SOURCES}
-  ${WARFARE_SCENE_INGAME_UI_SOURCES}
-  ${WARFARE_INPUT_SOURCES}
-  ${WARFARE_NETWORK_SOURCES}
-  ${WARFARE_PLAYERS_SOURCES}
-  ${WARFARE_WORLD_SOURCES}
-  ${WARFARE_WORLD_BIRDS_SOURCES}
-  ${WARFARE_WORLD_EFFECTS_SOURCES}
-  ${WARFARE_WORLD_INDOOR_SOURCES}
-  ${WARFARE_WORLD_LIGHTING_SOURCES}
-  ${WARFARE_WORLD_OBJECTS_SOURCES}
-  ${WARFARE_WORLD_TERRAIN_SOURCES}
-  ${WARFARE_WORLD_WATER_SOURCES}
-  ${WARFARE_CORE_UIS_SOURCES}
-  ${WARFARE_POPUP_NOTICE_TEXT_SOURCES}
+  ${WARFARE_CORE_SOURCES}
   "${TARGET_CLIENT_CONFIG_HEADER}"
 )
 
+if(WIN32) # The game executable itself is still Windows-only (WinMain/WndProc); the POSIX one lands with SDL in phase 3.
 add_executable(WarFare
   resource.h
   StdAfx.h
   WarFareMain.cpp
 )
+endif()
 
 source_group("Scene" FILES ${WARFARE_SCENE_SOURCES})
 source_group("Scene/Login" FILES ${WARFARE_SCENE_LOGIN_SOURCES})
@@ -335,12 +351,11 @@ set_target_properties(WarFare.Core PROPERTIES
   CXX_SCAN_FOR_MODULES OFF
 )
 
-set_target_properties(WarFare PROPERTIES
-  OUTPUT_NAME          "KnightOnLine"
-  CXX_SCAN_FOR_MODULES OFF
-)
-
 if(WIN32)
+  set_target_properties(WarFare PROPERTIES
+    OUTPUT_NAME          "KnightOnLine"
+    CXX_SCAN_FOR_MODULES OFF
+  )
   set_target_properties(WarFare PROPERTIES WIN32_EXECUTABLE TRUE)
   target_sources(WarFare PRIVATE Resource.rc)
 endif()
@@ -348,7 +363,9 @@ endif()
 # Enable warnings as errors
 if(OPENKO_COMPILE_WARNINGS_AS_ERROR)
   set_property(TARGET WarFare.Core PROPERTY COMPILE_WARNING_AS_ERROR ON)
-  set_property(TARGET WarFare PROPERTY COMPILE_WARNING_AS_ERROR ON)
+  if(WIN32)
+    set_property(TARGET WarFare PROPERTY COMPILE_WARNING_AS_ERROR ON)
+  endif()
 endif()
 
 # Setup PCH
@@ -366,9 +383,14 @@ target_link_libraries(WarFare.Core PUBLIC
   N3Base_client
 )
 
-target_link_libraries(WarFare PRIVATE
-  WarFare.Core
-)
+# TCP transport (APISocket) runs on standalone Asio on every platform.
+target_link_libraries(WarFare.Core PRIVATE asio)
+
+if(WIN32)
+  target_link_libraries(WarFare PRIVATE
+    WarFare.Core
+  )
+endif()
 
 # Link in the libs that we use
 if(WIN32)
@@ -384,8 +406,10 @@ endif()
 target_compile_definitions(WarFare.Core PRIVATE
   _WINSOCK_DEPRECATED_NO_WARNINGS)
 
-target_compile_definitions(WarFare PRIVATE
-  _WINSOCK_DEPRECATED_NO_WARNINGS)
+if(WIN32)
+  target_compile_definitions(WarFare PRIVATE
+    _WINSOCK_DEPRECATED_NO_WARNINGS)
+endif()
 
 # Setup warning levels
 target_compile_options(WarFare.Core PRIVATE
@@ -394,11 +418,13 @@ target_compile_options(WarFare.Core PRIVATE
   $<$<CXX_COMPILER_ID:Clang>:-Wall -Wextra>
 )
 
-target_compile_options(WarFare PRIVATE
-  $<$<CXX_COMPILER_ID:MSVC>:/W3>
-  $<$<CXX_COMPILER_ID:GNU>:-Wall>
-  $<$<CXX_COMPILER_ID:Clang>:-Wall -Wextra>
-)
+if(WIN32)
+  target_compile_options(WarFare PRIVATE
+    $<$<CXX_COMPILER_ID:MSVC>:/W3>
+    $<$<CXX_COMPILER_ID:GNU>:-Wall>
+    $<$<CXX_COMPILER_ID:Clang>:-Wall -Wextra>
+  )
+endif()
 
 if(MSVC)
   set_property(TARGET WarFare PROPERTY
@@ -406,6 +432,8 @@ if(MSVC)
   )
 endif()
 
-add_custom_command(TARGET WarFare POST_BUILD
-  COMMAND "${CMAKE_COMMAND}" -E echo "$<TARGET_FILE:WarFare> has been built"
-)
+if(WIN32)
+  add_custom_command(TARGET WarFare POST_BUILD
+    COMMAND "${CMAKE_COMMAND}" -E echo "$<TARGET_FILE:WarFare> has been built"
+  )
+endif()

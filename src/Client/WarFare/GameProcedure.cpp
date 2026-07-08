@@ -390,6 +390,15 @@ void CGameProcedure::Tick()
 
 	//////////////////////////////////
 	// Network Msg 처리하기
+
+	// Pump the sockets: drain readable data and detect disconnects. This
+	// replaces the WSAAsyncSelect notifications that used to arrive through
+	// the window message pump (WM_SOCKETMSG).
+	if (!s_pSocket->Poll())
+		ReportServerConnectionClosed(true);
+
+	s_pSocketSub->Poll();
+
 	while (!s_pSocket->m_qRecvPkt.empty())
 	{
 		auto pkt = s_pSocket->m_qRecvPkt.front();

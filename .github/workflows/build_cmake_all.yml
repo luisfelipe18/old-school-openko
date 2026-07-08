@@ -195,7 +195,8 @@ jobs:
           cmake \
             --build build-client-posix \
             --target shared FileIO MathUtils Platform N3Base_client JpegFile \
-                     FileIO.Tests MathUtils.Tests Platform.Tests \
+                     WarFare.Core \
+                     FileIO.Tests MathUtils.Tests Platform.Tests WarFareNet.Tests \
             --parallel
 
       - name: Run tests

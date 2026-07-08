@@ -230,19 +230,37 @@ Windows-only).
 
 **Objetivo:** `CAPISocket` multiplataforma y desacoplado de la ventana.
 
-* [ ] Reescribir `CAPISocket` (`Connect/Disconnect/Send/Receive/ReConnect`)
-      sobre `asio::ip::tcp::socket` no bloqueante; conservar API pública,
-      buffers y criptografía (`JvCryption`) intactos — el protocolo NO cambia.
-* [ ] Sustituir el modelo push (`WM_SOCKETMSG` → `WndProc`) por polling: un
-      `CAPISocket::Poll()` llamado una vez por tick desde `CGameProcedure`
-      drena lecturas y detecta desconexión (`ReportServerConnectionClosed`).
-* [ ] Eliminar `WM_SOCKETMSG` de `WarFareMain.cpp` y `WSAStartup`/`ioctlsocket`.
-* [ ] Adoptar la misma implementación en Windows (menos código, un solo camino).
+* [x] Reescribir `CAPISocket` (`Connect/Disconnect/Send/Receive/ReConnect`)
+      sobre `asio::ip::tcp::socket` no bloqueante (transporte pimpl
+      `CAPISocketTransport`, así los ~40 TUs que incluyen `APISocket.h` no
+      arrastran asio); API pública, framing (AA55/55AA), buffers y
+      criptografía (`JvCryption`) intactos — el protocolo NO cambia. El
+      resolver de asio reemplaza `inet_addr`/`gethostbyname`, y el `send()`
+      parcial que reenviaba el buffer completo desde el inicio (bug latente)
+      quedó corregido con `write_some` + reintento por escritura.
+* [x] Sustituir el modelo push (`WM_SOCKETMSG` → `WndProc`) por polling:
+      `CAPISocket::Poll()` llamado una vez por tick desde el pump de red de
+      `CGameProcedure` drena lecturas y devuelve FALSE al detectar la
+      desconexión (→ `ReportServerConnectionClosed(true)`, como hacía
+      `FD_CLOSE`). El socket secundario ahora también se drena (antes el
+      WndProc solo atendía al principal). El error de envío ya no hace
+      `PostQuitMessage(-1)`: se reporta por el mismo camino de desconexión.
+* [x] Eliminar `WM_SOCKETMSG` de `WarFareMain.cpp`/`APISocket.h` y
+      `WSAStartup`/`WSACleanup`/`ioctlsocket` (asio inicializa Winsock).
+* [x] Adoptar la misma implementación en Windows (un solo camino). MSBuild:
+      `WarFare(.Core).vcxproj` importan `asio.props` y `Client.slnx`/
+      `All.slnx` añaden la dependencia `fetch-asio`. Extra necesario:
+      `GameDef.h` ya no exige `<dinput.h>` fuera de Windows — los scancodes
+      `DIK_*` canónicos viven en `Platform/DInputKeyCodes.h` (base para el
+      mapeo SDL de F3).
 
-**Aceptación:** test de integración contra Ebenezer/VersionManager local
-(ya compilan en macOS/Linux): handshake de login + eco de paquetes cifrados
-en las tres plataformas. Windows sigue conectando al servidor oficial de
-pruebas side-by-side.
+**Aceptación (estado):** `WarFare.Core` compila en POSIX (subconjunto de
+red) y nuevo test de integración `WarFareNet.Tests` con un servidor asio
+embebido que habla el framing real: conexión fallida, recepción en claro,
+frame de envío bien formado, **recepción cifrada JvCryption** y detección de
+desconexión vía `Poll()` — 5/5 en verde en Linux/clang; macOS vía CI. El
+handshake contra Ebenezer/VersionManager reales queda como validación
+manual/side-by-side (requiere base de datos SQL que CI no provee).
 
 ### Fase 3 — Ventana, bucle principal y entrada con SDL3 (esfuerzo: ~2 sp)
 

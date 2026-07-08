@@ -272,30 +272,6 @@ LRESULT CALLBACK WndProcMain(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPar
 		}
 		break;
 
-		case WM_SOCKETMSG:
-		{
-			switch (WSAGETSELECTEVENT(lParam))
-			{
-				case FD_CONNECT:
-					TRACE("Socket connected");
-					break;
-
-				case FD_CLOSE:
-					CGameProcedure::ReportServerConnectionClosed(true);
-					TRACE("Socket closed");
-					break;
-
-				case FD_READ:
-					CGameProcedure::s_pSocket->Receive();
-					break;
-
-				default:
-					__ASSERT(0, "WM_SOCKETMSG: unknown socket flag.");
-					break;
-			}
-		}
-		break;
-
 		case WM_ACTIVATE:
 		{
 			int iActive = LOWORD(wParam); // activation flag

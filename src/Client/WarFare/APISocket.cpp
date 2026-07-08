@@ -1,17 +1,26 @@
-﻿// APISocket.cpp: implementation of the CAPISocket class.
+// APISocket.cpp: implementation of the CAPISocket class.
+//
+// TCP transport over standalone Asio (the same stack the servers use):
+// a blocking connect followed by non-blocking reads drained once per game
+// tick via Poll(). This replaces the old Winsock WSAAsyncSelect model, which
+// coupled socket notifications to the Win32 window message pump
+// (WM_SOCKETMSG) and therefore only existed on Windows.
 //
 //////////////////////////////////////////////////////////////////////
 
 #include "StdAfx.h"
 #include "APISocket.h"
-#include "ClientResourceFormatter.h"
+
+#include <asio.hpp>
+
+#ifdef _N3GAME
+#include <N3Base/LogWriter.h>
+#endif
 
 //////////////////////////////////////////////////////////////////////
 // Construction/Destruction
 //////////////////////////////////////////////////////////////////////
 
-//
-static WSAData s_WSData;
 int CAPISocket::s_nInstanceCount = 0;
 
 #ifdef _CRYPTION
@@ -24,22 +33,32 @@ uint32_t CAPISocket::s_wRcvVal  = 0;
 const uint16_t PACKET_HEADER = 0XAA55;
 const uint16_t PACKET_TAIL   = 0X55AA;
 
-#ifdef _N3GAME
-#include <N3Base/LogWriter.h>
-#endif
+// Byte-order helpers matching the legacy htons/ntohs usage without pulling
+// the platform socket headers in.
+static uint16_t SwapBytes16(uint16_t value)
+{
+	return static_cast<uint16_t>((value << 8) | (value >> 8));
+}
+
+class CAPISocketTransport
+{
+public:
+	asio::io_context IoContext;
+	asio::ip::tcp::socket Socket {IoContext};
+};
 
 CAPISocket::CAPISocket() : m_SendBuf(SEND_BUF_SIZE), m_RecvBuf(RECV_BUF_SIZE), m_CB(RECV_BUF_SIZE)
 {
-	m_hSocket    = INVALID_SOCKET;
-	m_hWndTarget = nullptr;
-	m_dwPort     = 0;
+	m_pTransport      = std::make_unique<CAPISocketTransport>();
+	m_hWndTarget      = nullptr;
+	m_dwPort          = 0;
 
-	if (s_nInstanceCount++ == 0)
-		(void) WSAStartup(0x0101, &s_WSData);
+	++s_nInstanceCount;
 
-	m_iSendByteCount = 0;
-	m_bConnected     = FALSE;
-	m_bEnableSend    = TRUE; // 보내기 가능..?
+	m_iSendByteCount  = 0;
+	m_bConnected      = FALSE;
+	m_bConnectionLost = FALSE;
+	m_bEnableSend     = TRUE; // 보내기 가능..?
 
 	memset(m_SendBuf.data(), 0, m_SendBuf.size());
 	memset(m_RecvBuf.data(), 0, m_RecvBuf.size());
@@ -49,8 +68,7 @@ CAPISocket::~CAPISocket()
 {
 	Release();
 
-	if (--s_nInstanceCount == 0)
-		WSACleanup();
+	--s_nInstanceCount;
 }
 
 void CAPISocket::Release()
@@ -68,20 +86,24 @@ void CAPISocket::Release()
 
 void CAPISocket::Disconnect()
 {
-	if (m_hSocket != INVALID_SOCKET)
-		closesocket(m_hSocket);
+	asio::error_code ec;
+	if (m_pTransport->Socket.is_open())
+	{
+		m_pTransport->Socket.shutdown(asio::ip::tcp::socket::shutdown_both, ec);
+		m_pTransport->Socket.close(ec);
+	}
 
-	m_hSocket    = INVALID_SOCKET;
 	m_hWndTarget = nullptr;
 	m_szIP.clear();
-	m_dwPort      = 0;
+	m_dwPort          = 0;
 
-	m_bConnected  = FALSE;
-	m_bEnableSend = TRUE; // 보내기 가능..?
+	m_bConnected      = FALSE;
+	m_bConnectionLost = FALSE;
+	m_bEnableSend     = TRUE; // 보내기 가능..?
 
 #ifdef _CRYPTION
-	InitCrypt(0);         // 암호화 해제..
-#endif                    // #ifdef _CRYPTION
+	InitCrypt(0);             // 암호화 해제..
+#endif                        // #ifdef _CRYPTION
 }
 
 int CAPISocket::Connect(HWND hWnd, const std::string& szIP, uint32_t dwPort)
@@ -89,70 +111,49 @@ int CAPISocket::Connect(HWND hWnd, const std::string& szIP, uint32_t dwPort)
 	if (szIP.empty() || dwPort == 0)
 		return -1;
 
-	if (m_hSocket != INVALID_SOCKET)
+	if (m_pTransport->Socket.is_open())
 		Disconnect();
 
-	//
-	struct sockaddr_in server {};
-	struct hostent* hp = nullptr;
+	asio::error_code ec;
 
-	if ((szIP[0] >= '0') && (szIP[0] <= '9'))
+	// The resolver covers both dotted IPs and hostnames (formerly the
+	// inet_addr/gethostbyname split).
+	asio::ip::tcp::resolver resolver(m_pTransport->IoContext);
+	const auto endpoints = resolver.resolve(szIP, std::to_string(dwPort), ec);
+	if (ec)
 	{
-		server.sin_family      = AF_INET;
-		server.sin_addr.s_addr = inet_addr(szIP.c_str());
-		server.sin_port        = htons((u_short) dwPort);
-	}
-	else
-	{
-		hp = gethostbyname(szIP.c_str());
-		if (hp == nullptr)
-		{
-#ifdef _DEBUG
-			std::string msg = fmt::format("Error: Connecting to {}.", szIP);
-			MessageBoxA(hWnd, msg.c_str(), "socket error", MB_OK | MB_ICONSTOP);
+#ifdef _N3GAME
+		CLogWriter::Write("socket resolve error! ({}): {}", szIP, ec.message());
 #endif
-			return -1;
-		}
-
-		memcpy(&server.sin_addr, hp->h_addr, hp->h_length);
-		server.sin_family = hp->h_addrtype;
-		server.sin_port   = htons((u_short) dwPort);
-	} // else
-
-	// create socket
-	SOCKET sock = socket(AF_INET, SOCK_STREAM, 0);
-	if (sock == INVALID_SOCKET)
-	{
-		int iErrCode = ::WSAGetLastError();
-#ifdef _DEBUG
-		char msg[] = "Error opening stream socket";
-		MessageBoxA(hWnd, msg, "socket error", MB_OK | MB_ICONSTOP);
-#endif
-		return iErrCode;
+		return ec.value() != 0 ? ec.value() : -1;
 	}
 
-	m_hSocket          = sock;
-
-	// 소켓 옵션
-	int iRecvBufferLen = RECV_BUF_SIZE;
-	setsockopt(sock, SOL_SOCKET, SO_RCVBUF, (char*) &iRecvBufferLen, 4);
-
-	if (connect(sock, (struct sockaddr*) &server, sizeof(server)) != 0)
+	asio::connect(m_pTransport->Socket, endpoints, ec);
+	if (ec)
 	{
-		int iErrCode = ::WSAGetLastError();
-
-		closesocket(sock);
-		m_hSocket = INVALID_SOCKET;
-
-		return iErrCode;
+		asio::error_code ignored;
+		m_pTransport->Socket.close(ignored);
+		return ec.value() != 0 ? ec.value() : -1;
 	}
 
-	WSAAsyncSelect(sock, hWnd, WM_SOCKETMSG, FD_CONNECT | FD_READ | FD_CLOSE);
+	asio::error_code optionError;
+	m_pTransport->Socket.set_option(asio::socket_base::receive_buffer_size(RECV_BUF_SIZE), optionError);
 
-	m_hWndTarget = hWnd;
-	m_szIP       = szIP;
-	m_dwPort     = dwPort;
-	m_bConnected = TRUE;
+	// Reads are drained from the game loop (Poll), so the socket must never
+	// block there.
+	m_pTransport->Socket.non_blocking(true, ec);
+	if (ec)
+	{
+		asio::error_code ignored;
+		m_pTransport->Socket.close(ignored);
+		return ec.value() != 0 ? ec.value() : -1;
+	}
+
+	m_hWndTarget      = hWnd;
+	m_szIP            = szIP;
+	m_dwPort          = dwPort;
+	m_bConnected      = TRUE;
+	m_bConnectionLost = FALSE;
 
 	return 0;
 }
@@ -162,32 +163,51 @@ int CAPISocket::ReConnect()
 	return Connect(m_hWndTarget, m_szIP, m_dwPort);
 }
 
+BOOL CAPISocket::Poll()
+{
+	if (m_bConnected)
+		Receive();
+
+	if (m_bConnectionLost)
+	{
+		m_bConnectionLost = FALSE;
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
 void CAPISocket::Receive()
 {
-	if (INVALID_SOCKET == (SOCKET) m_hSocket || FALSE == m_bConnected)
+	if (FALSE == m_bConnected || !m_pTransport->Socket.is_open())
 		return;
 
-	u_long dwPktSize = 0;
-	u_long dwRead    = 0;
-	int count        = 0;
-
-	ioctlsocket((SOCKET) m_hSocket, FIONREAD, &dwPktSize);
-	while (dwRead < dwPktSize)
+	// Drain everything currently readable.
+	for (;;)
 	{
-		count = recv((SOCKET) m_hSocket, m_RecvBuf.data(), static_cast<int>(m_RecvBuf.size()), 0);
-		if (count == SOCKET_ERROR)
+		asio::error_code ec;
+		const size_t count =
+			m_pTransport->Socket.read_some(asio::buffer(m_RecvBuf.data(), m_RecvBuf.size()), ec);
+
+		if (count > 0)
+			m_CB.PutData(m_RecvBuf.data(), static_cast<int>(count));
+
+		if (ec)
 		{
-			__ASSERT(0, "socket receive error!");
+			if (ec == asio::error::would_block || ec == asio::error::try_again)
+				break; // nothing more to read right now
+
+			// Graceful close or hard error: flag it for Poll()'s caller.
+			if (ec != asio::error::eof)
+			{
 #ifdef _N3GAME
-			int iErr = ::GetLastError();
-			CLogWriter::Write("socket receive error! : {}", iErr);
+				CLogWriter::Write("socket receive error! : {}", ec.message());
 #endif
+			}
+
+			m_bConnected      = FALSE;
+			m_bConnectionLost = TRUE;
 			break;
-		}
-		if (count)
-		{
-			dwRead += count;
-			m_CB.PutData(m_RecvBuf.data(), count);
 		}
 	}
 
@@ -205,13 +225,13 @@ BOOL CAPISocket::ReceiveProcess()
 		std::vector<uint8_t> data(iCount);
 		m_CB.GetData(reinterpret_cast<char*>(data.data()), iCount);
 
-		if (PACKET_HEADER == ntohs(*reinterpret_cast<uint16_t*>(&data[0])))
+		if (PACKET_HEADER == SwapBytes16(*reinterpret_cast<uint16_t*>(&data[0])))
 		{
 			int16_t siCore = *reinterpret_cast<int16_t*>(&data[2]);
 			if (siCore <= iCount)
 			{
 				// 패킷 꼬리 부분 검사..
-				if (PACKET_TAIL == ntohs(*reinterpret_cast<uint16_t*>(&data[iCount - 2])))
+				if (PACKET_TAIL == SwapBytes16(*reinterpret_cast<uint16_t*>(&data[iCount - 2])))
 				{
 					Packet* pkt = new Packet();
 					if (s_bCryptionFlag)
@@ -258,7 +278,7 @@ void CAPISocket::Send(uint8_t* pData, int nSize)
 {
 	if (!m_bEnableSend)
 		return; // 보내기 가능..?
-	if (INVALID_SOCKET == (SOCKET) m_hSocket || FALSE == m_bConnected)
+	if (FALSE == m_bConnected || !m_pTransport->Socket.is_open())
 		return;
 
 #ifdef _CRYPTION
@@ -286,36 +306,46 @@ void CAPISocket::Send(uint8_t* pData, int nSize)
 	}
 #endif
 
-	int nTotalSize            = nSize + 6;
+	const size_t nTotalSize   = static_cast<size_t>(nSize) + 6;
 	char* pSendData           = m_SendBuf.data();
-	*((uint16_t*) pSendData)  = htons(PACKET_HEADER);
+	*((uint16_t*) pSendData)  = SwapBytes16(PACKET_HEADER);
 	pSendData                += 2;
-	*((uint16_t*) pSendData)  = nSize;
+	*((uint16_t*) pSendData)  = static_cast<uint16_t>(nSize);
 	pSendData                += 2;
 	memcpy(pSendData, pData, nSize);
 	pSendData                += nSize;
-	*((uint16_t*) pSendData)  = htons(PACKET_TAIL);
+	*((uint16_t*) pSendData)  = SwapBytes16(PACKET_TAIL);
 	// pSendData             += 2;
 
-	int nSent                 = 0;
-	int count                 = 0;
+	size_t nSent              = 0;
 	while (nSent < nTotalSize)
 	{
-		count = send((SOCKET) m_hSocket, m_SendBuf.data(), nTotalSize, 0);
-		if (count == SOCKET_ERROR)
+		asio::error_code ec;
+		nSent += m_pTransport->Socket.write_some(
+			asio::buffer(m_SendBuf.data() + nSent, nTotalSize - nSent), ec);
+
+		if (ec == asio::error::would_block || ec == asio::error::try_again)
+		{
+			// Outgoing packets are small; wait for writability and continue.
+			asio::error_code waitError;
+			m_pTransport->Socket.wait(asio::ip::tcp::socket::wait_write, waitError);
+			continue;
+		}
+
+		if (ec)
 		{
 			__ASSERT(0, "socket send error!");
 #ifdef _N3GAME
-			int iErr = ::GetLastError();
-			CLogWriter::Write("socket send error! : {}", iErr);
-			PostQuitMessage(-1);
+			CLogWriter::Write("socket send error! : {}", ec.message());
 #endif
+			// The disconnect is reported through the next Poll(), which runs
+			// the caller's connection-closed handling (formerly this posted
+			// WM_QUIT directly).
+			m_bConnected      = FALSE;
+			m_bConnectionLost = TRUE;
 			break;
 		}
-
-		if (count > 0)
-			nSent += count;
 	}
 
-	m_iSendByteCount += nTotalSize;
+	m_iSendByteCount += static_cast<int>(nTotalSize);
 }
