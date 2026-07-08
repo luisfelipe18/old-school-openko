@@ -194,7 +194,8 @@ jobs:
         run: |
           cmake \
             --build build-client-posix \
-            --target shared FileIO MathUtils FileIO.Tests MathUtils.Tests \
+            --target shared FileIO MathUtils Platform N3Base_client JpegFile \
+                     FileIO.Tests MathUtils.Tests Platform.Tests \
             --parallel
 
       - name: Run tests

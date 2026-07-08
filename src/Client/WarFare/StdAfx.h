@@ -3,7 +3,10 @@
 
 #pragma once
 
+#ifdef _WIN32
+// winsock2.h must precede any <windows.h> pulled in via the D3D headers below.
 #include <winsock2.h>
+#endif
 #include <N3Base/My_3DStruct.h>
 
 #if !__has_include(<warfare_config.h>)

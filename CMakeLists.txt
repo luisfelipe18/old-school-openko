@@ -137,6 +137,7 @@ set(CMAKE_FOLDER) # reset so shared is placed in the root
 add_subdirectory(src/shared)
 add_subdirectory(src/FileIO)
 add_subdirectory(src/MathUtils)
+add_subdirectory(src/Platform)
 
 if(OPENKO_BUILD_CLIENT OR OPENKO_BUILD_TOOLS)
   # Dependencies
@@ -250,6 +251,7 @@ if(OPENKO_BUILD_TESTS)
   set(CMAKE_FOLDER "Tests")
   add_subdirectory(tests/FileIO)
   add_subdirectory(tests/MathUtils)
+  add_subdirectory(tests/Platform)
   
   if(OPENKO_BUILD_SERVERS)
     add_subdirectory(tests/Server/Ebenezer)

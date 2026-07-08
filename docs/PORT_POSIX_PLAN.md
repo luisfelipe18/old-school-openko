@@ -168,44 +168,63 @@ Windows intacto.
 **Objetivo:** que `N3Base` (menos render/UI) y la lógica no visual de
 `WarFare.Core` compilen en macOS con clang. Es la fase "mecánica" grande.
 
-* [ ] Crear `src/Platform/` con:
-  * `PlatformTypes.h`: en Windows incluye lo de siempre; en POSIX define los
-    tipos que hoy se filtran por interfaces (`BOOL`, `DWORD`, `POINT`, `RECT`,
-    `HWND` → handle opaco de ventana propia `WindowHandle`).
-  * `PlatformTime.h`: `PlatformTickMs()` sobre `std::chrono::steady_clock`;
-    migrar los 17 usos de `timeGetTime()` y el reloj de `N3Base.cpp`.
-  * `PlatformString.h`: reemplazos de `lstrcpy/lstrcat/wsprintf` por
-    `std::string`/`fmt` (el repo ya usa fmt vía spdlog); `_MAX_PATH` →
-    `PATH_MAX`/`std::filesystem`.
-  * `PlatformDebug.h`: `TRACE`/`__ASSERT`/`OutputDebugString` → spdlog + `assert`.
-* [ ] **Sacar `<winsock2.h>` del PCH** (`WarFare/StdAfx.h`): es lo que mete
-      headers de Windows en cada TU. Dejar el PCH con `My_3DStruct.h` +
-      `warfare_config.h` y que red se incluya solo donde se usa.
-* [ ] `GetCurrentDirectory`/rutas: migrar `CN3Base::PathSet/PathGet` y la carga
-      de `Option.ini` a `std::filesystem`; en macOS/Linux, ubicar la config de
-      usuario en `~/Library/Application Support/OpenKO/` y
-      `${XDG_CONFIG_HOME:-~/.config}/openko/` respectivamente (con fallback al
-      directorio del ejecutable para no romper la distribución portable).
-* [ ] **Resolución case-insensitive de assets** en
-      `FileIO`/`N3BaseFileAccess`: los archivos del juego mezclan mayúsculas
-      (`Item.tbl` vs `item.tbl`). Implementar un resolvedor que, si la ruta
-      exacta no existe, escanee el directorio ignorando mayúsculas (con caché).
-      Imprescindible en Linux; recomendable en macOS (APFS puede ser
-      case-sensitive).
-* [ ] **Capa de encoding**: utilidades `Cp949ToUtf8`/`Utf8ToCp949` sobre
-      `iconv`; auditar strings literales no-ASCII en el código (comentarios en
-      coreano ya están en archivos UTF-8, verificar con `file`/`iconv -c`).
-* [ ] Barrido de llamadas sueltas Win32 en lógica de juego (`MessageBox`,
-      `GetCursorPos`, `Sleep`, `GetTickCount`, …) → PAL o SDL (stub temporal).
-* [ ] CMake: nuevo target `N3Base_portable` (o `#ifdef` de exclusión) que
-      compile en POSIX todo N3Base **excepto** `N3Eng`, `DFont`, `N3UIEdit`,
-      `N3Texture` y demás render (se incorporan en fases 5–7).
+* [x] Crear `src/Platform/` con:
+  * `PlatformTypes.h`: no-op en Windows; en POSIX define los tipos de datos
+    Win32 que se filtran por interfaces (`BOOL`, `DWORD`, `POINT`, `RECT`,
+    `COLORREF`, `HRESULT`, handles opacos `HWND`/`HINSTANCE`).
+  * `D3D9Types.h`: definiciones POSIX binario-compatibles de los tipos de
+    *datos* D3D9 que viven en estructuras y formatos del juego (`D3DCOLOR`,
+    `D3DCOLORVALUE`, `D3DMATERIAL9`, `D3DLIGHT9`, `D3DFORMAT` con los valores
+    reales, FVF, blend/texture-op); las interfaces COM quedan como punteros
+    opacos. `My_3DStruct.h` lo incluye en lugar de `<d3dx9.h>` fuera de
+    Windows, y `My_3DStruct.cpp` congela los layouts con `static_assert`
+    (vértices, materiales, `__Vector3`==12 bytes) en *todas* las plataformas.
+  * `PlatformTime.h`: `PlatformTickMs()`/`PlatformTimeSeconds()` sobre
+    `std::chrono::steady_clock`; migrados los 13 usos reales de
+    `timeGetTime()` (N3SkyMng, LocalInput) y reescritos `CN3Base::TimeGet` y
+    `TimerProcess` (antes QPC + fallback) en una única versión chrono.
+  * `PlatformString.h`: `StrLowerAscii` para los `CharLower` (Windows
+    conserva `CharLower`, que es DBCS-aware). El barrido de
+    `lstrcpy/lstrcat/wsprintf` (~19 usos, todos en código WarFare que se
+    reescribe en F2/F3) queda para esas fases.
+  * `PlatformDebug.h` resultó innecesario: `DebugUtils.h` ya era portable
+    (fmt + assert, `OutputDebugString` ya gateado).
+* [x] **Sacar `<winsock2.h>` del PCH** (`WarFare/StdAfx.h`): gateado a
+      `_WIN32` (en Windows debe preceder a `<windows.h>`; POSIX obtiene la
+      red con Asio en F2).
+* [ ] `GetCurrentDirectory`/`Option.ini` a `std::filesystem` + directorios de
+      config de usuario por SO — se hace junto con el `main` SDL en F3
+      (`CN3Base::PathSet` ya es portable: separador y lowercase por
+      plataforma).
+* [x] **Resolución case-insensitive de assets**: `FileIO/PathResolver`
+      (`ResolveCaseInsensitivePath` + normalización de separadores `\` → `/`)
+      integrado en `FileReader::OpenExisting` en POSIX, con tests. (Caché de
+      directorio pendiente si el profiling lo pide.)
+* [x] **Capa de encoding**: `Platform/PlatformEncoding` —
+      `Cp949ToUtf8`/`Utf8ToCp949` sobre iconv (POSIX, con alias
+      CP949/UHC/EUC-KR) y WideCharToMultiByte (Windows), con tests de
+      round-trip en coreano.
+* [x] Barrido Win32 en el subconjunto portado: `MessageBox` (N3SndMgr,
+      N3BaseFileAccess), `GetLocalTime`/`SYSTEMTIME` (LogWriter → `std::tm`),
+      `GetAsyncKeyState` (`_IsKeyDown` → stub POSIX hasta F3), render de
+      debug D3D gateado (RenderLines, RenderCollisionMesh). El barrido del
+      código de juego WarFare llega con F2/F3.
+* [x] CMake: `N3Base_client` compila en POSIX desde
+      `N3BASE_POSIX_PORTABLE_SOURCES` (core + formatos + anim + tablas +
+      **audio OpenAL/mpg123 completo**); las fuentes de render/UI/cielo se
+      reincorporan en F5–F7. Libs `d3d9/dinput8/...` gateadas a Windows.
+      **Excluido `WinCrypt`** (CryptoAPI): las texturas cifradas necesitan
+      una reimplementación portable de su derivación RC4 — movido a F4.
 
-**Aceptación:** en macOS compilan `MathUtils`, `FileIO`, `shared`,
-`JpegFile`, `ZipArchive` y el subconjunto no-render de `N3Base`; un test de
-humo carga un `.n3chr`/`.n3shape` real y valida sus datos (esto además
-protege el formato binario: `__Vector3` debe seguir siendo 12 bytes,
-`D3DCOLOR` → `uint32_t` ARGB).
+**Aceptación (estado):** en Linux/clang compilan `MathUtils`, `FileIO`,
+`shared`, `Platform`, `JpegFile` (mitad GDI gateada a Windows) y el
+subconjunto no-render de `N3Base` con `-Werror`; tests de FileIO (incl.
+resolvedor), MathUtils y Platform (encoding/reloj) en verde; el layout
+binario queda protegido por `static_assert` en todas las plataformas. macOS
+se valida con el job de CI. El test de humo con un `.n3chr` real se movió a
+F4 (requiere `N3Texture`/meshes portados y assets en CI); `ZipArchive` se
+descartó del alcance (es de las client tools, que siguen siendo
+Windows-only).
 
 ### Fase 2 — Red: de `WSAAsyncSelect` a Asio (esfuerzo: ~1.5 sp)
 
@@ -270,6 +289,13 @@ que la única dependencia gráfica restante sea la interfaz del device.
       el loader propio (los `.dxt` del juego ya se cargan con código propio;
       los DXT1/3/5 se suben tal cual como texturas comprimidas).
 * [ ] `D3DXGetErrorString` → tabla de errores propia del RHI.
+* [ ] Portar `CWinCrypt` (N3Base): deriva una clave RC4 vía CryptoAPI
+      (`CryptDeriveKey` sobre un hash del cipher fijo) para leer texturas
+      cifradas; reimplementar la derivación compatible en C++ portable
+      (quedó excluido del subconjunto POSIX en F1).
+* [ ] Test de humo con assets reales (movido desde F1): cargar un
+      `.n3chr`/`.n3shape` del repo de assets y validar contenidos en CI
+      POSIX.
 
 **Aceptación:** `grep -r "d3dx" src/N3Base src/Client` solo aparece en el
 backend D3D9 de Windows (aislado); Windows compila y renderiza igual.

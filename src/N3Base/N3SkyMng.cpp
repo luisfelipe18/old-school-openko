@@ -11,6 +11,7 @@
 #include "N3Star.h"
 #include "mmsystem.h"
 #include "N3Texture.h"
+#include <Platform/PlatformTime.h>
 
 #include "N3GERain.h"
 #include "N3GESnow.h"
@@ -25,7 +26,7 @@ typedef std::vector<__SKY_DAYCHANGE>::iterator it_SDC;
 CN3SkyMng::CN3SkyMng()
 {
 	m_eWeather    = SW_CLEAR;
-	m_dwCheckTick = timeGetTime();
+	m_dwCheckTick = PlatformTickMs();
 
 #ifdef _N3GAME // 게임이 아닌 툴에서는 필요없다...
 	m_pSnd_Weather_Snow = nullptr;
@@ -206,7 +207,7 @@ void CN3SkyMng::RenderWeather()
 
 void CN3SkyMng::Tick()
 {
-	uint32_t dwCurTickCount = timeGetTime();
+	uint32_t dwCurTickCount = PlatformTickMs();
 	__ASSERT(dwCurTickCount >= m_dwCheckTick, "음수이다.");
 	uint32_t dwCurGameTime = m_dwCheckGameTime
 							 + (uint32_t) ((dwCurTickCount - m_dwCheckTick) * TIME_REAL_PER_GAME
@@ -783,7 +784,7 @@ void CN3SkyMng::InitToDefaultHardCoding()
 void CN3SkyMng::SetCheckGameTime(uint32_t dwCheckGameTime)
 {
 	dwCheckGameTime      %= 86400;
-	uint32_t dwCheckTick  = timeGetTime();
+	uint32_t dwCheckTick  = PlatformTickMs();
 	m_dwCheckGameTime     = dwCheckGameTime;
 	m_dwCheckTick         = dwCheckTick;
 
@@ -984,7 +985,7 @@ void CN3SkyMng::SetWeather(eSKY_WEATHER eWeather, int iPercentage)
 	m_eWeather                = eWeather;
 
 	// 현재 게임 시간 구하기
-	uint32_t dwCurTickCount   = timeGetTime();
+	uint32_t dwCurTickCount   = PlatformTickMs();
 	__ASSERT(dwCurTickCount >= m_dwCheckTick, "음수이다.");
 	uint32_t dwCurGameTime = m_dwCheckGameTime
 							 + (uint32_t) ((dwCurTickCount - m_dwCheckTick) * TIME_REAL_PER_GAME
@@ -1412,7 +1413,7 @@ void CN3SkyMng::SunAndMoonDirectionFixByHour(int iHour) // 해와 달 각도 관
 
 void CN3SkyMng::GetGameTime(int* piYear, int* piMonth, int* piDay, int* piHour, int* piMin)
 {
-	uint32_t dwCurTickCount = timeGetTime();
+	uint32_t dwCurTickCount = PlatformTickMs();
 	__ASSERT(dwCurTickCount >= m_dwCheckTick, "음수이다.");
 	uint32_t dwCurGameTime = m_dwCheckGameTime
 							 + (uint32_t) ((dwCurTickCount - m_dwCheckTick) * TIME_REAL_PER_GAME

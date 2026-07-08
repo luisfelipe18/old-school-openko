@@ -139,7 +139,7 @@ int CN3TransformCollision::CheckCollisionPrecisely(
 		return 0;
 }
 
-#if defined(_DEBUG) || defined(_N3TOOL)
+#if (defined(_DEBUG) || defined(_N3TOOL)) && defined(_WIN32) // POSIX: back with the RHI
 void CN3TransformCollision::RenderCollisionMesh()
 {
 	if (nullptr == m_pMeshCollision)

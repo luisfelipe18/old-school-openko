@@ -185,8 +185,50 @@ set(N3BASE_COMMON_SOURCES
   ${N3BASE_COMMON_WEATHER_SOURCES}
 )
 
+# POSIX port (phase 1, docs/PORT_POSIX_PLAN.md): the platform-independent
+# subset of N3Base that already builds on macOS/Linux. Rendering, UI and
+# window-system sources rejoin this list as the RHI/SDL phases land.
+set(N3BASE_POSIX_PORTABLE_SOURCES
+  ColorValue.inl
+  DebugUtils.cpp
+  DebugUtils.h
+  LogWriter.cpp
+  LogWriter.h
+  Material.inl
+  My_3DStruct.cpp
+  My_3DStruct.h
+  N3AnimControl.cpp
+  N3AnimControl.h
+  N3AnimKey.cpp
+  N3AnimKey.h
+  N3Base.cpp
+  N3Base.h
+  N3BaseFileAccess.cpp
+  N3BaseFileAccess.h
+  N3Mng.h
+  N3TableBase.h
+  N3TableBaseImpl.cpp
+  N3TableBaseImpl.h
+  N3Transform.cpp
+  N3Transform.h
+  N3TransformCollision.cpp
+  N3TransformCollision.h
+  StdAfxBase.h
+  WaveFormat.cpp
+  WaveFormat.h
+  VertexTypes.inl
+  ${N3BASE_COMMON_AUDIO_SOURCES}
+)
+
+if(WIN32)
+  set(N3BASE_CLIENT_SOURCES ${N3BASE_COMMON_SOURCES})
+else()
+  set(N3BASE_CLIENT_SOURCES ${N3BASE_POSIX_PORTABLE_SOURCES})
+endif()
+
 set(N3BASE_COMMON_DEPENDENCIES_PUBLIC
   FileIO
+  Platform
   shared
   spdlog
 )
@@ -209,14 +251,18 @@ source_group("Sky" FILES ${N3BASE_COMMON_SKY_SOURCES})
 source_group("UI" FILES ${N3BASE_COMMON_UI_SOURCES})
 source_group("Weather" FILES ${N3BASE_COMMON_WEATHER_SOURCES} ${N3BASE_TOOL_WEATHER_SOURCES})
 
-# Link in the libs that we use
-set(N3BASE_COMMON_LIBS_PRIVATE
-  d3d9.lib
-  d3dx9.lib
-  dinput8.lib
-  dsound.lib
-  dxguid.lib
-)
+# Link in the libs that we use (Windows-only import libraries)
+if(WIN32)
+  set(N3BASE_COMMON_LIBS_PRIVATE
+    d3d9.lib
+    d3dx9.lib
+    dinput8.lib
+    dsound.lib
+    dxguid.lib
+  )
+else()
+  set(N3BASE_COMMON_LIBS_PRIVATE)
+endif()
 
 # Setup warning levels
 set(N3BASE_COMMON_COMPILE_OPTIONS
@@ -227,7 +273,7 @@ set(N3BASE_COMMON_COMPILE_OPTIONS
 
 if(OPENKO_BUILD_CLIENT)
   add_library(N3Base_client STATIC
-    ${N3BASE_COMMON_SOURCES}
+    ${N3BASE_CLIENT_SOURCES}
   )
 
   set_target_properties(N3Base_client PROPERTIES

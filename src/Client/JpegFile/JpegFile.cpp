@@ -10,7 +10,14 @@
 //	See jpegfile.h for usage.
 //
 ////////////////////////////////////////////////////////////
+#ifdef _WIN32
 #include <windows.h>
+#else
+#include <Platform/PlatformTypes.h>
+
+#include <cstring> // std::memcpy (provided transitively by <windows.h> above)
+using std::memcpy;
+#endif
 #include "JpegFile.h"
 
 #include <cassert>
@@ -35,7 +42,9 @@ extern "C"
 }
 #endif // __cplusplus
 
-constexpr WORD PALVERSION = 0x300;
+#ifdef _WIN32
+constexpr WORD PALVERSION = 0x300; // only used by the GDI palette half below
+#endif
 
 constexpr auto WIDTHBYTES(auto bits)
 {
@@ -92,8 +101,10 @@ void j_putRGBScanline(BYTE* jpegline, int widthPix, BYTE* outBuf, int row);
 
 void j_putGrayScanlineToRGB(BYTE* jpegline, int widthPix, BYTE* outBuf, int row);
 
+#ifdef _WIN32
 static BOOL DibToSamps(HANDLE hDib, int nSampsPerRow, JSAMPARRAY jsmpPixels, const char** pcsMsg);
 static RGBQUAD QuadFromWord(WORD b16);
+#endif
 
 //
 //	constructor doesn't do much - there's no real class here...
@@ -450,6 +461,8 @@ BOOL CJpegFile::BGRFromRGB(BYTE* buf, UINT widthPix, UINT height)
 	}
 	return TRUE;
 }
+
+#ifdef _WIN32 // GDI/DIB half: screenshot capture and the Windows tools only
 
 int CJpegFile::PalEntriesOnDevice(HDC hDC)
 {
@@ -1395,6 +1408,8 @@ BOOL CJpegFile::DecryptJPEG(const std::string& csJpeg)
 
 	return TRUE;
 }
+
+#endif // _WIN32
 
 BOOL CJpegFile::SaveFromDecryptToJpeg(const std::string& csKsc, const std::string& csJpeg)
 {

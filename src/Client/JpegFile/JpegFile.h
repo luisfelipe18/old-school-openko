@@ -65,7 +65,11 @@
 #include <cstdio>
 #include <string>
 
+#ifdef _WIN32
 #include <windows.h>
+#else
+#include <Platform/PlatformTypes.h>
+#endif
 
 enum e_JpegFileError : uint8_t
 {
@@ -145,6 +149,7 @@ public:
 		UINT widthPix,         // width in pixels
 		UINT height);          // lines
 
+#ifdef _WIN32 // GDI/DIB helpers: screenshot capture and the tools use these
 	int PalEntriesOnDevice(HDC hDC);
 	WORD DIBNumColors(LPSTR lpDIB);
 	WORD PaletteSize(LPSTR lpDIB);
@@ -161,18 +166,23 @@ public:
 		int nQuality,                     // JPEG quality (0-100)
 		const std::string& csJpeg,        // Pathname to jpeg file
 		const char** pcsMsg);             // Error msg to return
+#endif // _WIN32
 
 	BOOL SaveFromDecryptToJpeg(const std::string& csKsc, const std::string& csJpeg);
 
+#ifdef _WIN32
 	virtual BOOL DecryptJPEG(const std::string& csJpeg);
+#endif
 	virtual BOOL LoadJpegFile(const std::string& /*csJpeg*/)
 	{
 		return TRUE;
 	}
 
+#ifdef _WIN32
 	virtual void DrawImage(HDC hDC)
 	{
 	}
+#endif
 
 	static WORD m_r;
 	static WORD m_c1;

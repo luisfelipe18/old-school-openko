@@ -56,8 +56,11 @@ public:
 	{
 		if (nullptr == m_lpTexture)
 			return 0;
-		else
-			return m_lpTexture->GetLevelCount();
+#ifdef _WIN32
+		return m_lpTexture->GetLevelCount();
+#else
+		return 0; // POSIX port: real mip counts return with the RHI texture backend
+#endif
 	}
 
 	bool Create(

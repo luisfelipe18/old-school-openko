@@ -1,4 +1,5 @@
 ﻿#include "FileReader.h"
+#include "PathResolver.h"
 
 #include <cassert>
 #include <cstdio>  // SEEK_SET, SEEK_CUR, SEEK_END
@@ -15,10 +16,18 @@ bool FileReader::OpenExisting(const std::filesystem::path& path)
 	// Close any existing file handle and reset read states.
 	Close();
 
+#ifdef _WIN32
+	const std::filesystem::path& openPath = path;
+#else
+	// Asset references carry Windows-style separators and lowercased names;
+	// resolve them against the real (possibly case-sensitive) filesystem.
+	const std::filesystem::path openPath  = ResolveCaseInsensitivePath(path);
+#endif
+
 	// Open and map the given file into memory for reading.
 	try
 	{
-		_mappedFileHandle = boost_ipc::file_mapping(path.native().c_str(), boost_ipc::read_only);
+		_mappedFileHandle = boost_ipc::file_mapping(openPath.native().c_str(), boost_ipc::read_only);
 		_mappedFileRegion = boost_ipc::mapped_region(_mappedFileHandle, boost_ipc::read_only);
 	}
 	catch (const boost_ipc::interprocess_exception&)
@@ -28,7 +37,7 @@ bool FileReader::OpenExisting(const std::filesystem::path& path)
 
 	_address = _mappedFileRegion.get_address();
 	_size    = static_cast<uint64_t>(_mappedFileRegion.get_size());
-	_path    = path;
+	_path    = openPath;
 	_open    = true;
 
 	return true;

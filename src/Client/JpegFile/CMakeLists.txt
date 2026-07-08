@@ -14,6 +14,7 @@ endif()
 
 # Setup dependencies
 target_link_libraries(JpegFile PUBLIC libjpeg)
+target_link_libraries(JpegFile PRIVATE Platform)
 
 # Expose include path
 target_include_directories(JpegFile PUBLIC

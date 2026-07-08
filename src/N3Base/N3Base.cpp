@@ -10,7 +10,10 @@
 #include "N3FXShape.h"
 #include "N3Chr.h"
 #include "N3Base.h"
-#include <mmsystem.h>
+#include <Platform/PlatformTime.h>
+#ifndef _WIN32
+#include <Platform/PlatformString.h>
+#endif
 
 LPDIRECT3DDEVICE9 CN3Base::s_lpD3DDev = nullptr;      // 참조 포인터.. 멋대로 해제하면 안된다..
 uint32_t CN3Base::s_dwTextureCaps     = 0;            // Texture 호환성..
@@ -103,8 +106,11 @@ void CN3Base::SaveResrc()
 #endif // end of _N3TOOL
 
 //-----------------------------------------------------------------------------
-// Name: DXUtil_Timer()
-// Desc: Performs timer opertations. Use the following commands:
+// Name: TimerProcess()
+// Desc: Performs timer operations (derived from the DXUtil_Timer sample).
+//       Runs on std::chrono's monotonic clock (formerly
+//       QueryPerformanceCounter with a timeGetTime() fallback), so it behaves
+//       identically on every platform. Use the following commands:
 //          TIMER_RESET           - to reset the timer
 //          TIMER_START           - to start the timer
 //          TIMER_STOP            - to stop (or pause) the timer
@@ -116,161 +122,61 @@ void CN3Base::SaveResrc()
 //-----------------------------------------------------------------------------
 float CN3Base::TimerProcess(TIMER_COMMAND command)
 {
-	static BOOL m_bTimerInitialized    = FALSE;
-	static BOOL m_bUsingQPF            = FALSE;
-	static LONGLONG m_llQPFTicksPerSec = 0;
+	static double s_fStopTime        = 0.0;
+	static double s_fLastElapsedTime = 0.0;
+	static double s_fBaseTime        = 0.0;
 
-	// Initialize the timer
-	if (FALSE == m_bTimerInitialized)
-	{
-		m_bTimerInitialized = TRUE;
-
-		// Use QueryPerformanceFrequency() to get frequency of timer.  If QPF is
-		// not supported, we will timeGetTime() which returns milliseconds.
-		LARGE_INTEGER qwTicksPerSec;
-		m_bUsingQPF = QueryPerformanceFrequency(&qwTicksPerSec);
-		if (m_bUsingQPF)
-			m_llQPFTicksPerSec = qwTicksPerSec.QuadPart;
-	}
-
-	if (m_bUsingQPF)
-	{
-		static LONGLONG m_llStopTime        = 0;
-		static LONGLONG m_llLastElapsedTime = 0;
-		static LONGLONG m_llBaseTime        = 0;
-		double fTime = 0.0, fElapsedTime = 0.0;
-		LARGE_INTEGER qwTime;
-
-		// Get either the current time or the stop time, depending
-		// on whether we're stopped and what command was sent
-		if (m_llStopTime != 0 && command != TIMER_START && command != TIMER_GETABSOLUTETIME)
-			qwTime.QuadPart = m_llStopTime;
-		else
-			QueryPerformanceCounter(&qwTime);
-
-		// Return the elapsed time
-		if (command == TIMER_GETELAPSEDTIME)
-		{
-			fElapsedTime = (double) (qwTime.QuadPart - m_llLastElapsedTime)
-						   / (double) m_llQPFTicksPerSec;
-			m_llLastElapsedTime = qwTime.QuadPart;
-			return (FLOAT) fElapsedTime;
-		}
-
-		// Return the current time
-		if (command == TIMER_GETAPPTIME)
-		{
-			double fAppTime = (double) (qwTime.QuadPart - m_llBaseTime)
-							  / (double) m_llQPFTicksPerSec;
-			return (FLOAT) fAppTime;
-		}
-
-		// Reset the timer
-		if (command == TIMER_RESET)
-		{
-			m_llBaseTime        = qwTime.QuadPart;
-			m_llLastElapsedTime = qwTime.QuadPart;
-			return 0.0f;
-		}
-
-		// Start the timer
-		if (command == TIMER_START)
-		{
-			m_llBaseTime        += qwTime.QuadPart - m_llStopTime;
-			m_llStopTime         = 0;
-			m_llLastElapsedTime  = qwTime.QuadPart;
-			return 0.0f;
-		}
-
-		// Stop the timer
-		if (command == TIMER_STOP)
-		{
-			m_llStopTime        = qwTime.QuadPart;
-			m_llLastElapsedTime = qwTime.QuadPart;
-			return 0.0f;
-		}
-
-		// Advance the timer by 1/10th second
-		if (command == TIMER_ADVANCE)
-		{
-			m_llStopTime += m_llQPFTicksPerSec / 10;
-			return 0.0f;
-		}
-
-		if (command == TIMER_GETABSOLUTETIME)
-		{
-			fTime = qwTime.QuadPart / (double) m_llQPFTicksPerSec;
-			return (FLOAT) fTime;
-		}
-
-		return -1.0f; // Invalid command specified
-	}
+	// Get either the current time or the stop time, depending
+	// on whether we're stopped and what command was sent
+	double fTime = 0.0;
+	if (s_fStopTime != 0.0 && command != TIMER_START && command != TIMER_GETABSOLUTETIME)
+		fTime = s_fStopTime;
 	else
+		fTime = PlatformTimeSeconds();
+
+	switch (command)
 	{
-		// Get the time using timeGetTime()
-		static double m_fLastElapsedTime = 0.0;
-		static double m_fBaseTime        = 0.0;
-		static double m_fStopTime        = 0.0;
-		double fTime = 0.0, fElapsedTime = 0.0;
-
-		// Get either the current time or the stop time, depending
-		// on whether we're stopped and what command was sent
-		if (m_fStopTime != 0.0 && command != TIMER_START && command != TIMER_GETABSOLUTETIME)
-			fTime = m_fStopTime;
-		else
-			fTime = timeGetTime() * 0.001;
-
 		// Return the elapsed time
-		if (command == TIMER_GETELAPSEDTIME)
+		case TIMER_GETELAPSEDTIME:
 		{
-			fElapsedTime       = (double) (fTime - m_fLastElapsedTime);
-			m_fLastElapsedTime = fTime;
-			return (FLOAT) fElapsedTime;
+			double fElapsedTime = fTime - s_fLastElapsedTime;
+			s_fLastElapsedTime  = fTime;
+			return (float) fElapsedTime;
 		}
 
 		// Return the current time
-		if (command == TIMER_GETAPPTIME)
-		{
-			return (FLOAT) (fTime - m_fBaseTime);
-		}
+		case TIMER_GETAPPTIME:
+			return (float) (fTime - s_fBaseTime);
 
 		// Reset the timer
-		if (command == TIMER_RESET)
-		{
-			m_fBaseTime        = fTime;
-			m_fLastElapsedTime = fTime;
+		case TIMER_RESET:
+			s_fBaseTime        = fTime;
+			s_fLastElapsedTime = fTime;
 			return 0.0f;
-		}
 
 		// Start the timer
-		if (command == TIMER_START)
-		{
-			m_fBaseTime        += fTime - m_fStopTime;
-			m_fStopTime         = 0.0f;
-			m_fLastElapsedTime  = fTime;
+		case TIMER_START:
+			s_fBaseTime        += fTime - s_fStopTime;
+			s_fStopTime         = 0.0;
+			s_fLastElapsedTime  = fTime;
 			return 0.0f;
-		}
 
 		// Stop the timer
-		if (command == TIMER_STOP)
-		{
-			m_fStopTime = fTime;
+		case TIMER_STOP:
+			s_fStopTime        = fTime;
+			s_fLastElapsedTime = fTime;
 			return 0.0f;
-		}
 
 		// Advance the timer by 1/10th second
-		if (command == TIMER_ADVANCE)
-		{
-			m_fStopTime += 0.1f;
+		case TIMER_ADVANCE:
+			s_fStopTime += 0.1;
 			return 0.0f;
-		}
 
-		if (command == TIMER_GETABSOLUTETIME)
-		{
-			return (FLOAT) fTime;
-		}
+		case TIMER_GETABSOLUTETIME:
+			return (float) fTime;
 
-		return -1.0f; // Invalid command specified
+		default:
+			return -1.0f; // Invalid command specified
 	}
 }
 
@@ -281,15 +187,25 @@ void CN3Base::PathSet(const std::string& szPath)
 		return;
 
 	// NOTE: this puts the entire string into lowercase characters
+#ifdef _WIN32
 	CharLower(&(s_szPath[0])); // make sure to give lowercase
+#else
+	StrLowerAscii(s_szPath);   // make sure to give lowercase
+#endif
 	if (s_szPath.size() > 1)
 	{
-		// NOTE: this checks if the last character is '\'; if not it will add it
+		// NOTE: this checks if the last character is the path separator; if not it will add it
+#ifdef _WIN32
 		if (s_szPath[s_szPath.size() - 1] != '\\')
 			s_szPath += '\\';
+#else
+		if (s_szPath[s_szPath.size() - 1] != '/')
+			s_szPath += '/';
+#endif
 	}
 }
 
+#ifdef _WIN32 // POSIX port: debug line rendering comes back with the RHI (phase 5)
 void CN3Base::RenderLines(const __Vector3* pvLines, int nCount, D3DCOLOR color)
 {
 	DWORD dwAlpha = 0, dwFog = 0, dwLight = 0;
@@ -390,32 +306,19 @@ void CN3Base::RenderLines(const RECT& rc, D3DCOLOR color)
 	CN3Base::s_lpD3DDev->SetFVF(dwVertexShader);
 }
 
+#else
+void CN3Base::RenderLines(const __Vector3* /*pvLines*/, int /*nCount*/, D3DCOLOR /*color*/)
+{
+}
+
+void CN3Base::RenderLines(const RECT& /*rc*/, D3DCOLOR /*color*/)
+{
+}
+#endif // _WIN32
+
 float CN3Base::TimeGet()
 {
-	static bool bInit       = false;
-	static bool bUseHWTimer = FALSE;
-	static LARGE_INTEGER nTime, nFrequency;
-
-	if (bInit == false)
-	{
-		if (TRUE == ::QueryPerformanceCounter(&nTime))
-		{
-			::QueryPerformanceFrequency(&nFrequency);
-			bUseHWTimer = TRUE;
-		}
-		else
-		{
-			bUseHWTimer = FALSE;
-		}
-
-		bInit = true;
-	}
-
-	if (bUseHWTimer)
-	{
-		::QueryPerformanceCounter(&nTime);
-		return (float) ((double) (nTime.QuadPart) / (double) nFrequency.QuadPart);
-	}
-
-	return (float) timeGetTime();
+	// Monotonic seconds since process start (formerly QueryPerformanceCounter
+	// with a timeGetTime() fallback). Callers only ever consume differences.
+	return (float) PlatformTimeSeconds();
 }

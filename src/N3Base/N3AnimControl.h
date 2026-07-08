@@ -34,6 +34,8 @@ public:
 	float fFrmStrike0;
 	float fFrmStrike1;
 
+	__AnimData(const __AnimData&) = default;
+
 	__AnimData()
 	{
 		fFrmPerSec         = 30.0f; // 초당 30프레임이 표준이다..
