@@ -1,7 +1,10 @@
 # Plan de implementación: port del cliente WarFare a plataformas POSIX (macOS / Linux)
 
-> **Estado:** propuesta / borrador de trabajo
+> **Estado:** en ejecución (fases 0-5 completadas o casi; ver checklists)
 > **Rama:** `feature/port-posix`
+> **Para agentes nuevos:** leer primero `docs/PORT_POSIX_CONTEXT.md` (reglas,
+> gotchas, build/test). Las fases 6+ están subdivididas en tareas `T*`
+> independientes, pensadas para ejecutarse en sesiones separadas.
 > **Objetivo primario:** compilar y ejecutar el cliente (`src/Client/WarFare`) de forma nativa en **macOS** (Apple Silicon e Intel), manteniendo soporte **Linux** en el mismo esfuerzo y sin romper el build de Windows en ningún momento.
 
 ---
@@ -384,77 +387,111 @@ tajada migrada corre de verdad: `N3Base.Tests` carga un `.n3vmesh` real por
 el loader del motor y lo dibuja por el Null device. El hito "Windows 100%
 sobre RHI" se alcanza al completar la migración por módulos.
 
-### Fase 6 — Backend OpenGL (esfuerzo: ~4 sp, la fase más técnica)
+### Fase 6 — Recursos RHI + Backend OpenGL (esfuerzo: ~4-5 sp, subdividida)
 
-**Objetivo:** implementar `RHIDeviceGL` (GL 3.3 core; en macOS contexto 4.1
-core vía SDL) y ver el juego dibujar en macOS/Linux.
+> Cada tarea es autocontenida, con su criterio de aceptación, y deja la rama
+> verde (build + 6 suites de tests + smoke). Orden: T6.1 → T6.2 → (T6.3‖T6.4)
+> → T6.5 → T6.6 → T6.7 → T6.8. Ver `PORT_POSIX_CONTEXT.md` §4-5 antes de
+> empezar cualquiera.
 
-* [ ] Contexto GL por SDL (`SDL_GL_CreateContext`), loader `glad`, vsync por
-      `SDL_GL_SetSwapInterval` (opción `VSyncEnabled` existente).
-* [ ] Recursos: VBO/IBO (con soporte del patrón `DrawPrimitiveUP` vía buffer
-      transitorio en ring), texturas (incl. DXT1/3/5 con
-      `GL_EXT_texture_compression_s3tc`, disponible en macOS y Mesa; fallback
-      a descompresión por CPU si faltara), render-to-texture si algún efecto
-      lo usa.
-* [ ] **Emulación de fixed-function con un über-shader**: matrices
-      world/view/proj, hasta 2–3 texture stages con sus ops
-      (MODULATE/ADD/SELECTARG…), iluminación por vértice (luces
-      direccionales/puntuales como el juego usa en `LightMgr`), fog lineal,
-      alpha test y vertex color. Los estados D3D9 del RHI se compilan a
-      claves de pipeline + uniforms.
-* [ ] Diferencias de convención: profundidad [0,1] vs [-1,1]
-      (`glClipControl` no existe en GL 4.1 de macOS → ajustar matriz de
-      proyección), origen de texturas (flip V al cargar o en sampler),
-      semántica de `D3DCOLOR` BGRA en vertex color (usar
-      `GL_BGRA`+normalized o swizzle al construir).
-* [ ] Herramientas de validación: capturas RenderDoc **en Linux** (mismo
-      backend GL; en macOS no existe depurador para GL) comparadas contra
-      capturas D3D9 de referencia.
+* [ ] **T6.1 — Buffers RHI.** Añadir `IRHIVertexBuffer`/`IRHIIndexBuffer`
+      (Lock/Unlock/Release, semántica IDirect3DVertexBuffer9) +
+      `CreateVertexBuffer`/`CreateIndexBuffer` en `IRHIDevice`; cambiar las
+      firmas de `SetStreamSource`/`SetIndices` a los tipos RHI. Impl Null:
+      memoria de sistema real (malloc; Lock devuelve el puntero). Impl D3D9:
+      wrapper. Migrar los 4 usuarios de `CreateVertexBuffer`
+      (`N3TerrainPatch`, `N3GERain`, `N3GESnow`, `N3UIImage`) y el cast del
+      alpha-manager. Tests en `tests/N3Base` (round-trip Lock/escritura).
+      *Aceptación:* los 4 archivos compilan en POSIX y entran al subset;
+      Windows CI verde.
+* [ ] **T6.2 — Texturas RHI + port de N3Texture.** `IRHITexture`
+      (LockRect/UnlockRect/GetLevelDesc por nivel) + `CreateTexture`;
+      `SetTexture` acepta el tipo RHI. Impl Null: almacenamiento por nivel
+      con tamaño correcto (¡bloques 4x4 para DXT!). Migrar `N3Texture.cpp`
+      (miembro `m_lpTexture` → `IRHITexture*`); los caminos con D3DX
+      (`D3DXLoadSurfaceFromSurface`, save, LOD-rescale) quedan `#ifdef _WIN32`
+      por ahora. Test: generar un `.dxt` sintético mínimo (formato del juego)
+      y cargarlo headless; si `OPENKO_FETCH_CLIENT_ASSETS=ON`, smoke con una
+      textura real. *Aceptación:* `N3Texture` en el subset POSIX; carga DXT
+      headless testeada.
+* [ ] **T6.3 — Rezagados de device (mecánica).** `ValidateDevice` y
+      `SetScissorRect` entran a `IRHIDevice` (Null: no-op OK; D3D9: forward);
+      migrar `N3Terrain.cpp` y `UIHotKeyDlg.cpp`. `N3Cloak`
+      (`SetVertexShader(nullptr)` x2) se migra gateando esas 2 líneas.
+      *Aceptación:* `grep s_lpD3DDev src/Client/WarFare src/N3Base` solo
+      devuelve `N3Eng*`, `DFont`, `N3Texture`(win-paths) y `N3UIEdit`.
+* [ ] **T6.4 — Recursos de texto portables.** `text_resources.h`/`resource.h`
+      usan `LoadString` del `.rc` en Windows. Extraer las cadenas IDS_* a una
+      tabla C++ o archivo de datos cargado en runtime, manteniendo el camino
+      `.rc` en Windows (`fmt::format_text_resource` como API común).
+      *Aceptación:* un TU de WarFare que use `IDS_*` compila en POSIX.
+* [ ] **T6.5 — Backend GL a: contexto + clear.** `RHIDeviceGL` mínimo:
+      contexto vía `SDL_GL_CreateContext` + loader `glad` (vendorizar
+      generado GL 3.3/4.1 core en `deps/` o `src/N3Base/RHI/glad/`),
+      `Clear`/`BeginScene`/`EndScene`/`Present` (SwapWindow), vsync según
+      `bVSyncEnabled`. Selección de backend por `Option.ini`
+      (`Renderer=Null|GL`). *Aceptación:* la ventana deja de ser negra — se
+      ve el color de clear (probar en Mac); smoke CI sigue en dummy+Null.
+* [ ] **T6.6 — Backend GL b: geometría + texturas.** VBO/IBO desde los
+      buffers RHI, ring-buffer transitorio para `Draw*UP`, texturas
+      (DXT vía `GL_EXT_texture_compression_s3tc`, RGBA/565 sin comprimir),
+      conversión BGRA de `D3DCOLOR` en vertex colors, flip V.
+      *Aceptación:* test visual con la malla del smoke (quad) dibujada.
+* [ ] **T6.7 — Backend GL c: über-shader fixed-function v1.** Matrices
+      world/view/proj, 2 texture stages (MODULATE/SELECTARG1/ADD/DISABLE),
+      alpha blend/test, fog lineal, iluminación por vértice
+      (direccional+punto), materiales. Estados D3D del RHI → uniforms/estado
+      GL. Ajustar proyección para depth [-1,1].
+      *Aceptación:* con assets reales en un Mac, `GameProcLogIn` (T6.8)
+      o en su defecto una escena de prueba con `.n3shape` real se ve
+      correcta; comparar contra captura D3D9 de referencia.
+* [ ] **T6.8 — Conectar CGameProcedure (hito C).** Compilar en POSIX
+      `GameBase`/`GameEng`/`GameProcedure` + escena de login + los `N3UI*` de
+      N3Base (menos `N3UIEdit`, F7) con el patrón de gates ya establecido;
+      sustituir el pase de diagnóstico del main SDL por
+      `StaticMemberInit` + `TickActive`/`RenderActive` + desconexión de
+      sockets al salir. `DFont` provisional: stub que no dibuja texto (el
+      real llega en F7). *Aceptación:* **pantalla de login renderizando en
+      macOS** (sin texto es aceptable para el hito).
 
-**Aceptación (hito visible):** escena de login (`GameProcLogIn`) y selección
-de personaje renderizan correctamente en macOS; después mundo/terreno/agua/
-efectos. Checklist de paridad visual por escena.
+**Aceptación de fase:** hito C — login visible en macOS con backend GL;
+CI verde en las 3 plataformas; el subset POSIX incluye terreno/UI base.
 
 ### Fase 6b — Backend SDL_GPU: el definitivo para macOS/Linux (esfuerzo: ~2 sp)
 
-**Objetivo:** implementar `RHIDeviceSDLGPU` sobre la API SDL_GPU de SDL3
-(Metal en macOS, Vulkan en Linux), que pasa a ser el backend por defecto;
-GL queda como fallback/entorno de depuración en Linux.
+* [ ] **T6b.1 — Toolchain de shaders.** Über-shader portado a HLSL,
+      compilación offline con `SDL_shadercross` a SPIR-V + MSL como paso de
+      build CMake (find_package con fallback FetchContent).
+* [ ] **T6b.2 — `RHIDeviceSDLGPU`.** Device/swapchain/passes de SDL_GPU;
+      caché de pipelines con `RHIStateKey` (ya existe con tests); buffers
+      transitorios para `Draw*UP`; texturas (BC1-3 nativos en Metal/Vulkan).
+* [ ] **T6b.3 — Paridad y default.** `Renderer=SDLGPU` en `Option.ini`,
+      comparación visual GL vs SDL_GPU con las mismas capturas, Xcode GPU
+      capture en macOS; pasar el default de macOS a SDL_GPU.
 
-* [ ] Caché de pipeline-objects usando la clave de estado definida en la RHI
-      (fase 5); buffers transitorios para el patrón `DrawPrimitiveUP` con las
-      transfer/copy passes de SDL_GPU.
-* [ ] Portar el über-shader a HLSL y compilarlo offline con `SDL_shadercross`
-      a SPIR-V + MSL (paso de build en CMake); las variantes del
-      fixed-function se generan por permutación de defines.
-* [ ] Paridad visual GL vs SDL_GPU con las mismas capturas de referencia;
-      en macOS ahora sí con Xcode GPU Frame Capture.
-* [ ] Selección de backend en runtime/`Option.ini` (`Renderer=GL|SDLGPU`)
-      para poder bisectar bugs de render entre backends.
-
-**Nota:** esta fase es paralelizable con F7 una vez validada la RHI (fase 5)
-y el primer render GL (fase 6); no bloquea el hito "jugable".
-
-**Aceptación:** el cliente corre en macOS sobre Metal (verificable con Metal
-HUD / Xcode capture) con paridad visual respecto al backend GL y a D3D9.
+**Nota:** paralelizable con F7 tras T6.7. **Aceptación:** cliente corriendo
+sobre Metal en macOS con paridad visual respecto a GL y D3D9.
 
 ### Fase 7 — Texto: fuentes y entrada/IME (esfuerzo: ~2 sp)
 
 **Objetivo:** `DFont` y `N3UIEdit` sin GDI/IMM32.
 
-* [ ] `DFont` sobre FreeType: rasterizar glifos a un atlas (misma interfaz
-      `DrawText`/`SetText`); cachear por (fuente, tamaño, negrita/cursiva);
-      cubrir Hangul + Latin-1 (los assets traen los nombres de fuente de
-      Windows — mapear "굴림/Gulim" → fuente empaquetada con licencia libre,
-      p. ej. Noto Sans KR, distribuida junto al cliente POSIX).
-* [ ] `N3UIEdit` sin ventana `EDIT`: buffer de texto propio + caret ya
-      existente (`CN3Caret`), alimentado por `SDL_EVENT_TEXT_INPUT` /
-      `SDL_EVENT_TEXT_EDITING` (composición IME nativa de macOS y
-      ibus/fcitx en Linux), `SDL_StartTextInput`/`SDL_SetTextInputArea` al
-      enfocar/desenfocar; eliminar el paso `WM_COMMAND`/`EN_CHANGE` del main.
-* [ ] Conversión UTF-8 ↔ CP949 en la frontera de red para chat/nombres
-      (protocolo intacto).
-
+* [ ] **T7.1 — `DFont` sobre FreeType.** Atlas de glifos a `IRHITexture`
+      (misma API pública `DrawText`/`SetText`); cachear por (fuente, tamaño,
+      estilo); cubrir Hangul + Latin-1; mapear "굴림/Gulim" → Noto Sans KR
+      empaquetada. GDI queda `#ifdef _WIN32`. *Aceptación:* texto visible en
+      la pantalla de login en macOS; test headless que rasteriza y verifica
+      que el atlas tiene píxeles.
+* [ ] **T7.2 — `N3UIEdit` sin ventana `EDIT`.** Buffer de texto propio +
+      caret existente, alimentado por `SDL_EVENT_TEXT_INPUT`/`TEXT_EDITING`
+      (IME nativo), `SDL_StartTextInput`/`SDL_SetTextInputArea` en
+      focus/blur; eliminar el paso `WM_COMMAND` del camino POSIX.
+      *Aceptación:* login con usuario/contraseña tecleados; composición
+      coreana funcional en macOS.
+* [ ] **T7.3 — Fronteras de encoding de chat.** `Cp949ToUtf8`/`Utf8ToCp949`
+      en los puntos de entrada/salida de texto de red (chat, nombres).
+      *Aceptación:* round-trip de chat con tildes y Hangul contra Ebenezer
+      local.
 **Aceptación:** login con usuario/contraseña escritos por teclado, chat
 in-game con texto coreano y español (tildes) en macOS y Linux.
 
