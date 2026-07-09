@@ -147,6 +147,11 @@ struct __Options
 	bool bWindowMode      = false;
 
 	bool bVSyncEnabled    = true;
+
+	// POSIX render backend selection (docs/PORT_POSIX_PLAN.md, T6.5): the RHI
+	// OpenGL backend when true, the headless Null backend otherwise. Windows
+	// always renders through Direct3D 9 and ignores this.
+	bool bPreferGLRenderer = false;
 };
 
 #include "RHI/RHIDevice.h"

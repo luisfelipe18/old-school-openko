@@ -431,13 +431,22 @@ sobre RHI" se alcanza al completar la migración por módulos.
       `GameBase.cpp`; se movió a `ClientResourceFormatter.cpp` y este entró al
       subset POSIX. Test end-to-end en `tests/WarFare` que cifra un `.tbl`
       sintético, lo carga y formatea `IDS_*` con `%d`/`%s`.)*
-* [ ] **T6.5 — Backend GL a: contexto + clear.** `RHIDeviceGL` mínimo:
+* [x] **T6.5 — Backend GL a: contexto + clear.** `RHIDeviceGL` mínimo:
       contexto vía `SDL_GL_CreateContext` + loader `glad` (vendorizar
       generado GL 3.3/4.1 core en `deps/` o `src/N3Base/RHI/glad/`),
       `Clear`/`BeginScene`/`EndScene`/`Present` (SwapWindow), vsync según
       `bVSyncEnabled`. Selección de backend por `Option.ini`
       (`Renderer=Null|GL`). *Aceptación:* la ventana deja de ser negra — se
       ve el color de clear (probar en Mac); smoke CI sigue en dummy+Null.
+      *(Hecho: `RHIDeviceGL` hereda de `RHIDeviceNull` y solo sobrescribe
+      `Clear`/`Present`; contexto GL 3.3 core (forward-compat, para macOS),
+      vsync por `SDL_GL_SetSwapInterval`. En vez de vendorizar glad generado
+      se usa un loader minimal propio (`GLLoader.h/.cpp`, `namespace gl`) que
+      resuelve solo las funciones usadas vía `SDL_GL_GetProcAddress` — sin
+      dep de link a GL, crece en T6.6/T6.7. Selección por `[Screen]
+      Renderer=GL` o flag `--renderer gl`; default Null. Degrada a Null si el
+      driver no tiene GL (p.ej. dummy de CI). **Falta validación visual en un
+      Mac** — no hay GL real en el contenedor de build.)*
 * [ ] **T6.6 — Backend GL b: geometría + texturas.** VBO/IBO desde los
       buffers RHI, ring-buffer transitorio para `Draw*UP`, texturas
       (DXT vía `GL_EXT_texture_compression_s3tc`, RGBA/565 sin comprimir),

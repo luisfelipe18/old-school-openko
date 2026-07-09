@@ -316,11 +316,15 @@ else()
     GameDef.h
     GameOptions.cpp
     GameOptions.h
+    GLLoader.cpp
+    GLLoader.h
     LocalInput.h
     LocalInputSDL.cpp
     LocalInputSDL.h
     N3TerrainPatch.cpp
     N3TerrainPatch.h
+    RHIDeviceGL.cpp
+    RHIDeviceGL.h
     StdAfx.h
     text_resources.h
     ${WARFARE_NETWORK_SOURCES}

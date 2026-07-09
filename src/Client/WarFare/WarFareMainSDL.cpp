@@ -16,6 +16,7 @@
 #include "GameOptions.h"
 #include "LocalInput.h"
 #include "LocalInputSDL.h"
+#include "RHIDeviceGL.h"
 
 #include <N3Base/LogWriter.h>
 #include <N3Base/N3Base.h>
@@ -29,6 +30,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
+#include <memory>
 #include <string>
 
 namespace
@@ -130,14 +132,24 @@ void LogInputDiagnostics(CLocalInput& input)
 int main(int argc, char* argv[])
 {
 	// CI/diagnostics: --smoke <N> pumps N frames and exits.
-	long smokeFrames = -1;
+	// --renderer <gl|null> overrides the Option.ini backend for a quick test.
+	long smokeFrames             = -1;
+	std::string rendererOverride;
 	for (int i = 1; i < argc - 1; ++i)
 	{
 		if (std::strcmp(argv[i], "--smoke") == 0)
 			smokeFrames = std::strtol(argv[i + 1], nullptr, 10);
+		else if (std::strcmp(argv[i], "--renderer") == 0)
+			rendererOverride = argv[i + 1];
 	}
 
 	LoadGameOptions();
+
+	bool bWantGL = CN3Base::s_Options.bPreferGLRenderer;
+	if (rendererOverride == "gl" || rendererOverride == "GL")
+		bWantGL = true;
+	else if (rendererOverride == "null" || rendererOverride == "Null")
+		bWantGL = false;
 
 	srand((uint32_t) time(nullptr));
 
@@ -152,8 +164,29 @@ int main(int argc, char* argv[])
 	if (!CN3Base::s_Options.bWindowMode)
 		windowFlags |= SDL_WINDOW_FULLSCREEN;
 
+	// The GL backend needs a GL-capable window, and the context attributes must
+	// be set before the window is created.
+	if (bWantGL)
+	{
+		RHIDeviceGL::SetGLWindowAttributes();
+		windowFlags |= SDL_WINDOW_OPENGL;
+	}
+
 	g_pWindow = SDL_CreateWindow("Knight OnLine Client", CN3Base::s_Options.iViewWidth,
 		CN3Base::s_Options.iViewHeight, windowFlags);
+
+	// A GL-capable window can't be created on drivers without OpenGL (e.g. the
+	// "dummy" driver CI uses): drop the GL flag, retry, and use the Null backend.
+	if (g_pWindow == nullptr && bWantGL)
+	{
+		spdlog::warn("GL-capable window creation failed ({}); retrying without OpenGL",
+			SDL_GetError());
+		bWantGL     = false;
+		windowFlags &= ~static_cast<SDL_WindowFlags>(SDL_WINDOW_OPENGL);
+		g_pWindow   = SDL_CreateWindow("Knight OnLine Client", CN3Base::s_Options.iViewWidth,
+			  CN3Base::s_Options.iViewHeight, windowFlags);
+	}
+
 	if (g_pWindow == nullptr)
 	{
 		CLogWriter::Write("Cannot create window: {}", SDL_GetError());
@@ -163,10 +196,29 @@ int main(int argc, char* argv[])
 
 	SetupWindowCursor();
 
-	// Headless RHI backend until the GL/SDL_GPU ones land (phases 6/6b):
-	// render code runs and is counted, pixels come later.
-	RHIDeviceNull rhiDevice;
-	CN3Base::RHIDeviceSet(&rhiDevice);
+	// Render backend: OpenGL when requested and available (draws the clear
+	// colour to the window), otherwise the headless Null backend that CI runs
+	// (render code executes and is counted, pixels come later).
+	std::unique_ptr<IRHIDevice> pRHIDevice;
+	bool bUsingGL = false;
+	if (bWantGL)
+	{
+		auto pGL = std::make_unique<RHIDeviceGL>(g_pWindow, CN3Base::s_Options.bVSyncEnabled);
+		if (pGL->IsValid())
+		{
+			pRHIDevice = std::move(pGL);
+			bUsingGL   = true;
+		}
+		else
+		{
+			spdlog::warn("OpenGL backend unavailable; falling back to the Null backend");
+		}
+	}
+	if (pRHIDevice == nullptr)
+		pRHIDevice = std::make_unique<RHIDeviceNull>();
+
+	CN3Base::RHIDeviceSet(pRHIDevice.get());
+	spdlog::info("render backend: {}", bUsingGL ? "OpenGL" : "Null");
 
 	CLocalInput localInput;
 	localInput.Init(nullptr, nullptr);
@@ -207,11 +259,12 @@ int main(int argc, char* argv[])
 			g_bQuitRequested = true;
 
 		// TODO(F6): CGameProcedure::TickActive() + RenderActive() replace the
-		// diagnostics below; the RHI frame sequence already runs here.
-		rhiDevice.BeginScene();
-		rhiDevice.Clear(D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, 0xFF000000, 1.0f, 0);
-		rhiDevice.EndScene();
-		rhiDevice.Present();
+		// diagnostics below; the RHI frame sequence already runs here. The
+		// clear colour is a dim blue so the GL backend is visibly not-black.
+		pRHIDevice->BeginScene();
+		pRHIDevice->Clear(D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, 0xFF102040, 1.0f, 0);
+		pRHIDevice->EndScene();
+		pRHIDevice->Present();
 
 		SDL_Delay(g_bWindowInFocus ? 10 : 50);
 
@@ -225,8 +278,10 @@ int main(int argc, char* argv[])
 
 	// Clean shutdown (the WndProc used to disconnect the game sockets here;
 	// that returns with CGameProcedure in the render phases).
+	if (auto* pNull = dynamic_cast<RHIDeviceNull*>(pRHIDevice.get()))
+		spdlog::info("frames presented through the RHI: {}", pNull->PresentCount());
 	CN3Base::RHIDeviceSet(nullptr);
-	spdlog::info("frames presented through the RHI: {}", rhiDevice.PresentCount());
+	pRHIDevice.reset(); // destroy the GL context before the window
 	if (g_pCursor != nullptr)
 		SDL_DestroyCursor(g_pCursor);
 	SDL_DestroyWindow(g_pWindow);

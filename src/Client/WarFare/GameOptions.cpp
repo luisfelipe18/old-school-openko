@@ -113,4 +113,10 @@ void LoadGameOptions()
 	// Load unofficial config to determine if we should enable vsync or not
 	// This is officially enabled by default.
 	CN3Base::s_Options.bVSyncEnabled = ini.GetBool("Screen", "VSyncEnabled", true);
+
+	// POSIX-only: pick the RHI render backend. "GL" uses the OpenGL backend
+	// (docs/PORT_POSIX_PLAN.md, T6.5); anything else keeps the headless Null
+	// backend, which is what CI smoke runs. Windows ignores this and uses D3D9.
+	const std::string szRenderer         = ini.GetString("Screen", "Renderer", "Null");
+	CN3Base::s_Options.bPreferGLRenderer = (szRenderer == "GL" || szRenderer == "gl");
 }
