@@ -11,6 +11,55 @@
 
 #include "RHIDevice.h"
 
+/// Wraps an IDirect3DTexture9. LockRect/UnlockRect/GetLevelDesc/GetLevelCount
+/// forward to the COM object; Release() mirrors the COM reference count so
+/// N3Texture's "release until zero" bookkeeping stays byte-identical.
+class RHITextureD3D9 : public IRHITexture
+{
+public:
+	explicit RHITextureD3D9(LPDIRECT3DTEXTURE9 pTexture) : m_pTexture(pTexture)
+	{
+	}
+
+	HRESULT LockRect(
+		UINT level, D3DLOCKED_RECT* pLockedRect, const RECT* pRect, DWORD flags) override
+	{
+		return m_pTexture->LockRect(level, pLockedRect, pRect, flags);
+	}
+
+	HRESULT UnlockRect(UINT level) override
+	{
+		return m_pTexture->UnlockRect(level);
+	}
+
+	HRESULT GetLevelDesc(UINT level, D3DSURFACE_DESC* pDesc) override
+	{
+		return m_pTexture->GetLevelDesc(level, pDesc);
+	}
+
+	UINT GetLevelCount() const override
+	{
+		return m_pTexture->GetLevelCount();
+	}
+
+	ULONG Release() override
+	{
+		const ULONG rc = m_pTexture->Release();
+		if (rc == 0)
+			delete this;
+		return rc;
+	}
+
+	// Raw handle for the Windows-only tool paths (D3DX surface work).
+	LPDIRECT3DTEXTURE9 D3DTexture() const
+	{
+		return m_pTexture;
+	}
+
+protected:
+	LPDIRECT3DTEXTURE9 m_pTexture;
+};
+
 /// Wraps an IDirect3DVertexBuffer9; Release() drops the COM reference and
 /// destroys the wrapper (single-owner semantics, see RHIBuffers.h).
 class RHIVertexBufferD3D9 : public IRHIVertexBuffer
@@ -209,9 +258,11 @@ public:
 		return m_pDevice->GetViewport(pViewport);
 	}
 
-	HRESULT SetTexture(DWORD stage, LPDIRECT3DBASETEXTURE9 pTexture) override
+	HRESULT SetTexture(DWORD stage, IRHITexture* pTexture) override
 	{
-		return m_pDevice->SetTexture(stage, pTexture);
+		LPDIRECT3DTEXTURE9 pD3DTexture =
+			pTexture ? static_cast<RHITextureD3D9*>(pTexture)->D3DTexture() : nullptr;
+		return m_pDevice->SetTexture(stage, pD3DTexture);
 	}
 
 	HRESULT SetFVF(DWORD fvf) override
@@ -222,6 +273,22 @@ public:
 	HRESULT GetFVF(DWORD* pFvf) override
 	{
 		return m_pDevice->GetFVF(pFvf);
+	}
+
+	HRESULT CreateTexture(UINT width, UINT height, UINT levels, DWORD usage, D3DFORMAT format,
+		D3DPOOL pool, IRHITexture** ppTexture) override
+	{
+		if (ppTexture == nullptr)
+			return RHI_E_FAIL;
+
+		LPDIRECT3DTEXTURE9 pD3DTexture = nullptr;
+		const HRESULT rval =
+			m_pDevice->CreateTexture(width, height, levels, usage, format, pool, &pD3DTexture, nullptr);
+		if (FAILED(rval))
+			return rval;
+
+		*ppTexture = new RHITextureD3D9(pD3DTexture);
+		return rval;
 	}
 
 	HRESULT CreateVertexBuffer(

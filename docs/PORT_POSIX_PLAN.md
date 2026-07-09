@@ -404,7 +404,7 @@ sobre RHI" se alcanza al completar la migración por módulos.
       alpha-manager. Tests en `tests/N3Base` (round-trip Lock/escritura).
       *Aceptación:* los 4 archivos compilan en POSIX y entran al subset;
       Windows CI verde.
-* [ ] **T6.2 — Texturas RHI + port de N3Texture.** `IRHITexture`
+* [x] **T6.2 — Texturas RHI + port de N3Texture.** `IRHITexture`
       (LockRect/UnlockRect/GetLevelDesc por nivel) + `CreateTexture`;
       `SetTexture` acepta el tipo RHI. Impl Null: almacenamiento por nivel
       con tamaño correcto (¡bloques 4x4 para DXT!). Migrar `N3Texture.cpp`

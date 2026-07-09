@@ -5,8 +5,19 @@
 #include "N3Texture.h"
 #include "WinCrypt.h"
 
+#ifdef _WIN32
+#include "RHI/RHIDeviceD3D9.h" // RHITextureD3D9 wrapper for the D3DX/tool paths
+#endif
+
 #ifdef _N3TOOL
 #include "BitmapFile.h"
+
+// Tool-only D3DX/surface work operates on the raw D3D texture. _N3TOOL implies
+// a Windows build, so the RHI texture is always a RHITextureD3D9 here.
+static inline LPDIRECT3DTEXTURE9 D3DTex(IRHITexture* pTexture)
+{
+	return pTexture ? static_cast<RHITextureD3D9*>(pTexture)->D3DTexture() : nullptr;
+}
 #endif // #ifdef _N3TOOL
 
 #include <FileIO/FileReader.h>
@@ -114,8 +125,8 @@ bool CN3Texture::Create(int nWidth, int nHeight, D3DFORMAT Format, BOOL bGenerat
 			nMMC++;
 	}
 
-	HRESULT rval = s_lpD3DDev->CreateTexture(
-		nWidth, nHeight, nMMC, 0, Format, D3DPOOL_MANAGED, &m_lpTexture, nullptr);
+	HRESULT rval = RHIDevice()->CreateTexture(
+		nWidth, nHeight, nMMC, 0, Format, D3DPOOL_MANAGED, &m_lpTexture);
 
 #ifdef _N3GAME
 	if (rval == D3DERR_INVALIDCALL)
@@ -236,13 +247,17 @@ bool CN3Texture::LoadFromFile(const std::string& szFileName)
 	}
 	else
 	{
+#ifdef _WIN32
 		D3DXIMAGE_INFO ImgInfo;
+		LPDIRECT3DTEXTURE9 lpD3DTexture = nullptr;
 		HRESULT rval = D3DXCreateTextureFromFileEx(s_lpD3DDev, szFullPath.c_str(), D3DX_DEFAULT,
 			D3DX_DEFAULT, D3DX_DEFAULT, 0, D3DFMT_UNKNOWN, D3DPOOL_MANAGED,
 			D3DX_FILTER_TRIANGLE | D3DX_FILTER_MIRROR, D3DX_FILTER_TRIANGLE | D3DX_FILTER_MIRROR, 0,
-			&ImgInfo, nullptr, &m_lpTexture);
+			&ImgInfo, nullptr, &lpD3DTexture);
 		if (rval == D3D_OK)
 		{
+			m_lpTexture = new RHITextureD3D9(lpD3DTexture);
+
 			D3DSURFACE_DESC sd;
 			m_lpTexture->GetLevelDesc(0, &sd);
 
@@ -256,6 +271,12 @@ bool CN3Texture::LoadFromFile(const std::string& szFileName)
 			CLogWriter::Write("N3Texture - Failed to load texture({})", szFullPath);
 #endif
 		}
+#else  // _WIN32
+		// Non-DXT image formats go through D3DX, which has no POSIX equivalent
+		// yet; the engine loads .dxt for essentially everything (T6.2 scope).
+		CLogWriter::Write(
+			"N3Texture - non-DXT texture formats are Windows-only for now ({})", szFullPath);
+#endif // _WIN32
 
 		if (32 == m_Header.nWidth && 32 == m_Header.nHeight)
 			s_ResrcInfo.nTexture_Loaded_32X32++;
@@ -772,7 +793,7 @@ bool CN3Texture::Save(File& file)
 		for (int i = 0; i < nMMC2; i++)
 		{
 			m_lpTexture->GetLevelDesc(i, &sd);
-			m_lpTexture->GetSurfaceLevel(i, &lpSurfSrc);
+			D3DTex(m_lpTexture)->GetSurfaceLevel(i, &lpSurfSrc);
 			int nW = sd.Width / 2, nH = sd.Height / 2;
 			s_lpD3DDev->CreateOffscreenPlainSurface(
 				nW, nH, fmtExtra, D3DPOOL_DEFAULT, &lpSurfDest, nullptr);
@@ -794,7 +815,7 @@ bool CN3Texture::Save(File& file)
 		if (nMMC == 1 && m_Header.nWidth >= 1024) // 부두를 위해 256 * 256 짜리 하나 더 저장해준다..
 		{
 			m_lpTexture->GetLevelDesc(0, &sd);
-			m_lpTexture->GetSurfaceLevel(0, &lpSurfSrc);
+			D3DTex(m_lpTexture)->GetSurfaceLevel(0, &lpSurfSrc);
 			int nW = 256, nH = 256;
 			s_lpD3DDev->CreateOffscreenPlainSurface(
 				nW, nH, fmtExtra, D3DPOOL_DEFAULT, &lpSurfDest, nullptr);
@@ -843,7 +864,7 @@ bool CN3Texture::Save(File& file)
 			LPDIRECT3DSURFACE9 lpSurfSrc = nullptr, lpSurfDest = nullptr;
 
 			m_lpTexture->GetLevelDesc(0, &sd);
-			m_lpTexture->GetSurfaceLevel(0, &lpSurfSrc);
+			D3DTex(m_lpTexture)->GetSurfaceLevel(0, &lpSurfSrc);
 			int nW = 256, nH = 256;
 			s_lpD3DDev->CreateOffscreenPlainSurface(
 				nW, nH, sd.Format, D3DPOOL_DEFAULT, &lpSurfDest, nullptr);
@@ -880,7 +901,7 @@ bool CN3Texture::Convert(D3DFORMAT Format, int nWidth, int nHeight, BOOL bGenera
 		nHeight = dsd.Height;
 	}
 
-	LPDIRECT3DTEXTURE9 lpTexOld = m_lpTexture;
+	IRHITexture* lpTexOld = m_lpTexture;
 
 	m_lpTexture                 = nullptr;
 	if (this->Create(nWidth, nHeight, Format, bGenerateMipMap) == false)
@@ -888,7 +909,7 @@ bool CN3Texture::Convert(D3DFORMAT Format, int nWidth, int nHeight, BOOL bGenera
 	if (bGenerateMipMap)
 	{
 		LPDIRECT3DSURFACE9 lpTSOld;
-		lpTexOld->GetSurfaceLevel(0, &lpTSOld);
+		D3DTex(lpTexOld)->GetSurfaceLevel(0, &lpTSOld);
 		this->GenerateMipMap(lpTSOld); // MipMap 생성
 		lpTSOld->Release();
 	}
@@ -896,8 +917,8 @@ bool CN3Texture::Convert(D3DFORMAT Format, int nWidth, int nHeight, BOOL bGenera
 	{
 		LPDIRECT3DSURFACE9 lpTSNew;
 		LPDIRECT3DSURFACE9 lpTSOld;
-		m_lpTexture->GetSurfaceLevel(0, &lpTSNew);
-		lpTexOld->GetSurfaceLevel(0, &lpTSOld);
+		D3DTex(m_lpTexture)->GetSurfaceLevel(0, &lpTSNew);
+		D3DTex(lpTexOld)->GetSurfaceLevel(0, &lpTSOld);
 		D3DXLoadSurfaceFromSurface(lpTSNew, nullptr, nullptr, lpTSOld, nullptr, nullptr,
 			D3DX_FILTER_NONE, 0); // 첫번재 레벨 서피스 복사.
 		lpTSOld->Release();
@@ -927,14 +948,14 @@ bool CN3Texture::GenerateMipMap(LPDIRECT3DSURFACE9 lpSurfSrc)
 	if (nullptr == lpSurfSrc)
 	{
 		bNeedReleaseSurf = true;
-		if (D3D_OK != m_lpTexture->GetSurfaceLevel(0, &lpSurfSrc))
+		if (D3D_OK != D3DTex(m_lpTexture)->GetSurfaceLevel(0, &lpSurfSrc))
 			return false;
 	}
 
 	HRESULT rval = D3D_OK;
 	if (nMMC < nMMC2) // 적으면 새로 생성..
 	{
-		LPDIRECT3DTEXTURE9 lpTexOld = m_lpTexture;
+		IRHITexture* lpTexOld = m_lpTexture;
 		m_lpTexture                 = nullptr;
 
 		bool created                = CreateFromSurface(lpSurfSrc, m_Header.Format, TRUE);
@@ -960,7 +981,7 @@ bool CN3Texture::GenerateMipMap(LPDIRECT3DSURFACE9 lpSurfSrc)
 		if (false == bNeedReleaseSurf) // 다른 서피스에서 복사해야 되는 거면 0 레벨도 복사..
 		{
 			LPDIRECT3DSURFACE9 lpSurfDest;
-			m_lpTexture->GetSurfaceLevel(0, &lpSurfDest);
+			D3DTex(m_lpTexture)->GetSurfaceLevel(0, &lpSurfDest);
 			uint32_t dwFilter = D3DX_FILTER_TRIANGLE; // 기본 필터는 없다..
 			HRESULT rval      = D3DXLoadSurfaceFromSurface(lpSurfDest, nullptr, nullptr, lpSurfSrc,
 					 nullptr, nullptr, dwFilter, 0);  // 작은 맵 체인에 서피스 이미지 축소 복사
@@ -971,8 +992,8 @@ bool CN3Texture::GenerateMipMap(LPDIRECT3DSURFACE9 lpSurfSrc)
 		for (int i = 1; i < nMMC2; i++)
 		{
 			LPDIRECT3DSURFACE9 lpSurfDest, lpSurfUp;
-			m_lpTexture->GetSurfaceLevel(i - 1, &lpSurfUp);
-			m_lpTexture->GetSurfaceLevel(i, &lpSurfDest);
+			D3DTex(m_lpTexture)->GetSurfaceLevel(i - 1, &lpSurfUp);
+			D3DTex(m_lpTexture)->GetSurfaceLevel(i, &lpSurfDest);
 			uint32_t dwFilter = D3DX_FILTER_TRIANGLE; // 기본 필터는 없다..
 			HRESULT rval      = D3DXLoadSurfaceFromSurface(lpSurfDest, nullptr, nullptr, lpSurfUp,
 					 nullptr, nullptr, dwFilter, 0);  // 작은 맵 체인에 서피스 이미지 축소 복사
@@ -1003,6 +1024,13 @@ void CN3Texture::UpdateRenderInfo()
 {
 }
 
+#ifdef _WIN32
+LPDIRECT3DTEXTURE9 CN3Texture::GetRawD3D()
+{
+	return m_lpTexture ? static_cast<RHITextureD3D9*>(m_lpTexture)->D3DTexture() : nullptr;
+}
+#endif
+
 #ifdef _N3TOOL
 bool CN3Texture::SaveToBitmapFile(const std::string& szFN)
 {
@@ -1012,7 +1040,7 @@ bool CN3Texture::SaveToBitmapFile(const std::string& szFN)
 		return false;
 
 	LPDIRECT3DSURFACE9 lpSurfSrc = nullptr;
-	m_lpTexture->GetSurfaceLevel(0, &lpSurfSrc);
+	D3DTex(m_lpTexture)->GetSurfaceLevel(0, &lpSurfSrc);
 
 	if (nullptr == lpSurfSrc)
 		return false;

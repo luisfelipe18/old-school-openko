@@ -112,6 +112,7 @@ set(N3BASE_COMMON_RHI_SOURCES
   RHI/RHIDeviceNull.cpp
   RHI/RHIDeviceNull.h
   RHI/RHIStateKey.h
+  RHI/RHITextures.h
 )
 
 set(N3BASE_COMMON_SOURCES
@@ -255,6 +256,8 @@ set(N3BASE_POSIX_PORTABLE_SOURCES
   N3ShapeMgr.h
   N3Skin.cpp
   N3Skin.h
+  N3Texture.cpp
+  N3Texture.h
   N3UIImage.cpp
   N3UIImage.h
   StdAfxBase.h

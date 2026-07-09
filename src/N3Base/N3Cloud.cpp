@@ -231,7 +231,7 @@ void CN3Cloud::Render()
 		RHIDevice()->SetTextureStageState(0, D3DTSS_ALPHAARG2, D3DTA_DIFFUSE);
 }
 
-LPDIRECT3DTEXTURE9 CN3Cloud::GetTex(e_CLOUDTEX tex)
+IRHITexture* CN3Cloud::GetTex(e_CLOUDTEX tex)
 {
 	if (nullptr == m_pTextures[tex])
 	{

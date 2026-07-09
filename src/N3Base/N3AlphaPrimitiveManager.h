@@ -9,13 +9,15 @@
 
 #include "My_3DStruct.h"
 
+struct IRHITexture; // RHI texture handle bound at draw time (see RHI/RHITextures.h)
+
 struct __AlphaPrimitive
 {
 	float fCameraDistance           = 0.0f;
 	uint32_t dwBlendSrc             = 0;
 	uint32_t dwBlendDest            = 0;
 	int nRenderFlags                = RF_NOTHING;
-	LPDIRECT3DTEXTURE9 lpTex        = nullptr;
+	IRHITexture* lpTex              = nullptr;
 	uint32_t dwFVF                  = 0;
 	D3DPRIMITIVETYPE ePrimitiveType = D3DPT_TRIANGLELIST;
 	int nPrimitiveCount             = 0;

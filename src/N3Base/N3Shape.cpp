@@ -182,7 +182,7 @@ void CN3SPart::Render()
 	s_RenderInfo.nShape_Part++; // Rendering Information Update...
 #endif
 
-	LPDIRECT3DTEXTURE9 lpTex = nullptr;
+	IRHITexture* lpTex       = nullptr;
 	int iTC                  = static_cast<int>(m_TexRefs.size());
 	if (iTC > 0)
 	{
@@ -278,7 +278,7 @@ void CN3SPart::RenderSelected(bool bWireFrame)
 	CN3Base::s_RenderInfo.nShape_Polygon += m_PMInst.GetNumIndices() / 3;
 #endif _DEBUG
 
-	LPDIRECT3DTEXTURE9 lpTex = nullptr;
+	IRHITexture* lpTex       = nullptr;
 	int iTC                  = static_cast<int>(m_TexRefs.size());
 	if (iTC > 0)
 	{
@@ -447,7 +447,7 @@ void CN3SPart::PartialRender(int iCount, uint16_t* pIndices)
 	CN3Base::s_RenderInfo.nShape_Part++; // Rendering Information Update...
 #endif
 
-	LPDIRECT3DTEXTURE9 lpTex = nullptr;
+	IRHITexture* lpTex       = nullptr;
 	int iTC                  = static_cast<int>(m_TexRefs.size());
 	if (iTC > 0)
 	{

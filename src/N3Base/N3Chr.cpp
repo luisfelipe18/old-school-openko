@@ -209,7 +209,7 @@ void CN3CPart::Render(int nLOD)
 	}
 
 	RHIDevice()->SetMaterial(&m_Mtl);
-	LPDIRECT3DTEXTURE9 lpTex = nullptr;
+	IRHITexture* lpTex      = nullptr;
 	bool bUseTwoUV           = false;
 	if (m_pTexRef)
 		lpTex = m_pTexRef->Get();
@@ -389,7 +389,7 @@ void CN3CPlugBase::Render(const __Matrix44& mtxParent, const __Matrix44& mtxJoin
 	RHIDevice()->SetTransform(D3DTS_WORLD, mtx.toD3D());
 
 	RHIDevice()->SetMaterial(&m_Mtl);
-	LPDIRECT3DTEXTURE9 lpTex = nullptr;
+	IRHITexture* lpTex      = nullptr;
 	bool bUseTwoUV           = false;
 	if (m_pTexRef)
 		lpTex = m_pTexRef->Get();

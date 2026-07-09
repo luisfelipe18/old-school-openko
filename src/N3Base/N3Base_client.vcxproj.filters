@@ -499,5 +499,6 @@
     <ClInclude Include="RHI\RHIDeviceD3D9.h" />
     <ClInclude Include="RHI\RHIDeviceNull.h" />
     <ClInclude Include="RHI\RHIStateKey.h" />
+    <ClInclude Include="RHI\RHITextures.h" />
   </ItemGroup>
 </Project>

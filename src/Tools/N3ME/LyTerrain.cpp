@@ -1781,7 +1781,7 @@ void CLyTerrain::SaveGameData(File& file)
 
 				CN3Texture* pNewTex = new CN3Texture;
 				LPDIRECT3DSURFACE9 pSurf;
-				m_ppLightMapTexture[x][z]->Get()->GetSurfaceLevel(0, &pSurf);
+				m_ppLightMapTexture[x][z]->GetRawD3D()->GetSurfaceLevel(0, &pSurf);
 				pNewTex->CreateFromSurface(pSurf, m_ppLightMapTexture[x][z]->PixelFormat(), true);
 				pNewTex->Convert(D3DFMT_A4R4G4B4, LIGHTMAP_TEX_SIZE, LIGHTMAP_TEX_SIZE);
 				pNewTex->Save(file);
@@ -1923,7 +1923,7 @@ void CLyTerrain::MakeGameLightMap(char* szFullPathName)
 
 						CN3Texture* pNewTex = new CN3Texture;
 						LPDIRECT3DSURFACE9 pSurf;
-						m_ppLightMapTexture[tpx + tx][tpz + tz]->Get()->GetSurfaceLevel(0, &pSurf);
+						m_ppLightMapTexture[tpx + tx][tpz + tz]->GetRawD3D()->GetSurfaceLevel(0, &pSurf);
 						pNewTex->CreateFromSurface(
 							pSurf, m_ppLightMapTexture[tpx + tx][tpz + tz]->PixelFormat(), true);
 						pNewTex->Convert(D3DFMT_A4R4G4B4, LIGHTMAP_TEX_SIZE, LIGHTMAP_TEX_SIZE);
@@ -1962,7 +1962,7 @@ void CLyTerrain::MakeGameColorMap(char* szFullPathName)
 			ProgressBar.StepIt();
 
 			LPDIRECT3DSURFACE9 lpSurfSrc = nullptr;
-			m_pColorTexture[x][z].Get()->GetSurfaceLevel(0, &lpSurfSrc);
+			m_pColorTexture[x][z].GetRawD3D()->GetSurfaceLevel(0, &lpSurfSrc);
 			if (nullptr == lpSurfSrc)
 			{
 				MessageBox(::GetActiveWindow(), "No Colormap", "Save Game Color Map Error.", MB_OK);
@@ -4509,13 +4509,13 @@ void CLyTerrain::SetColorMap(int x, int y)
 	int t2 = m_ppMapData[x][y].DTexInfo2.TexIdx.TexID;
 
 	if (m_ppMapData[x][y].DTexInfo1.Attr.Group > 0 && GetTileTex(t1))
-		hr = s_lpD3DDev->SetTexture(0, GetTileTex(t1)->Get());
+		hr = s_lpD3DDev->SetTexture(0, GetTileTex(t1)->GetRawD3D());
 	else
 		hr = s_lpD3DDev->SetTexture(0, nullptr);
 
 	if (m_ppMapData[x][y].DTexInfo2.Attr.Group > 0 && GetTileTex(t2))
 	{
-		hr = s_lpD3DDev->SetTexture(1, GetTileTex(t2)->Get());
+		hr = s_lpD3DDev->SetTexture(1, GetTileTex(t2)->GetRawD3D());
 		hr = s_lpD3DDev->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_ADD);
 		hr = s_lpD3DDev->SetTextureStageState(1, D3DTSS_COLORARG1, D3DTA_CURRENT);
 		hr = s_lpD3DDev->SetTextureStageState(1, D3DTSS_COLORARG2, D3DTA_TEXTURE);
@@ -5655,7 +5655,7 @@ void CLyTerrain::GenerateMiniMap(LPCTSTR lpszPathName, int size)
 			ProgressBar.StepIt();
 
 			LPDIRECT3DSURFACE9 lpSurface;
-			m_pColorTexture[x][z].Get()->GetSurfaceLevel(0, &lpSurface);
+			m_pColorTexture[x][z].GetRawD3D()->GetSurfaceLevel(0, &lpSurface);
 			TmpTex.CreateFromSurface(lpSurface, m_pColorTexture[x][z].PixelFormat(), TRUE);
 			lpSurface->Release();
 

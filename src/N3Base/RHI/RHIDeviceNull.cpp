@@ -168,7 +168,7 @@ HRESULT RHIDeviceNull::GetViewport(D3DVIEWPORT9* pViewport)
 	return D3D_OK;
 }
 
-HRESULT RHIDeviceNull::SetTexture(DWORD /*stage*/, LPDIRECT3DBASETEXTURE9 /*pTexture*/)
+HRESULT RHIDeviceNull::SetTexture(DWORD /*stage*/, IRHITexture* /*pTexture*/)
 {
 	return D3D_OK;
 }
@@ -260,6 +260,119 @@ HRESULT RHIDeviceNull::CreateIndexBuffer(
 		return RHI_E_FAIL;
 
 	*ppBuffer = new RHIIndexBufferNull(length, format);
+	return D3D_OK;
+}
+
+// --- Textures ----------------------------------------------------------------
+
+namespace
+{
+// Bytes for one row of blocks (DXT) or pixels (uncompressed), matching how a
+// D3D9 LockRect reports Pitch, plus the number of such rows.
+void SurfaceLayout(D3DFORMAT format, UINT width, UINT height, INT& pitch, UINT& rows)
+{
+	const bool bDXT1 = (format == D3DFMT_DXT1);
+	const bool bDXT  = bDXT1 || format == D3DFMT_DXT2 || format == D3DFMT_DXT3
+					   || format == D3DFMT_DXT4 || format == D3DFMT_DXT5;
+	if (bDXT)
+	{
+		const UINT blocksX = (width + 3) / 4;
+		const UINT blocksY = (height + 3) / 4;
+		pitch              = static_cast<INT>(blocksX * (bDXT1 ? 8u : 16u));
+		rows               = blocksY;
+		return;
+	}
+
+	UINT bpp = 4;
+	if (format == D3DFMT_A1R5G5B5 || format == D3DFMT_A4R4G4B4)
+		bpp = 2;
+	else if (format == D3DFMT_R8G8B8)
+		bpp = 3;
+	pitch = static_cast<INT>(width * bpp);
+	rows  = height;
+}
+} // namespace
+
+RHITextureNull::RHITextureNull(UINT width, UINT height, UINT levels, D3DFORMAT format)
+	: m_eFormat(format)
+{
+	m_Levels.reserve(levels);
+	UINT w = width, h = height;
+	for (UINT i = 0; i < levels; ++i)
+	{
+		INT pitch  = 0;
+		UINT rows  = 0;
+		SurfaceLayout(format, w, h, pitch, rows);
+
+		Level level;
+		level.width  = w;
+		level.height = h;
+		level.pitch  = pitch;
+		level.storage.resize(static_cast<size_t>(pitch) * rows);
+		m_Levels.push_back(std::move(level));
+
+		w = (w > 1) ? w / 2 : 1;
+		h = (h > 1) ? h / 2 : 1;
+	}
+}
+
+HRESULT RHITextureNull::LockRect(
+	UINT level, D3DLOCKED_RECT* pLockedRect, const RECT* /*pRect*/, DWORD /*flags*/)
+{
+	if (pLockedRect == nullptr || level >= m_Levels.size())
+		return RHI_E_FAIL;
+
+	pLockedRect->Pitch = m_Levels[level].pitch;
+	pLockedRect->pBits = m_Levels[level].storage.data();
+	return D3D_OK;
+}
+
+HRESULT RHITextureNull::UnlockRect(UINT level)
+{
+	return (level < m_Levels.size()) ? D3D_OK : RHI_E_FAIL;
+}
+
+HRESULT RHITextureNull::GetLevelDesc(UINT level, D3DSURFACE_DESC* pDesc)
+{
+	if (pDesc == nullptr || level >= m_Levels.size())
+		return RHI_E_FAIL;
+
+	*pDesc                    = {};
+	pDesc->Format             = m_eFormat;
+	pDesc->Type               = D3DRTYPE_TEXTURE;
+	pDesc->Pool               = D3DPOOL_MANAGED;
+	pDesc->MultiSampleType    = D3DMULTISAMPLE_NONE;
+	pDesc->Width              = m_Levels[level].width;
+	pDesc->Height             = m_Levels[level].height;
+	return D3D_OK;
+}
+
+ULONG RHITextureNull::Release()
+{
+	delete this;
+	return 0;
+}
+
+HRESULT RHIDeviceNull::CreateTexture(UINT width, UINT height, UINT levels, DWORD /*usage*/,
+	D3DFORMAT format, D3DPOOL /*pool*/, IRHITexture** ppTexture)
+{
+	if (ppTexture == nullptr || width == 0 || height == 0)
+		return RHI_E_FAIL;
+
+	// levels == 0 means "full mip chain" in D3D9.
+	if (levels == 0)
+	{
+		levels    = 1;
+		UINT w = width, h = height;
+		while (w > 1 || h > 1)
+		{
+			w = (w > 1) ? w / 2 : 1;
+			h = (h > 1) ? h / 2 : 1;
+			++levels;
+		}
+	}
+
+	*ppTexture = new RHITextureNull(width, height, levels, format);
 	return D3D_OK;
 }
 

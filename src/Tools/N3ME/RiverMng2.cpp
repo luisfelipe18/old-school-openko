@@ -113,8 +113,8 @@ void CRiverMng2::Render()
 	//hr = s_lpD3DDev->SetRenderState(D3DRS_LIGHTING, FALSE);
 
 	// set texture
-	s_lpD3DDev->SetTexture(0, m_pTexRiver[(int) m_fTexIndex]->Get());
-	s_lpD3DDev->SetTexture(1, m_pTexWave->Get());
+	s_lpD3DDev->SetTexture(0, m_pTexRiver[(int) m_fTexIndex]->GetRawD3D());
+	s_lpD3DDev->SetTexture(1, m_pTexWave->GetRawD3D());
 	//s_lpD3DDev->SetTexture(1, NULL);
 	s_lpD3DDev->SetTexture(2, NULL);
 

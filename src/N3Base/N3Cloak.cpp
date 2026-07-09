@@ -120,7 +120,7 @@ void CN3Cloak::Render(__Matrix44& mtx)
 	if (dwCull != D3DCULL_NONE)
 		s_lpD3DDev->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
 
-	s_lpD3DDev->SetTexture(0, m_pTex->Get());
+	s_lpD3DDev->SetTexture(0, m_pTex->GetRawD3D());
 	s_lpD3DDev->SetTexture(1, nullptr);
 
 	s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_MODULATE);

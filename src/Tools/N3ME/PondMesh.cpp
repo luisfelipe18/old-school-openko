@@ -113,7 +113,7 @@ void CPondMesh::Render()
 		// set texture state(color)
 		s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
 		s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TEXTURE);
-		s_lpD3DDev->SetTexture(0, m_pTexture->Get());
+		s_lpD3DDev->SetTexture(0, m_pTexture->GetRawD3D());
 		s_lpD3DDev->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
 		s_lpD3DDev->SetTexture(1, nullptr);
 

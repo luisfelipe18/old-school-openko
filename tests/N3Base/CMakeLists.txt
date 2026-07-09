@@ -1,6 +1,7 @@
 add_executable(N3Base.Tests
   RHIBuffers_test.cpp
   RHIDeviceNull_test.cpp
+  RHITexture_test.cpp
   RHIStateKey_test.cpp
   VMeshHeadless_test.cpp)
 

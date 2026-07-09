@@ -41,6 +41,39 @@ protected:
 	bool m_bLocked  = false;
 };
 
+/// System-memory texture: each mip level gets a real buffer sized like a D3D9
+/// LockRect surface (4x4 block layout for DXT), so N3Texture::Load() can read
+/// the .dxt payload into it headlessly (tests, CI, POSIX until GL lands).
+class RHITextureNull : public IRHITexture
+{
+public:
+	RHITextureNull(UINT width, UINT height, UINT levels, D3DFORMAT format);
+
+	HRESULT LockRect(
+		UINT level, D3DLOCKED_RECT* pLockedRect, const RECT* pRect, DWORD flags) override;
+	HRESULT UnlockRect(UINT level) override;
+	HRESULT GetLevelDesc(UINT level, D3DSURFACE_DESC* pDesc) override;
+
+	UINT GetLevelCount() const override
+	{
+		return static_cast<UINT>(m_Levels.size());
+	}
+
+	ULONG Release() override;
+
+protected:
+	struct Level
+	{
+		UINT width;
+		UINT height;
+		INT pitch; // bytes per row (of blocks, for DXT)
+		std::vector<uint8_t> storage;
+	};
+
+	std::vector<Level> m_Levels;
+	D3DFORMAT m_eFormat;
+};
+
 class RHIIndexBufferNull : public IRHIIndexBuffer
 {
 public:
@@ -92,9 +125,12 @@ public:
 	HRESULT SetViewport(const D3DVIEWPORT9* pViewport) override;
 	HRESULT GetViewport(D3DVIEWPORT9* pViewport) override;
 
-	HRESULT SetTexture(DWORD stage, LPDIRECT3DBASETEXTURE9 pTexture) override;
+	HRESULT SetTexture(DWORD stage, IRHITexture* pTexture) override;
 	HRESULT SetFVF(DWORD fvf) override;
 	HRESULT GetFVF(DWORD* pFvf) override;
+
+	HRESULT CreateTexture(UINT width, UINT height, UINT levels, DWORD usage, D3DFORMAT format,
+		D3DPOOL pool, IRHITexture** ppTexture) override;
 
 	HRESULT CreateVertexBuffer(
 		UINT length, DWORD usage, DWORD fvf, D3DPOOL pool, IRHIVertexBuffer** ppBuffer) override;

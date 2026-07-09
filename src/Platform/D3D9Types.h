@@ -177,6 +177,46 @@ typedef enum _D3DMULTISAMPLE_TYPE
 	D3DMULTISAMPLE_FORCE_DWORD = 0x7fffffff
 } D3DMULTISAMPLE_TYPE;
 
+// D3D9 error HRESULTs (MAKE_D3DHRESULT: 0x88760000 | code). Real backends may
+// return these; the Null backend never does, but N3Texture compares against
+// them in its _N3GAME diagnostics.
+#ifndef D3DERR_INVALIDCALL
+#define D3DERR_INVALIDCALL       ((HRESULT) 0x8876086CL)
+#define D3DERR_OUTOFVIDEOMEMORY  ((HRESULT) 0x8876017CL)
+#endif
+
+typedef enum _D3DRESOURCETYPE
+{
+	D3DRTYPE_SURFACE       = 1,
+	D3DRTYPE_VOLUME        = 2,
+	D3DRTYPE_TEXTURE       = 3,
+	D3DRTYPE_VOLUMETEXTURE = 4,
+	D3DRTYPE_CUBETEXTURE   = 5,
+	D3DRTYPE_VERTEXBUFFER  = 6,
+	D3DRTYPE_INDEXBUFFER   = 7,
+	D3DRTYPE_FORCE_DWORD   = 0x7fffffff
+} D3DRESOURCETYPE;
+
+// Layout matches d3d9types.h; N3Texture reads Width/Height/Format from it.
+typedef struct _D3DSURFACE_DESC
+{
+	D3DFORMAT Format;
+	D3DRESOURCETYPE Type;
+	DWORD Usage;
+	D3DPOOL Pool;
+	D3DMULTISAMPLE_TYPE MultiSampleType;
+	DWORD MultiSampleQuality;
+	UINT Width;
+	UINT Height;
+} D3DSURFACE_DESC;
+
+// Result of LockRect: Pitch is bytes between rows (of blocks, for DXT).
+typedef struct _D3DLOCKED_RECT
+{
+	INT Pitch;
+	void* pBits;
+} D3DLOCKED_RECT;
+
 typedef enum _D3DSWAPEFFECT
 {
 	D3DSWAPEFFECT_DISCARD     = 1,

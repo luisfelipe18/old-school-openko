@@ -45,6 +45,7 @@ using HRESULT  = LONG;
 #define S_OK          ((HRESULT) 0)
 #define S_FALSE       ((HRESULT) 1)
 #define E_FAIL        ((HRESULT) 0x80004005L)
+#define E_OUTOFMEMORY ((HRESULT) 0x8007000EL)
 #endif
 
 #ifndef TRUE

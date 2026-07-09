@@ -69,7 +69,7 @@ public:
 	virtual void Tick();
 
 protected:
-	LPDIRECT3DTEXTURE9 GetTex(e_CLOUDTEX tex);
+	IRHITexture* GetTex(e_CLOUDTEX tex);
 };
 
 #endif // !defined(AFX_N3CLOUD_H__0C780CD3_38F2_48CD_B36E_E7C64C7893EB__INCLUDED_)

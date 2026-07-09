@@ -127,7 +127,7 @@ void CN3FXSPart::Render()
 	CN3Base::s_RenderInfo.nShape_Part++; // Rendering Information Update...
 #endif
 
-	LPDIRECT3DTEXTURE9 lpTex = nullptr;
+	IRHITexture* lpTex       = nullptr;
 	int iTC                  = static_cast<int>(m_TexRefs.size());
 	if (iTC > 0)
 	{

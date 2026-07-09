@@ -19,6 +19,7 @@
 
 #include "../My_3DStruct.h"
 #include "RHIBuffers.h"
+#include "RHITextures.h"
 
 struct IRHIDevice
 {
@@ -48,10 +49,14 @@ struct IRHIDevice
 	virtual HRESULT GetViewport(D3DVIEWPORT9* pViewport)                                   = 0;
 
 	// --- Textures & geometry ----------------------------------------------------
-	// Textures stay opaque D3D pointers until the texture RHI lands (phase 6).
-	virtual HRESULT SetTexture(DWORD stage, LPDIRECT3DBASETEXTURE9 pTexture)               = 0;
+	virtual HRESULT SetTexture(DWORD stage, IRHITexture* pTexture)                         = 0;
 	virtual HRESULT SetFVF(DWORD fvf)                                                      = 0;
 	virtual HRESULT GetFVF(DWORD* pFvf)                                                    = 0;
+
+	// Textures (T6.2). Same semantics as IDirect3DDevice9::CreateTexture minus
+	// the shared-handle parameter.
+	virtual HRESULT CreateTexture(UINT width, UINT height, UINT levels, DWORD usage,
+		D3DFORMAT format, D3DPOOL pool, IRHITexture** ppTexture)                           = 0;
 
 	// Geometry buffers (T6.1). Same semantics as the D3D9 Create* calls,
 	// minus the shared-handle parameter.
