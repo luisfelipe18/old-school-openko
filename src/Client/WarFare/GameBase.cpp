@@ -14,7 +14,9 @@
 #include <ranges>
 #include <algorithm>
 
-CN3TableBase<__TABLE_TEXTS> CGameBase::s_pTbl_Texts;
+// CGameBase::s_pTbl_Texts is defined in ClientResourceFormatter.cpp so the
+// text-resource lookup (fmt::format_text_resource / IDS_*) links on POSIX
+// without dragging in the rest of GameBase (docs/PORT_POSIX_PLAN.md, T6.4).
 CN3TableBase<__TABLE_ZONE> CGameBase::s_pTbl_Zones;
 CN3TableBase<__TABLE_UI_RESRC> CGameBase::s_pTbl_UI;
 CN3TableBase<__TABLE_ITEM_BASIC> CGameBase::s_pTbl_Items_Basic;

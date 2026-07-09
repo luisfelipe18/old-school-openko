@@ -309,6 +309,8 @@ else()
   # POSIX port (docs/PORT_POSIX_PLAN.md): network (phase 2) plus the SDL
   # window/input layer (phase 3); the rest of the game rejoins with the RHI.
   set(WARFARE_CORE_SOURCES
+    ClientResourceFormatter.cpp
+    ClientResourceFormatter.h
     CursorDecoder.cpp
     CursorDecoder.h
     GameDef.h
@@ -320,6 +322,7 @@ else()
     N3TerrainPatch.cpp
     N3TerrainPatch.h
     StdAfx.h
+    text_resources.h
     ${WARFARE_NETWORK_SOURCES}
   )
 endif()

@@ -420,11 +420,17 @@ sobre RHI" se alcanza al completar la migración por módulos.
       (`SetVertexShader(nullptr)` x2) se migra gateando esas 2 líneas.
       *Aceptación:* `grep s_lpD3DDev src/Client/WarFare src/N3Base` solo
       devuelve `N3Eng*`, `DFont`, `N3Texture`(win-paths) y `N3UIEdit`.
-* [ ] **T6.4 — Recursos de texto portables.** `text_resources.h`/`resource.h`
+* [x] **T6.4 — Recursos de texto portables.** `text_resources.h`/`resource.h`
       usan `LoadString` del `.rc` en Windows. Extraer las cadenas IDS_* a una
       tabla C++ o archivo de datos cargado en runtime, manteniendo el camino
       `.rc` en Windows (`fmt::format_text_resource` como API común).
       *Aceptación:* un TU de WarFare que use `IDS_*` compila en POSIX.
+      *(Hecho: upstream ya movió `format_text_resource` a la tabla TBL
+      `Data\Texts_*.tbl` — no quedaba `LoadString`. El único acople era que
+      la definición del static `CGameBase::s_pTbl_Texts` vivía en el pesado
+      `GameBase.cpp`; se movió a `ClientResourceFormatter.cpp` y este entró al
+      subset POSIX. Test end-to-end en `tests/WarFare` que cifra un `.tbl`
+      sintético, lo carga y formatea `IDS_*` con `%d`/`%s`.)*
 * [ ] **T6.5 — Backend GL a: contexto + clear.** `RHIDeviceGL` mínimo:
       contexto vía `SDL_GL_CreateContext` + loader `glad` (vendorizar
       generado GL 3.3/4.1 core en `deps/` o `src/N3Base/RHI/glad/`),
