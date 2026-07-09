@@ -155,36 +155,36 @@ void CN3GERain::Render(__Vector3& vPos)
 
 	// 이전 render state 저장
 	DWORD dwColorVertex = 0, dwLighting = 0, dwAlphaBlend = 0, dwSrcAlpha = 0, dwDestAlpha = 0;
-	s_lpD3DDev->GetRenderState(D3DRS_COLORVERTEX, &dwColorVertex);
-	s_lpD3DDev->GetRenderState(D3DRS_LIGHTING, &dwLighting);
-	s_lpD3DDev->GetRenderState(D3DRS_ALPHABLENDENABLE, &dwAlphaBlend);
-	s_lpD3DDev->GetRenderState(D3DRS_SRCBLEND, &dwSrcAlpha);
-	s_lpD3DDev->GetRenderState(D3DRS_DESTBLEND, &dwDestAlpha);
+	RHIDevice()->GetRenderState(D3DRS_COLORVERTEX, &dwColorVertex);
+	RHIDevice()->GetRenderState(D3DRS_LIGHTING, &dwLighting);
+	RHIDevice()->GetRenderState(D3DRS_ALPHABLENDENABLE, &dwAlphaBlend);
+	RHIDevice()->GetRenderState(D3DRS_SRCBLEND, &dwSrcAlpha);
+	RHIDevice()->GetRenderState(D3DRS_DESTBLEND, &dwDestAlpha);
 
 	// set render state
-	s_lpD3DDev->SetRenderState(D3DRS_COLORVERTEX, TRUE);
-	s_lpD3DDev->SetRenderState(D3DRS_LIGHTING, FALSE);
-	s_lpD3DDev->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
-	s_lpD3DDev->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
-	s_lpD3DDev->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+	RHIDevice()->SetRenderState(D3DRS_COLORVERTEX, TRUE);
+	RHIDevice()->SetRenderState(D3DRS_LIGHTING, FALSE);
+	RHIDevice()->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+	RHIDevice()->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
+	RHIDevice()->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
 
 	// set transform
-	s_lpD3DDev->SetTransform(D3DTS_WORLD, m_Matrix.toD3D());
+	RHIDevice()->SetTransform(D3DTS_WORLD, m_Matrix.toD3D());
 
 	// set texture
-	s_lpD3DDev->SetTexture(0, nullptr);
+	RHIDevice()->SetTexture(0, nullptr);
 
 	// render
-	s_lpD3DDev->SetFVF(FVF_XYZCOLOR);
-	s_lpD3DDev->SetStreamSource(0, m_pVB, 0, sizeof(__VertexXyzColor)); // 버텍스 버퍼 지정
-	s_lpD3DDev->DrawPrimitive(D3DPT_LINELIST, 0, iActiveCount);
+	RHIDevice()->SetFVF(FVF_XYZCOLOR);
+	RHIDevice()->SetStreamSource(0, m_pVB, 0, sizeof(__VertexXyzColor)); // 버텍스 버퍼 지정
+	RHIDevice()->DrawPrimitive(D3DPT_LINELIST, 0, iActiveCount);
 
 	// restore
-	s_lpD3DDev->SetRenderState(D3DRS_COLORVERTEX, dwColorVertex);
-	s_lpD3DDev->SetRenderState(D3DRS_LIGHTING, dwLighting);
-	s_lpD3DDev->SetRenderState(D3DRS_ALPHABLENDENABLE, dwAlphaBlend);
-	s_lpD3DDev->SetRenderState(D3DRS_SRCBLEND, dwSrcAlpha);
-	s_lpD3DDev->SetRenderState(D3DRS_DESTBLEND, dwDestAlpha);
+	RHIDevice()->SetRenderState(D3DRS_COLORVERTEX, dwColorVertex);
+	RHIDevice()->SetRenderState(D3DRS_LIGHTING, dwLighting);
+	RHIDevice()->SetRenderState(D3DRS_ALPHABLENDENABLE, dwAlphaBlend);
+	RHIDevice()->SetRenderState(D3DRS_SRCBLEND, dwSrcAlpha);
+	RHIDevice()->SetRenderState(D3DRS_DESTBLEND, dwDestAlpha);
 }
 
 void CN3GERain::Create(float fDensity, float fWidth, float fHeight, float fRainLength,
@@ -195,7 +195,7 @@ void CN3GERain::Create(float fDensity, float fWidth, float fHeight, float fRainL
 // fRainLength : 빗줄기의 길이
 // vVelocity : 빗줄기의 속도
 {
-	if (nullptr == s_lpD3DDev)
+	if (nullptr == RHIDevice())
 		return;
 
 	Release();
@@ -218,8 +218,8 @@ void CN3GERain::Create(float fDensity, float fWidth, float fHeight, float fRainL
 
 	// m_pVB, m_pIB 만들기
 	m_iVC          = iRainCount * 2;
-	HRESULT hr     = s_lpD3DDev->CreateVertexBuffer(
-        m_iVC * sizeof(__VertexXyzColor), 0, FVF_XYZCOLOR, D3DPOOL_MANAGED, &m_pVB, nullptr);
+	HRESULT hr     = RHIDevice()->CreateVertexBuffer(
+        m_iVC * sizeof(__VertexXyzColor), 0, FVF_XYZCOLOR, D3DPOOL_MANAGED, &m_pVB);
 
 	if (FAILED(hr))
 		return;

@@ -186,52 +186,52 @@ void CN3GESnow::Render(__Vector3& vPos)
 
 	// 이전 render state 저장
 	DWORD dwAlphaBlend = 0, dwSrcAlpha = 0, dwDestAlpha = 0, dwCullMode = 0, dwLight = 0;
-	s_lpD3DDev->GetRenderState(D3DRS_ALPHABLENDENABLE, &dwAlphaBlend);
-	s_lpD3DDev->GetRenderState(D3DRS_SRCBLEND, &dwSrcAlpha);
-	s_lpD3DDev->GetRenderState(D3DRS_DESTBLEND, &dwDestAlpha);
-	s_lpD3DDev->GetRenderState(D3DRS_CULLMODE, &dwCullMode);
-	s_lpD3DDev->GetRenderState(D3DRS_LIGHTING, &dwLight);
+	RHIDevice()->GetRenderState(D3DRS_ALPHABLENDENABLE, &dwAlphaBlend);
+	RHIDevice()->GetRenderState(D3DRS_SRCBLEND, &dwSrcAlpha);
+	RHIDevice()->GetRenderState(D3DRS_DESTBLEND, &dwDestAlpha);
+	RHIDevice()->GetRenderState(D3DRS_CULLMODE, &dwCullMode);
+	RHIDevice()->GetRenderState(D3DRS_LIGHTING, &dwLight);
 
 	DWORD dwAddressU = 0, dwAddressV = 0;
-	s_lpD3DDev->GetSamplerState(0, D3DSAMP_ADDRESSU, &dwAddressU);
-	s_lpD3DDev->GetSamplerState(0, D3DSAMP_ADDRESSV, &dwAddressV);
+	RHIDevice()->GetSamplerState(0, D3DSAMP_ADDRESSU, &dwAddressU);
+	RHIDevice()->GetSamplerState(0, D3DSAMP_ADDRESSV, &dwAddressV);
 
 	// set render state
-	s_lpD3DDev->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
-	s_lpD3DDev->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
-	s_lpD3DDev->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
-	s_lpD3DDev->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
-	s_lpD3DDev->SetRenderState(D3DRS_LIGHTING, FALSE);
+	RHIDevice()->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+	RHIDevice()->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
+	RHIDevice()->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+	RHIDevice()->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+	RHIDevice()->SetRenderState(D3DRS_LIGHTING, FALSE);
 
 	// set transform
-	s_lpD3DDev->SetTransform(D3DTS_WORLD, m_Matrix.toD3D());
+	RHIDevice()->SetTransform(D3DTS_WORLD, m_Matrix.toD3D());
 
 	// set texture
 	__ASSERT(m_pTex, "Texture pointer is NULL!");
-	s_lpD3DDev->SetSamplerState(0, D3DSAMP_BORDERCOLOR, 0xffff0000);
-	s_lpD3DDev->SetSamplerState(0, D3DSAMP_ADDRESSU, D3DTADDRESS_BORDER);
-	s_lpD3DDev->SetSamplerState(0, D3DSAMP_ADDRESSV, D3DTADDRESS_BORDER);
-	s_lpD3DDev->SetTexture(0, m_pTex->Get());
+	RHIDevice()->SetSamplerState(0, D3DSAMP_BORDERCOLOR, 0xffff0000);
+	RHIDevice()->SetSamplerState(0, D3DSAMP_ADDRESSU, D3DTADDRESS_BORDER);
+	RHIDevice()->SetSamplerState(0, D3DSAMP_ADDRESSV, D3DTADDRESS_BORDER);
+	RHIDevice()->SetTexture(0, m_pTex->Get());
 
 	// render
-	s_lpD3DDev->SetFVF(FVF_XYZT1);
-	s_lpD3DDev->SetStreamSource(0, m_pVB, 0, sizeof(__VertexXyzT1)); // 버텍스 버퍼 지정
-	s_lpD3DDev->DrawPrimitive(D3DPT_TRIANGLELIST, 0, iActiveCount);
+	RHIDevice()->SetFVF(FVF_XYZT1);
+	RHIDevice()->SetStreamSource(0, m_pVB, 0, sizeof(__VertexXyzT1)); // 버텍스 버퍼 지정
+	RHIDevice()->DrawPrimitive(D3DPT_TRIANGLELIST, 0, iActiveCount);
 
 	// restore
-	s_lpD3DDev->SetRenderState(D3DRS_ALPHABLENDENABLE, dwAlphaBlend);
-	s_lpD3DDev->SetRenderState(D3DRS_SRCBLEND, dwSrcAlpha);
-	s_lpD3DDev->SetRenderState(D3DRS_DESTBLEND, dwDestAlpha);
-	s_lpD3DDev->SetRenderState(D3DRS_CULLMODE, dwCullMode);
-	s_lpD3DDev->SetRenderState(D3DRS_LIGHTING, dwLight);
-	s_lpD3DDev->SetSamplerState(0, D3DSAMP_ADDRESSU, dwAddressU);
-	s_lpD3DDev->SetSamplerState(0, D3DSAMP_ADDRESSV, dwAddressV);
+	RHIDevice()->SetRenderState(D3DRS_ALPHABLENDENABLE, dwAlphaBlend);
+	RHIDevice()->SetRenderState(D3DRS_SRCBLEND, dwSrcAlpha);
+	RHIDevice()->SetRenderState(D3DRS_DESTBLEND, dwDestAlpha);
+	RHIDevice()->SetRenderState(D3DRS_CULLMODE, dwCullMode);
+	RHIDevice()->SetRenderState(D3DRS_LIGHTING, dwLight);
+	RHIDevice()->SetSamplerState(0, D3DSAMP_ADDRESSU, dwAddressU);
+	RHIDevice()->SetSamplerState(0, D3DSAMP_ADDRESSV, dwAddressV);
 }
 
 void CN3GESnow::Create(float fDensity, float fWidth, float fHeight, float fSnowSize,
 	const __Vector3& vVelocity, float fTimeToFade)
 {
-	if (s_lpD3DDev == nullptr)
+	if (RHIDevice() == nullptr)
 		return;
 
 	__VertexXyzT1* pVertices = nullptr;
@@ -256,11 +256,11 @@ void CN3GESnow::Create(float fDensity, float fWidth, float fHeight, float fSnowS
 		return;
 
 	// m_pVB, m_pIB 만들기
-	__ASSERT(s_lpD3DDev, "D3D Device pointer is NULL!");
+	__ASSERT(RHIDevice(), "RHI device pointer is NULL!");
 	m_iVC      = iSnowCount * 3;
 
-	HRESULT hr = s_lpD3DDev->CreateVertexBuffer(
-		m_iVC * sizeof(__VertexXyzT1), 0, FVF_XYZT1, D3DPOOL_MANAGED, &m_pVB, nullptr);
+	HRESULT hr = RHIDevice()->CreateVertexBuffer(
+		m_iVC * sizeof(__VertexXyzT1), 0, FVF_XYZT1, D3DPOOL_MANAGED, &m_pVB);
 	if (FAILED(hr))
 		return;
 

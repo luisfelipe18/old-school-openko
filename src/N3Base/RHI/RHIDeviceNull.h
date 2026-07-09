@@ -10,6 +10,63 @@
 #include "RHIDevice.h"
 
 #include <map>
+#include <vector>
+
+/// System-memory buffer: Lock() hands out real storage, so asset loading and
+/// geometry generation run headlessly (tests, CI, POSIX until GL lands).
+class RHIVertexBufferNull : public IRHIVertexBuffer
+{
+public:
+	RHIVertexBufferNull(UINT length, DWORD fvf) : m_Storage(length), m_dwFVF(fvf)
+	{
+	}
+
+	HRESULT Lock(UINT offsetToLock, UINT sizeToLock, void** ppData, DWORD flags) override;
+	HRESULT Unlock() override;
+	ULONG Release() override;
+
+	UINT Length() const override
+	{
+		return static_cast<UINT>(m_Storage.size());
+	}
+
+	DWORD FVF() const override
+	{
+		return m_dwFVF;
+	}
+
+protected:
+	std::vector<uint8_t> m_Storage;
+	DWORD m_dwFVF   = 0;
+	bool m_bLocked  = false;
+};
+
+class RHIIndexBufferNull : public IRHIIndexBuffer
+{
+public:
+	RHIIndexBufferNull(UINT length, D3DFORMAT format) : m_Storage(length), m_eFormat(format)
+	{
+	}
+
+	HRESULT Lock(UINT offsetToLock, UINT sizeToLock, void** ppData, DWORD flags) override;
+	HRESULT Unlock() override;
+	ULONG Release() override;
+
+	UINT Length() const override
+	{
+		return static_cast<UINT>(m_Storage.size());
+	}
+
+	D3DFORMAT Format() const override
+	{
+		return m_eFormat;
+	}
+
+protected:
+	std::vector<uint8_t> m_Storage;
+	D3DFORMAT m_eFormat = D3DFMT_INDEX16;
+	bool m_bLocked      = false;
+};
 
 class RHIDeviceNull : public IRHIDevice
 {
@@ -39,9 +96,23 @@ public:
 	HRESULT SetFVF(DWORD fvf) override;
 	HRESULT GetFVF(DWORD* pFvf) override;
 
+	HRESULT CreateVertexBuffer(
+		UINT length, DWORD usage, DWORD fvf, D3DPOOL pool, IRHIVertexBuffer** ppBuffer) override;
+	HRESULT CreateIndexBuffer(
+		UINT length, DWORD usage, D3DFORMAT format, D3DPOOL pool, IRHIIndexBuffer** ppBuffer) override;
+
 	HRESULT SetStreamSource(
-		UINT streamNumber, LPDIRECT3DVERTEXBUFFER9 pBuffer, UINT offsetInBytes, UINT stride) override;
-	HRESULT SetIndices(LPDIRECT3DINDEXBUFFER9 pBuffer) override;
+		UINT streamNumber, IRHIVertexBuffer* pBuffer, UINT offsetInBytes, UINT stride) override;
+	HRESULT SetIndices(IRHIIndexBuffer* pBuffer) override;
+
+	IRHIVertexBuffer* BoundVertexBuffer() const
+	{
+		return m_pBoundVB;
+	}
+	IRHIIndexBuffer* BoundIndexBuffer() const
+	{
+		return m_pBoundIB;
+	}
 
 	HRESULT DrawPrimitive(
 		D3DPRIMITIVETYPE primitiveType, UINT startVertex, UINT primitiveCount) override;
@@ -72,6 +143,8 @@ protected:
 	std::map<DWORD, BOOL> m_LightsEnabled;
 	D3DVIEWPORT9 m_Viewport = {};
 	DWORD m_dwFVF           = 0;
+	IRHIVertexBuffer* m_pBoundVB = nullptr;
+	IRHIIndexBuffer* m_pBoundIB  = nullptr;
 	int m_nDrawCalls        = 0;
 	int m_nPresents         = 0;
 };

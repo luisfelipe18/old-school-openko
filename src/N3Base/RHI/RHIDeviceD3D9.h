@@ -11,6 +11,100 @@
 
 #include "RHIDevice.h"
 
+/// Wraps an IDirect3DVertexBuffer9; Release() drops the COM reference and
+/// destroys the wrapper (single-owner semantics, see RHIBuffers.h).
+class RHIVertexBufferD3D9 : public IRHIVertexBuffer
+{
+public:
+	RHIVertexBufferD3D9(LPDIRECT3DVERTEXBUFFER9 pBuffer, UINT length, DWORD fvf)
+		: m_pBuffer(pBuffer), m_nLength(length), m_dwFVF(fvf)
+	{
+	}
+
+	HRESULT Lock(UINT offsetToLock, UINT sizeToLock, void** ppData, DWORD flags) override
+	{
+		return m_pBuffer->Lock(offsetToLock, sizeToLock, ppData, flags);
+	}
+
+	HRESULT Unlock() override
+	{
+		return m_pBuffer->Unlock();
+	}
+
+	ULONG Release() override
+	{
+		m_pBuffer->Release();
+		delete this;
+		return 0;
+	}
+
+	UINT Length() const override
+	{
+		return m_nLength;
+	}
+
+	DWORD FVF() const override
+	{
+		return m_dwFVF;
+	}
+
+	LPDIRECT3DVERTEXBUFFER9 D3DBuffer() const
+	{
+		return m_pBuffer;
+	}
+
+protected:
+	LPDIRECT3DVERTEXBUFFER9 m_pBuffer;
+	UINT m_nLength;
+	DWORD m_dwFVF;
+};
+
+class RHIIndexBufferD3D9 : public IRHIIndexBuffer
+{
+public:
+	RHIIndexBufferD3D9(LPDIRECT3DINDEXBUFFER9 pBuffer, UINT length, D3DFORMAT format)
+		: m_pBuffer(pBuffer), m_nLength(length), m_eFormat(format)
+	{
+	}
+
+	HRESULT Lock(UINT offsetToLock, UINT sizeToLock, void** ppData, DWORD flags) override
+	{
+		return m_pBuffer->Lock(offsetToLock, sizeToLock, ppData, flags);
+	}
+
+	HRESULT Unlock() override
+	{
+		return m_pBuffer->Unlock();
+	}
+
+	ULONG Release() override
+	{
+		m_pBuffer->Release();
+		delete this;
+		return 0;
+	}
+
+	UINT Length() const override
+	{
+		return m_nLength;
+	}
+
+	D3DFORMAT Format() const override
+	{
+		return m_eFormat;
+	}
+
+	LPDIRECT3DINDEXBUFFER9 D3DBuffer() const
+	{
+		return m_pBuffer;
+	}
+
+protected:
+	LPDIRECT3DINDEXBUFFER9 m_pBuffer;
+	UINT m_nLength;
+	D3DFORMAT m_eFormat;
+};
+
 class RHIDeviceD3D9 : public IRHIDevice
 {
 public:
@@ -130,15 +224,49 @@ public:
 		return m_pDevice->GetFVF(pFvf);
 	}
 
-	HRESULT SetStreamSource(
-		UINT streamNumber, LPDIRECT3DVERTEXBUFFER9 pBuffer, UINT offsetInBytes, UINT stride) override
+	HRESULT CreateVertexBuffer(
+		UINT length, DWORD usage, DWORD fvf, D3DPOOL pool, IRHIVertexBuffer** ppBuffer) override
 	{
-		return m_pDevice->SetStreamSource(streamNumber, pBuffer, offsetInBytes, stride);
+		if (ppBuffer == nullptr)
+			return RHI_E_FAIL;
+
+		LPDIRECT3DVERTEXBUFFER9 pD3DBuffer = nullptr;
+		const HRESULT rval = m_pDevice->CreateVertexBuffer(length, usage, fvf, pool, &pD3DBuffer, nullptr);
+		if (FAILED(rval))
+			return rval;
+
+		*ppBuffer = new RHIVertexBufferD3D9(pD3DBuffer, length, fvf);
+		return rval;
 	}
 
-	HRESULT SetIndices(LPDIRECT3DINDEXBUFFER9 pBuffer) override
+	HRESULT CreateIndexBuffer(
+		UINT length, DWORD usage, D3DFORMAT format, D3DPOOL pool, IRHIIndexBuffer** ppBuffer) override
 	{
-		return m_pDevice->SetIndices(pBuffer);
+		if (ppBuffer == nullptr)
+			return RHI_E_FAIL;
+
+		LPDIRECT3DINDEXBUFFER9 pD3DBuffer = nullptr;
+		const HRESULT rval = m_pDevice->CreateIndexBuffer(length, usage, format, pool, &pD3DBuffer, nullptr);
+		if (FAILED(rval))
+			return rval;
+
+		*ppBuffer = new RHIIndexBufferD3D9(pD3DBuffer, length, format);
+		return rval;
+	}
+
+	HRESULT SetStreamSource(
+		UINT streamNumber, IRHIVertexBuffer* pBuffer, UINT offsetInBytes, UINT stride) override
+	{
+		LPDIRECT3DVERTEXBUFFER9 pD3DBuffer =
+			pBuffer ? static_cast<RHIVertexBufferD3D9*>(pBuffer)->D3DBuffer() : nullptr;
+		return m_pDevice->SetStreamSource(streamNumber, pD3DBuffer, offsetInBytes, stride);
+	}
+
+	HRESULT SetIndices(IRHIIndexBuffer* pBuffer) override
+	{
+		LPDIRECT3DINDEXBUFFER9 pD3DBuffer =
+			pBuffer ? static_cast<RHIIndexBufferD3D9*>(pBuffer)->D3DBuffer() : nullptr;
+		return m_pDevice->SetIndices(pD3DBuffer);
 	}
 
 	HRESULT DrawPrimitive(

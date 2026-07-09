@@ -394,7 +394,7 @@ sobre RHI" se alcanza al completar la migración por módulos.
 > → T6.5 → T6.6 → T6.7 → T6.8. Ver `PORT_POSIX_CONTEXT.md` §4-5 antes de
 > empezar cualquiera.
 
-* [ ] **T6.1 — Buffers RHI.** Añadir `IRHIVertexBuffer`/`IRHIIndexBuffer`
+* [x] **T6.1 — Buffers RHI.** Añadir `IRHIVertexBuffer`/`IRHIIndexBuffer`
       (Lock/Unlock/Release, semántica IDirect3DVertexBuffer9) +
       `CreateVertexBuffer`/`CreateIndexBuffer` en `IRHIDevice`; cambiar las
       firmas de `SetStreamSource`/`SetIndices` a los tipos RHI. Impl Null:

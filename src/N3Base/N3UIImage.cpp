@@ -77,8 +77,8 @@ bool CN3UIImage::CreateVB()
 		m_pVB = nullptr;
 	}
 
-	hr = s_lpD3DDev->CreateVertexBuffer(
-		4 * sizeof(__VertexTransformed), 0, FVF_TRANSFORMED, D3DPOOL_MANAGED, &m_pVB, nullptr);
+	hr = RHIDevice()->CreateVertexBuffer(
+		4 * sizeof(__VertexTransformed), 0, FVF_TRANSFORMED, D3DPOOL_MANAGED, &m_pVB);
 	return SUCCEEDED(hr);
 }
 
@@ -175,15 +175,15 @@ void CN3UIImage::Render()
 	{
 		if (m_pVB != nullptr && m_pTexRef != nullptr)
 		{
-			s_lpD3DDev->SetStreamSource(0, m_pVB, 0, sizeof(__VertexTransformed));
-			s_lpD3DDev->SetFVF(FVF_TRANSFORMED);
+			RHIDevice()->SetStreamSource(0, m_pVB, 0, sizeof(__VertexTransformed));
+			RHIDevice()->SetFVF(FVF_TRANSFORMED);
 
-			s_lpD3DDev->SetTexture(0, m_pTexRef->Get());
-			s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_MODULATE);
-			s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TEXTURE);
-			s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLORARG2, D3DTA_DIFFUSE);
+			RHIDevice()->SetTexture(0, m_pTexRef->Get());
+			RHIDevice()->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_MODULATE);
+			RHIDevice()->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TEXTURE);
+			RHIDevice()->SetTextureStageState(0, D3DTSS_COLORARG2, D3DTA_DIFFUSE);
 
-			s_lpD3DDev->DrawPrimitive(D3DPT_TRIANGLEFAN, 0, 2);
+			RHIDevice()->DrawPrimitive(D3DPT_TRIANGLEFAN, 0, 2);
 		}
 
 		CN3UIBase::Render();
@@ -197,11 +197,11 @@ void CN3UIImage::RenderIconWrapper()
 
 	if (m_pVB != nullptr)
 	{
-		s_lpD3DDev->SetStreamSource(0, m_pVB, 0, sizeof(__VertexTransformed));
-		s_lpD3DDev->SetFVF(FVF_TRANSFORMED);
-		s_lpD3DDev->SetTexture(0, nullptr);
+		RHIDevice()->SetStreamSource(0, m_pVB, 0, sizeof(__VertexTransformed));
+		RHIDevice()->SetFVF(FVF_TRANSFORMED);
+		RHIDevice()->SetTexture(0, nullptr);
 
-		s_lpD3DDev->DrawPrimitive(D3DPT_TRIANGLEFAN, 0, 2);
+		RHIDevice()->DrawPrimitive(D3DPT_TRIANGLEFAN, 0, 2);
 	}
 
 	CN3UIBase::Render();

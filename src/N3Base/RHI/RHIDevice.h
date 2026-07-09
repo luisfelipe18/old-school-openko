@@ -18,6 +18,7 @@
 // without a GPU).
 
 #include "../My_3DStruct.h"
+#include "RHIBuffers.h"
 
 struct IRHIDevice
 {
@@ -52,9 +53,16 @@ struct IRHIDevice
 	virtual HRESULT SetFVF(DWORD fvf)                                                      = 0;
 	virtual HRESULT GetFVF(DWORD* pFvf)                                                    = 0;
 
+	// Geometry buffers (T6.1). Same semantics as the D3D9 Create* calls,
+	// minus the shared-handle parameter.
+	virtual HRESULT CreateVertexBuffer(
+		UINT length, DWORD usage, DWORD fvf, D3DPOOL pool, IRHIVertexBuffer** ppBuffer)     = 0;
+	virtual HRESULT CreateIndexBuffer(
+		UINT length, DWORD usage, D3DFORMAT format, D3DPOOL pool, IRHIIndexBuffer** ppBuffer) = 0;
+
 	virtual HRESULT SetStreamSource(
-		UINT streamNumber, LPDIRECT3DVERTEXBUFFER9 pBuffer, UINT offsetInBytes, UINT stride) = 0;
-	virtual HRESULT SetIndices(LPDIRECT3DINDEXBUFFER9 pBuffer)                             = 0;
+		UINT streamNumber, IRHIVertexBuffer* pBuffer, UINT offsetInBytes, UINT stride)      = 0;
+	virtual HRESULT SetIndices(IRHIIndexBuffer* pBuffer)                                    = 0;
 
 	virtual HRESULT DrawPrimitive(
 		D3DPRIMITIVETYPE primitiveType, UINT startVertex, UINT primitiveCount)             = 0;

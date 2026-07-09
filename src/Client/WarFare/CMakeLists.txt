@@ -317,6 +317,8 @@ else()
     LocalInput.h
     LocalInputSDL.cpp
     LocalInputSDL.h
+    N3TerrainPatch.cpp
+    N3TerrainPatch.h
     StdAfx.h
     ${WARFARE_NETWORK_SOURCES}
   )

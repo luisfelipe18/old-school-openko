@@ -169,8 +169,8 @@ void CN3AlphaPrimitiveManager::Render()
 			if (pBuffs[i]->bUseVB)
 			{
 				CN3Base::RHIDevice()->SetStreamSource(0,
-					(LPDIRECT3DVERTEXBUFFER9) pBuffs[i]->pVertices, 0, pBuffs[i]->dwPrimitiveSize);
-				CN3Base::RHIDevice()->SetIndices((LPDIRECT3DINDEXBUFFER9) pBuffs[i]->pwIndices);
+					(IRHIVertexBuffer*) pBuffs[i]->pVertices, 0, pBuffs[i]->dwPrimitiveSize);
+				CN3Base::RHIDevice()->SetIndices((IRHIIndexBuffer*) pBuffs[i]->pwIndices);
 				CN3Base::RHIDevice()->DrawIndexedPrimitive(pBuffs[i]->ePrimitiveType, 0, 0,
 					pBuffs[i]->nVertexCount, 0, pBuffs[i]->nPrimitiveCount);
 			}
@@ -186,7 +186,7 @@ void CN3AlphaPrimitiveManager::Render()
 			if (pBuffs[i]->bUseVB)
 			{
 				CN3Base::RHIDevice()->SetStreamSource(0,
-					(LPDIRECT3DVERTEXBUFFER9) pBuffs[i]->pVertices, 0, pBuffs[i]->dwPrimitiveSize);
+					(IRHIVertexBuffer*) pBuffs[i]->pVertices, 0, pBuffs[i]->dwPrimitiveSize);
 				CN3Base::RHIDevice()->DrawPrimitive(
 					pBuffs[i]->ePrimitiveType, 0, pBuffs[i]->nPrimitiveCount);
 			}

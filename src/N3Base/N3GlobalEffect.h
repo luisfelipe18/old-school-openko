@@ -31,8 +31,8 @@ public:
 protected:
 	int m_iVC;
 	int m_iIC;
-	LPDIRECT3DVERTEXBUFFER9 m_pVB;
-	LPDIRECT3DINDEXBUFFER9 m_pIB;
+	IRHIVertexBuffer* m_pVB;
+	IRHIIndexBuffer* m_pIB;
 	uint32_t m_dwEffectType;
 	bool m_bActive;
 	float m_fFadeTime;    // 이시간 동안 차차 목표한 양만큼 파티클의 수가 늘어난다..

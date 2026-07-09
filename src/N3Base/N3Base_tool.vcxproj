@@ -30,6 +30,7 @@
     <ClInclude Include="mpg123_reader_io.h" />
     <ClInclude Include="My_3DStruct.h" />
     <ClInclude Include="N3AlphaPrimitiveManager.h" />
+    <ClInclude Include="RHI\RHIBuffers.h" />
     <ClInclude Include="RHI\RHIDevice.h" />
     <ClInclude Include="RHI\RHIDeviceD3D9.h" />
     <ClInclude Include="RHI\RHIDeviceNull.h" />

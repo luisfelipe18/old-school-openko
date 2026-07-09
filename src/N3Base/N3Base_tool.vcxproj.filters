@@ -526,6 +526,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="RHI\RHIDeviceNull.cpp" />
+    <ClInclude Include="RHI\RHIBuffers.h" />
     <ClInclude Include="RHI\RHIDevice.h" />
     <ClInclude Include="RHI\RHIDeviceD3D9.h" />
     <ClInclude Include="RHI\RHIDeviceNull.h" />

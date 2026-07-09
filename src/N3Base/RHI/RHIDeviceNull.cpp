@@ -188,14 +188,91 @@ HRESULT RHIDeviceNull::GetFVF(DWORD* pFvf)
 	return D3D_OK;
 }
 
-HRESULT RHIDeviceNull::SetStreamSource(
-	UINT /*streamNumber*/, LPDIRECT3DVERTEXBUFFER9 /*pBuffer*/, UINT /*offsetInBytes*/, UINT /*stride*/)
+// --- Buffers -----------------------------------------------------------------
+
+namespace
 {
+template <typename Storage>
+HRESULT LockStorage(Storage& storage, bool& locked, UINT offsetToLock, UINT sizeToLock, void** ppData)
+{
+	if (ppData == nullptr)
+		return RHI_E_FAIL;
+
+	// D3D9 semantics: size 0 locks from the offset to the end.
+	const size_t end = (sizeToLock == 0) ? storage.size() : size_t(offsetToLock) + sizeToLock;
+	if (offsetToLock >= storage.size() || end > storage.size())
+		return RHI_E_FAIL;
+
+	locked  = true;
+	*ppData = storage.data() + offsetToLock;
+	return D3D_OK;
+}
+} // namespace
+
+HRESULT RHIVertexBufferNull::Lock(UINT offsetToLock, UINT sizeToLock, void** ppData, DWORD /*flags*/)
+{
+	return LockStorage(m_Storage, m_bLocked, offsetToLock, sizeToLock, ppData);
+}
+
+HRESULT RHIVertexBufferNull::Unlock()
+{
+	m_bLocked = false;
 	return D3D_OK;
 }
 
-HRESULT RHIDeviceNull::SetIndices(LPDIRECT3DINDEXBUFFER9 /*pBuffer*/)
+ULONG RHIVertexBufferNull::Release()
 {
+	delete this;
+	return 0;
+}
+
+HRESULT RHIIndexBufferNull::Lock(UINT offsetToLock, UINT sizeToLock, void** ppData, DWORD /*flags*/)
+{
+	return LockStorage(m_Storage, m_bLocked, offsetToLock, sizeToLock, ppData);
+}
+
+HRESULT RHIIndexBufferNull::Unlock()
+{
+	m_bLocked = false;
+	return D3D_OK;
+}
+
+ULONG RHIIndexBufferNull::Release()
+{
+	delete this;
+	return 0;
+}
+
+HRESULT RHIDeviceNull::CreateVertexBuffer(
+	UINT length, DWORD /*usage*/, DWORD fvf, D3DPOOL /*pool*/, IRHIVertexBuffer** ppBuffer)
+{
+	if (ppBuffer == nullptr || length == 0)
+		return RHI_E_FAIL;
+
+	*ppBuffer = new RHIVertexBufferNull(length, fvf);
+	return D3D_OK;
+}
+
+HRESULT RHIDeviceNull::CreateIndexBuffer(
+	UINT length, DWORD /*usage*/, D3DFORMAT format, D3DPOOL /*pool*/, IRHIIndexBuffer** ppBuffer)
+{
+	if (ppBuffer == nullptr || length == 0)
+		return RHI_E_FAIL;
+
+	*ppBuffer = new RHIIndexBufferNull(length, format);
+	return D3D_OK;
+}
+
+HRESULT RHIDeviceNull::SetStreamSource(
+	UINT /*streamNumber*/, IRHIVertexBuffer* pBuffer, UINT /*offsetInBytes*/, UINT /*stride*/)
+{
+	m_pBoundVB = pBuffer;
+	return D3D_OK;
+}
+
+HRESULT RHIDeviceNull::SetIndices(IRHIIndexBuffer* pBuffer)
+{
+	m_pBoundIB = pBuffer;
 	return D3D_OK;
 }
 
