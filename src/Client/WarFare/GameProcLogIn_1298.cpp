@@ -166,21 +166,21 @@ void CGameProcLogIn_1298::Render()
 {
 	D3DCOLOR crEnv = 0x00000000;
 	s_pEng->Clear(crEnv);     // background color black
-	s_lpD3DDev->BeginScene(); // scene render start
+	RHIDevice()->BeginScene(); // scene render start
 
 	D3DVIEWPORT9 vp;
-	s_lpD3DDev->GetViewport(&vp);
+	RHIDevice()->GetViewport(&vp);
 
 	DWORD dwZWrite = 0;
-	s_lpD3DDev->GetRenderState(D3DRS_ZWRITEENABLE, &dwZWrite);
-	s_lpD3DDev->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
-	s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
-	s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TEXTURE);
-	s_lpD3DDev->SetFVF(FVF_TRANSFORMED);
-	s_lpD3DDev->SetRenderState(D3DRS_ZWRITEENABLE, dwZWrite);
+	RHIDevice()->GetRenderState(D3DRS_ZWRITEENABLE, &dwZWrite);
+	RHIDevice()->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+	RHIDevice()->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
+	RHIDevice()->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TEXTURE);
+	RHIDevice()->SetFVF(FVF_TRANSFORMED);
+	RHIDevice()->SetRenderState(D3DRS_ZWRITEENABLE, dwZWrite);
 	CGameProcedure::Render(); // Render UI and other basic elements.
 
-	s_lpD3DDev->EndScene();   // Starting scene rendering...
+	RHIDevice()->EndScene();   // Starting scene rendering...
 
 	s_pEng->Present(CN3Base::s_hWndBase);
 }

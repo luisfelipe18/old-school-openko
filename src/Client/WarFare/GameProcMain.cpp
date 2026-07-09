@@ -260,7 +260,7 @@ void CGameProcMain::Init()
 	// Reset lighting from previous scenes.
 	// Our scene will setup lighting as needed.
 	for (int i = 0; i < 8; i++)
-		s_lpD3DDev->LightEnable(i, FALSE);
+		RHIDevice()->LightEnable(i, FALSE);
 
 	int i = 0;
 	for (uint32_t resource = IDS_CMD_WHISPER; resource <= IDS_CMD_INDIVIDUAL_BATTLE; resource++)
@@ -667,18 +667,18 @@ void CGameProcMain::Render()
 
 	D3DCOLOR crSky = ACT_WORLD->GetSkyColorWithSky();
 	s_pEng->Clear(crSky);             // 안개 색깔을 넣어서 클리어.. -> 하늘색깔로 클리어 해야 하늘이 제대로 나온다..
-	s_pEng->s_lpD3DDev->BeginScene(); // 씬 렌더 ㅅ작...
+	s_pEng->RHIDevice()->BeginScene(); // 씬 렌더 ㅅ작...
 
 	ACT_WORLD->RenderSky();           // 하늘 렌더링..
 	float fSunAngle   = ACT_WORLD->GetSunAngleByRadinWithSky(); // 해의 각도를 가져오고..
 
 	uint32_t dwFilter = D3DTEXF_LINEAR;
-	CN3Base::s_lpD3DDev->SetSamplerState(0, D3DSAMP_MINFILTER, dwFilter);
-	CN3Base::s_lpD3DDev->SetSamplerState(0, D3DSAMP_MAGFILTER, dwFilter);
-	CN3Base::s_lpD3DDev->SetSamplerState(0, D3DSAMP_MIPFILTER, dwFilter);
-	CN3Base::s_lpD3DDev->SetSamplerState(1, D3DSAMP_MINFILTER, dwFilter);
-	CN3Base::s_lpD3DDev->SetSamplerState(1, D3DSAMP_MAGFILTER, dwFilter);
-	CN3Base::s_lpD3DDev->SetSamplerState(1, D3DSAMP_MIPFILTER, dwFilter);
+	CN3Base::RHIDevice()->SetSamplerState(0, D3DSAMP_MINFILTER, dwFilter);
+	CN3Base::RHIDevice()->SetSamplerState(0, D3DSAMP_MAGFILTER, dwFilter);
+	CN3Base::RHIDevice()->SetSamplerState(0, D3DSAMP_MIPFILTER, dwFilter);
+	CN3Base::RHIDevice()->SetSamplerState(1, D3DSAMP_MINFILTER, dwFilter);
+	CN3Base::RHIDevice()->SetSamplerState(1, D3DSAMP_MAGFILTER, dwFilter);
+	CN3Base::RHIDevice()->SetSamplerState(1, D3DSAMP_MIPFILTER, dwFilter);
 
 	ACT_WORLD->RenderTerrain();   // 지형 렌더..
 	ACT_WORLD->RenderShape();     // 물체 렌더..
@@ -710,7 +710,7 @@ void CGameProcMain::Render()
 	if (s_pGameCursor)
 		s_pGameCursor->Render();
 
-	s_pEng->s_lpD3DDev->EndScene();
+	s_pEng->RHIDevice()->EndScene();
 	s_pEng->Present(CN3Base::s_hWndBase);
 }
 

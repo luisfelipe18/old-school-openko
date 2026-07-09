@@ -92,15 +92,15 @@ void CN3Moon::Render(__Matrix44& matView, __Matrix44& matProj)
 	m_pVertices[3].y = (float) rcMoon.bottom;
 
 	if (m_pTexture)
-		s_lpD3DDev->SetTexture(0, m_pTexture->Get());
+		RHIDevice()->SetTexture(0, m_pTexture->Get());
 	else
-		s_lpD3DDev->SetTexture(0, nullptr);
-	s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_MODULATE);
-	s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TEXTURE);
-	s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLORARG2, D3DTA_DIFFUSE);
+		RHIDevice()->SetTexture(0, nullptr);
+	RHIDevice()->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_MODULATE);
+	RHIDevice()->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TEXTURE);
+	RHIDevice()->SetTextureStageState(0, D3DTSS_COLORARG2, D3DTA_DIFFUSE);
 
-	s_lpD3DDev->SetFVF(FVF_TRANSFORMED);
-	s_lpD3DDev->DrawPrimitiveUP(D3DPT_TRIANGLEFAN, 2, m_pVertices, sizeof(m_pVertices[0]));
+	RHIDevice()->SetFVF(FVF_TRANSFORMED);
+	RHIDevice()->DrawPrimitiveUP(D3DPT_TRIANGLEFAN, 2, m_pVertices, sizeof(m_pVertices[0]));
 }
 
 void CN3Moon::SetMoonPhase(int iIndex)

@@ -226,6 +226,34 @@ set(N3BASE_POSIX_PORTABLE_SOURCES
   N3TransformCollision.h
   N3VMesh.cpp
   N3VMesh.h
+  N3Camera.cpp
+  N3Camera.h
+  N3Chr.cpp
+  N3Chr.h
+  N3ColorChange.cpp
+  N3ColorChange.h
+  N3IMesh.cpp
+  N3IMesh.h
+  N3Joint.cpp
+  N3Joint.h
+  N3Light.cpp
+  N3Light.h
+  N3Mesh.cpp
+  N3Mesh.h
+  N3PMesh.cpp
+  N3PMesh.h
+  N3PMeshInstance.cpp
+  N3PMeshInstance.h
+  N3Scene.cpp
+  N3Scene.h
+  N3Shape.cpp
+  N3Shape.h
+  N3ShapeExtra.cpp
+  N3ShapeExtra.h
+  N3ShapeMgr.cpp
+  N3ShapeMgr.h
+  N3Skin.cpp
+  N3Skin.h
   StdAfxBase.h
   WaveFormat.cpp
   WaveFormat.h
@@ -233,7 +261,9 @@ set(N3BASE_POSIX_PORTABLE_SOURCES
   WinCrypt.h
   VertexTypes.inl
   ${N3BASE_COMMON_AUDIO_SOURCES}
+  ${N3BASE_COMMON_EFFECT_SOURCES}
   ${N3BASE_COMMON_RHI_SOURCES}
+  ${N3BASE_COMMON_SKY_SOURCES}
 )
 
 if(WIN32)

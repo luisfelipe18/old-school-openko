@@ -4,6 +4,9 @@
 #include "StdAfxBase.h"
 #include "N3SndObj.h"
 #include "N3Chr.h"
+#ifndef _WIN32
+#include <Platform/PlatformString.h> // lstrcmpi
+#endif
 #include "N3SkyMng.h"
 #include "N3Sun.h"
 #include "N3FXBundle.h"
@@ -187,70 +190,70 @@ void CN3CPart::Render(int nLOD)
 	DWORD dwAlpha = 0, dwFog = 0, dwCull = 0;
 	if (m_Mtl.nRenderFlags & RF_ALPHABLENDING) // Alpha 사용
 	{
-		s_lpD3DDev->GetRenderState(D3DRS_ALPHABLENDENABLE, &dwAlpha);
+		RHIDevice()->GetRenderState(D3DRS_ALPHABLENDENABLE, &dwAlpha);
 		if (TRUE != dwAlpha)
-			s_lpD3DDev->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
-		s_lpD3DDev->SetRenderState(D3DRS_SRCBLEND, m_Mtl.dwSrcBlend);
-		s_lpD3DDev->SetRenderState(D3DRS_DESTBLEND, m_Mtl.dwDestBlend);
+			RHIDevice()->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+		RHIDevice()->SetRenderState(D3DRS_SRCBLEND, m_Mtl.dwSrcBlend);
+		RHIDevice()->SetRenderState(D3DRS_DESTBLEND, m_Mtl.dwDestBlend);
 	}
 	if (m_Mtl.nRenderFlags & RF_NOTUSEFOG) // Fog 무시..
 	{
-		s_lpD3DDev->GetRenderState(D3DRS_FOGENABLE, &dwFog);
+		RHIDevice()->GetRenderState(D3DRS_FOGENABLE, &dwFog);
 		if (TRUE == dwFog)
-			s_lpD3DDev->SetRenderState(D3DRS_FOGENABLE, FALSE);
+			RHIDevice()->SetRenderState(D3DRS_FOGENABLE, FALSE);
 	}
 	if (m_Mtl.nRenderFlags & RF_DOUBLESIDED) // Render Flags -
 	{
-		s_lpD3DDev->GetRenderState(D3DRS_CULLMODE, &dwCull);
-		s_lpD3DDev->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+		RHIDevice()->GetRenderState(D3DRS_CULLMODE, &dwCull);
+		RHIDevice()->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
 	}
 
-	s_lpD3DDev->SetMaterial(&m_Mtl);
+	RHIDevice()->SetMaterial(&m_Mtl);
 	LPDIRECT3DTEXTURE9 lpTex = nullptr;
 	bool bUseTwoUV           = false;
 	if (m_pTexRef)
 		lpTex = m_pTexRef->Get();
 	if (lpTex)
 	{
-		s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_MODULATE);
-		s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TEXTURE);
-		s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLORARG2, D3DTA_DIFFUSE);
-		s_lpD3DDev->SetTexture(0, lpTex);
+		RHIDevice()->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_MODULATE);
+		RHIDevice()->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TEXTURE);
+		RHIDevice()->SetTextureStageState(0, D3DTSS_COLORARG2, D3DTA_DIFFUSE);
+		RHIDevice()->SetTexture(0, lpTex);
 
 		m_pTexRef->UpdateRenderInfo();
 
 		if (m_pTexOverlapRef && m_pTexOverlapRef->Get())
 		{
 			bUseTwoUV = true;
-			s_lpD3DDev->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_MODULATE);
-			s_lpD3DDev->SetTextureStageState(1, D3DTSS_COLORARG1, D3DTA_CURRENT);
-			s_lpD3DDev->SetTextureStageState(1, D3DTSS_COLORARG2, D3DTA_TEXTURE);
-			s_lpD3DDev->SetTexture(1, m_pTexOverlapRef->Get());
+			RHIDevice()->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_MODULATE);
+			RHIDevice()->SetTextureStageState(1, D3DTSS_COLORARG1, D3DTA_CURRENT);
+			RHIDevice()->SetTextureStageState(1, D3DTSS_COLORARG2, D3DTA_TEXTURE);
+			RHIDevice()->SetTexture(1, m_pTexOverlapRef->Get());
 
 			m_pTexOverlapRef->UpdateRenderInfo();
 		}
 	}
 	else
 	{
-		s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
-		s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_DIFFUSE);
-		s_lpD3DDev->SetTexture(0, nullptr);
+		RHIDevice()->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
+		RHIDevice()->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_DIFFUSE);
+		RHIDevice()->SetTexture(0, nullptr);
 	}
 
 	m_pSkinsRef->m_Skins[nLOD].Render(bUseTwoUV);
 
 	if (bUseTwoUV)
 	{
-		s_lpD3DDev->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
-		s_lpD3DDev->SetTexture(1, nullptr);
+		RHIDevice()->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
+		RHIDevice()->SetTexture(1, nullptr);
 	}
 
 	if ((m_Mtl.nRenderFlags & RF_ALPHABLENDING) && FALSE == dwAlpha)
-		s_lpD3DDev->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+		RHIDevice()->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
 	if ((m_Mtl.nRenderFlags & RF_NOTUSEFOG) && TRUE == dwFog)
-		s_lpD3DDev->SetRenderState(D3DRS_FOGENABLE, TRUE); // 안개 사용하지 않는다..
+		RHIDevice()->SetRenderState(D3DRS_FOGENABLE, TRUE); // 안개 사용하지 않는다..
 	if ((m_Mtl.nRenderFlags & RF_DOUBLESIDED) && D3DCULL_NONE != dwCull)
-		s_lpD3DDev->SetRenderState(D3DRS_CULLMODE, dwCull);
+		RHIDevice()->SetRenderState(D3DRS_CULLMODE, dwCull);
 }
 
 CN3Texture* CN3CPart::TexOverlapSet(const std::string& szFN)
@@ -361,67 +364,67 @@ void CN3CPlugBase::Render(const __Matrix44& mtxParent, const __Matrix44& mtxJoin
 	DWORD dwAlpha = 0, dwFog = 0, dwCull = 0;
 	if (m_Mtl.nRenderFlags & RF_ALPHABLENDING) // Alpha 사용
 	{
-		s_lpD3DDev->GetRenderState(D3DRS_ALPHABLENDENABLE, &dwAlpha);
+		RHIDevice()->GetRenderState(D3DRS_ALPHABLENDENABLE, &dwAlpha);
 		if (TRUE != dwAlpha)
-			s_lpD3DDev->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
-		s_lpD3DDev->SetRenderState(D3DRS_SRCBLEND, m_Mtl.dwSrcBlend);
-		s_lpD3DDev->SetRenderState(D3DRS_DESTBLEND, m_Mtl.dwDestBlend);
+			RHIDevice()->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+		RHIDevice()->SetRenderState(D3DRS_SRCBLEND, m_Mtl.dwSrcBlend);
+		RHIDevice()->SetRenderState(D3DRS_DESTBLEND, m_Mtl.dwDestBlend);
 	}
 	if (m_Mtl.nRenderFlags & RF_NOTUSEFOG) // Fog 무시..
 	{
-		s_lpD3DDev->GetRenderState(D3DRS_FOGENABLE, &dwFog);
+		RHIDevice()->GetRenderState(D3DRS_FOGENABLE, &dwFog);
 		if (TRUE == dwFog)
-			s_lpD3DDev->SetRenderState(D3DRS_FOGENABLE, FALSE);
+			RHIDevice()->SetRenderState(D3DRS_FOGENABLE, FALSE);
 	}
 	if (m_Mtl.nRenderFlags & RF_DOUBLESIDED) // Render Flags -
 	{
-		s_lpD3DDev->GetRenderState(D3DRS_CULLMODE, &dwCull);
-		s_lpD3DDev->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+		RHIDevice()->GetRenderState(D3DRS_CULLMODE, &dwCull);
+		RHIDevice()->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
 	}
 
 	static __Matrix44 mtx;
 	mtx  = m_Matrix;
 	mtx *= mtxJoint;
 	mtx *= mtxParent;
-	s_lpD3DDev->SetTransform(D3DTS_WORLD, mtx.toD3D());
+	RHIDevice()->SetTransform(D3DTS_WORLD, mtx.toD3D());
 
-	s_lpD3DDev->SetMaterial(&m_Mtl);
+	RHIDevice()->SetMaterial(&m_Mtl);
 	LPDIRECT3DTEXTURE9 lpTex = nullptr;
 	bool bUseTwoUV           = false;
 	if (m_pTexRef)
 		lpTex = m_pTexRef->Get();
 	if (lpTex)
 	{
-		s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_MODULATE);
-		s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TEXTURE);
-		s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLORARG2, D3DTA_DIFFUSE);
-		s_lpD3DDev->SetTexture(0, lpTex);
+		RHIDevice()->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_MODULATE);
+		RHIDevice()->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TEXTURE);
+		RHIDevice()->SetTextureStageState(0, D3DTSS_COLORARG2, D3DTA_DIFFUSE);
+		RHIDevice()->SetTexture(0, lpTex);
 		m_pTexRef->UpdateRenderInfo();
 
 		if (m_pTexOverlapRef && m_pTexOverlapRef->Get())
 		{
 			bUseTwoUV = true;
 
-			s_lpD3DDev->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_MODULATE);
-			s_lpD3DDev->SetTextureStageState(1, D3DTSS_COLORARG1, D3DTA_TEXTURE);
-			s_lpD3DDev->SetTextureStageState(1, D3DTSS_COLORARG2, D3DTA_CURRENT);
-			s_lpD3DDev->SetTexture(1, m_pTexOverlapRef->Get());
+			RHIDevice()->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_MODULATE);
+			RHIDevice()->SetTextureStageState(1, D3DTSS_COLORARG1, D3DTA_TEXTURE);
+			RHIDevice()->SetTextureStageState(1, D3DTSS_COLORARG2, D3DTA_CURRENT);
+			RHIDevice()->SetTexture(1, m_pTexOverlapRef->Get());
 			m_pTexOverlapRef->UpdateRenderInfo();
 		}
 	}
 	else
 	{
-		s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
-		s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_DIFFUSE);
-		s_lpD3DDev->SetTexture(0, nullptr);
+		RHIDevice()->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
+		RHIDevice()->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_DIFFUSE);
+		RHIDevice()->SetTexture(0, nullptr);
 	}
 
 	if ((m_Mtl.nRenderFlags & RF_ALPHABLENDING) && FALSE == dwAlpha)
-		s_lpD3DDev->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+		RHIDevice()->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
 	if ((m_Mtl.nRenderFlags & RF_NOTUSEFOG) && TRUE == dwFog)
-		s_lpD3DDev->SetRenderState(D3DRS_FOGENABLE, TRUE); // 안개 사용하지 않는다..
+		RHIDevice()->SetRenderState(D3DRS_FOGENABLE, TRUE); // 안개 사용하지 않는다..
 	if ((m_Mtl.nRenderFlags & RF_DOUBLESIDED) && D3DCULL_NONE != dwCull)
-		s_lpD3DDev->SetRenderState(D3DRS_CULLMODE, dwCull);
+		RHIDevice()->SetRenderState(D3DRS_CULLMODE, dwCull);
 
 	if (bUseTwoUV)
 		m_PMeshInst.RenderTwoUV();
@@ -430,8 +433,8 @@ void CN3CPlugBase::Render(const __Matrix44& mtxParent, const __Matrix44& mtxJoin
 
 	if (bUseTwoUV) // 텍스처 스테이지 두개로 렌더링한다...!!
 	{
-		s_lpD3DDev->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
-		s_lpD3DDev->SetTexture(1, nullptr);
+		RHIDevice()->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
+		RHIDevice()->SetTexture(1, nullptr);
 	}
 }
 
@@ -782,14 +785,14 @@ void CN3CPlug::RenderFXLines(
 	mtx  = m_Matrix;
 	mtx *= mtxJoint;
 	mtx *= mtxParent;
-	s_lpD3DDev->SetTransform(D3DTS_WORLD, mtx.toD3D());
+	RHIDevice()->SetTransform(D3DTS_WORLD, mtx.toD3D());
 
 	DWORD dwCull;
-	s_lpD3DDev->GetRenderState(D3DRS_CULLMODE, &dwCull);
-	s_lpD3DDev->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+	RHIDevice()->GetRenderState(D3DRS_CULLMODE, &dwCull);
+	RHIDevice()->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
 	m_PMeshInstFX.SetLOD((s_CameraData.vEye - mtx.Pos()).Magnitude() * s_CameraData.fFOV);
 	m_PMeshInstFX.Render();
-	s_lpD3DDev->SetRenderState(D3DRS_CULLMODE, dwCull);
+	RHIDevice()->SetRenderState(D3DRS_CULLMODE, dwCull);
 }
 #endif
 
@@ -1832,7 +1835,7 @@ void CN3Chr::Render()
 			m_nLOD = MAX_CHR_LOD - 1; // LOD 밖이면 ...
 	}
 
-	s_lpD3DDev->SetTransform(D3DTS_WORLD, m_Matrix.toD3D());
+	RHIDevice()->SetTransform(D3DTS_WORLD, m_Matrix.toD3D());
 
 	TickJoints(); // 조인트 행렬들 계산...
 	BuildMesh();  // 행렬에 따라 점위치 계산..

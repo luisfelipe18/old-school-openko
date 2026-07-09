@@ -217,10 +217,10 @@ void CN3SPart::Render()
 
 	//	static uint32_t dwAlpha, dwFog, dwCull;
 	DWORD dwFog = 0, dwCull = 0;
-	//	s_lpD3DDev->GetRenderState(D3DRS_ALPHABLENDENABLE, &dwAlpha);
-	//	if(TRUE != dwAlpha) s_lpD3DDev->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
-	//	s_lpD3DDev->SetRenderState(D3DRS_SRCBLEND,   m_Mtl.dwSrcBlend);
-	//	s_lpD3DDev->SetRenderState(D3DRS_DESTBLEND,  m_Mtl.dwDestBlend);
+	//	RHIDevice()->GetRenderState(D3DRS_ALPHABLENDENABLE, &dwAlpha);
+	//	if(TRUE != dwAlpha) RHIDevice()->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+	//	RHIDevice()->SetRenderState(D3DRS_SRCBLEND,   m_Mtl.dwSrcBlend);
+	//	RHIDevice()->SetRenderState(D3DRS_DESTBLEND,  m_Mtl.dwDestBlend);
 
 #ifdef _DEBUG
 	// Rendering Information Update...
@@ -229,42 +229,42 @@ void CN3SPart::Render()
 
 	if (m_Mtl.nRenderFlags & RF_NOTUSEFOG) // Fog 무시..
 	{
-		s_lpD3DDev->GetRenderState(D3DRS_FOGENABLE, &dwFog);
+		RHIDevice()->GetRenderState(D3DRS_FOGENABLE, &dwFog);
 		if (TRUE == dwFog)
-			s_lpD3DDev->SetRenderState(D3DRS_FOGENABLE, FALSE);
+			RHIDevice()->SetRenderState(D3DRS_FOGENABLE, FALSE);
 	}
 
 	if (m_Mtl.nRenderFlags & RF_DOUBLESIDED) // Render Flags -
 	{
-		s_lpD3DDev->GetRenderState(D3DRS_CULLMODE, &dwCull);
-		s_lpD3DDev->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+		RHIDevice()->GetRenderState(D3DRS_CULLMODE, &dwCull);
+		RHIDevice()->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
 	}
 
-	s_lpD3DDev->SetMaterial(&m_Mtl); // 재질 설정..
-	s_lpD3DDev->SetTexture(0, lpTex);
+	RHIDevice()->SetMaterial(&m_Mtl); // 재질 설정..
+	RHIDevice()->SetTexture(0, lpTex);
 	if (lpTex != nullptr)
 	{
-		s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLOROP, m_Mtl.dwColorOp);
-		s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLORARG1, m_Mtl.dwColorArg1);
-		s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLORARG2, m_Mtl.dwColorArg2);
+		RHIDevice()->SetTextureStageState(0, D3DTSS_COLOROP, m_Mtl.dwColorOp);
+		RHIDevice()->SetTextureStageState(0, D3DTSS_COLORARG1, m_Mtl.dwColorArg1);
+		RHIDevice()->SetTextureStageState(0, D3DTSS_COLORARG2, m_Mtl.dwColorArg2);
 	}
 	else
 	{
-		s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
-		s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_DIFFUSE);
+		RHIDevice()->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
+		RHIDevice()->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_DIFFUSE);
 	}
 
 	// 로딩할때 미리 계산해 놓은 월드 행렬 적용..
-	s_lpD3DDev->SetTransform(D3DTS_WORLD, m_Matrix.toD3D());
+	RHIDevice()->SetTransform(D3DTS_WORLD, m_Matrix.toD3D());
 
 	m_PMInst.Render();
 
-	//	if((m_Mtl.nRenderFlags & RF_ALPHABLENDING) && FALSE == dwAlpha)	s_lpD3DDev->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+	//	if((m_Mtl.nRenderFlags & RF_ALPHABLENDING) && FALSE == dwAlpha)	RHIDevice()->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
 	if ((m_Mtl.nRenderFlags & RF_NOTUSEFOG) && TRUE == dwFog)
-		s_lpD3DDev->SetRenderState(D3DRS_FOGENABLE, TRUE); // 안개 사용하지 않는다..
+		RHIDevice()->SetRenderState(D3DRS_FOGENABLE, TRUE); // 안개 사용하지 않는다..
 
 	if ((m_Mtl.nRenderFlags & RF_DOUBLESIDED) && D3DCULL_NONE != dwCull)
-		s_lpD3DDev->SetRenderState(D3DRS_CULLMODE, dwCull);
+		RHIDevice()->SetRenderState(D3DRS_CULLMODE, dwCull);
 }
 
 #ifdef _N3TOOL
@@ -287,14 +287,14 @@ void CN3SPart::RenderSelected(bool bWireFrame)
 			lpTex = m_TexRefs[iTexIndex]->Get();
 	}
 
-	s_lpD3DDev->SetTexture(0, lpTex);
-	s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
+	RHIDevice()->SetTexture(0, lpTex);
+	RHIDevice()->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
 	if (lpTex != nullptr)
-		s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TEXTURE);
+		RHIDevice()->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TEXTURE);
 	else
-		s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_DIFFUSE);
+		RHIDevice()->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_DIFFUSE);
 
-	s_lpD3DDev->SetTransform(D3DTS_WORLD, m_Matrix.toD3D());
+	RHIDevice()->SetTransform(D3DTS_WORLD, m_Matrix.toD3D());
 	if (bWireFrame)
 	{
 		__Vector3 vLines[4];
@@ -374,10 +374,16 @@ bool CN3SPart::Save(File& file)
 	if (pPMesh != nullptr)
 		nL = static_cast<int>(pPMesh->FileName().size());
 	else
+	{
+#ifdef _WIN32
 		MessageBox(s_hWndBase,
 			"Progressive mesh pointer is NULL! : object가 제대로 보이지 않을 수 있습니다.(리소스 "
 			"파일이 Load되지 않았을 가능성이 큼)",
 			"warning", MB_OK);
+#else
+		TRACE("Progressive mesh pointer is NULL!");
+#endif
+	}
 
 	file.Write(&nL, 4); // Mesh FileName
 	if (nL > 0)
@@ -483,40 +489,40 @@ void CN3SPart::PartialRender(int iCount, uint16_t* pIndices)
 
 	if (m_Mtl.nRenderFlags & RF_NOTUSEFOG) // Fog 무시..
 	{
-		s_lpD3DDev->GetRenderState(D3DRS_FOGENABLE, &dwFog);
+		RHIDevice()->GetRenderState(D3DRS_FOGENABLE, &dwFog);
 		if (TRUE == dwFog)
-			s_lpD3DDev->SetRenderState(D3DRS_FOGENABLE, FALSE);
+			RHIDevice()->SetRenderState(D3DRS_FOGENABLE, FALSE);
 	}
 	if (m_Mtl.nRenderFlags & RF_DOUBLESIDED) // Render Flags -
 	{
-		s_lpD3DDev->GetRenderState(D3DRS_CULLMODE, &dwCull);
-		s_lpD3DDev->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+		RHIDevice()->GetRenderState(D3DRS_CULLMODE, &dwCull);
+		RHIDevice()->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
 	}
 
-	s_lpD3DDev->SetMaterial(&m_Mtl); // 재질 설정..
-	s_lpD3DDev->SetTexture(0, lpTex);
+	RHIDevice()->SetMaterial(&m_Mtl); // 재질 설정..
+	RHIDevice()->SetTexture(0, lpTex);
 	if (nullptr != lpTex)
 	{
-		s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLOROP, m_Mtl.dwColorOp);
-		s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLORARG1, m_Mtl.dwColorArg1);
-		s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLORARG2, m_Mtl.dwColorArg2);
+		RHIDevice()->SetTextureStageState(0, D3DTSS_COLOROP, m_Mtl.dwColorOp);
+		RHIDevice()->SetTextureStageState(0, D3DTSS_COLORARG1, m_Mtl.dwColorArg1);
+		RHIDevice()->SetTextureStageState(0, D3DTSS_COLORARG2, m_Mtl.dwColorArg2);
 	}
 	else
 	{
-		s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
-		s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_DIFFUSE);
+		RHIDevice()->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
+		RHIDevice()->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_DIFFUSE);
 	}
 
 	// 로딩할때 미리 계산해 놓은 월드 행렬 적용..
-	s_lpD3DDev->SetTransform(D3DTS_WORLD, m_Matrix.toD3D());
+	RHIDevice()->SetTransform(D3DTS_WORLD, m_Matrix.toD3D());
 
 	m_PMInst.PartialRender(iCount, pIndices);
 
 	if ((m_Mtl.nRenderFlags & RF_NOTUSEFOG) && TRUE == dwFog)
-		s_lpD3DDev->SetRenderState(D3DRS_FOGENABLE, TRUE); // 안개 사용하지 않는다..
+		RHIDevice()->SetRenderState(D3DRS_FOGENABLE, TRUE); // 안개 사용하지 않는다..
 
 	if ((m_Mtl.nRenderFlags & RF_DOUBLESIDED) && D3DCULL_NONE != dwCull)
-		s_lpD3DDev->SetRenderState(D3DRS_CULLMODE, dwCull);
+		RHIDevice()->SetRenderState(D3DRS_CULLMODE, dwCull);
 }
 
 // CN3Shape Part ....

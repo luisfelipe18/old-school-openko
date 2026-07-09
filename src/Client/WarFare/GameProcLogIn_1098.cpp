@@ -223,14 +223,14 @@ void CGameProcLogIn_1098::Render()
 {
 	D3DCOLOR crEnv = 0x00000000;
 	s_pEng->Clear(crEnv);     // 배경은 검은색
-	s_lpD3DDev->BeginScene(); // 씬 렌더 ㅅ작...
+	RHIDevice()->BeginScene(); // 씬 렌더 ㅅ작...
 
 							  // 카메라 잡기..
 	m_pCamera->Tick();
 	m_pCamera->Apply();
 
 	for (int i = 0; i < 8; i++)
-		s_lpD3DDev->LightEnable(i, FALSE);
+		RHIDevice()->LightEnable(i, FALSE);
 
 	for (int i = 0; i < 3; i++)
 		m_pLights[i]->Apply();
@@ -238,7 +238,7 @@ void CGameProcLogIn_1098::Render()
 	////////////////////////////////////////////
 	// 달그리기..
 	D3DVIEWPORT9 vp;
-	s_lpD3DDev->GetViewport(&vp);
+	RHIDevice()->GetViewport(&vp);
 
 	float fMW  = (m_pTexBkg->Width() * vp.Width / 1024.0f) * 1.3f;
 	float fMH  = (m_pTexBkg->Height() * vp.Height / 768.0f) * 1.3f;
@@ -253,16 +253,16 @@ void CGameProcLogIn_1098::Render()
 	vMoon[3].Set(fX, fY + fMH, 0, fRHW, 0xffffffff, 0.0f, 1.0f);
 
 	DWORD dwZWrite;
-	s_lpD3DDev->GetRenderState(D3DRS_ZWRITEENABLE, &dwZWrite);
-	s_lpD3DDev->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+	RHIDevice()->GetRenderState(D3DRS_ZWRITEENABLE, &dwZWrite);
+	RHIDevice()->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
 
-	s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
-	s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TEXTURE);
-	s_lpD3DDev->SetTexture(0, m_pTexBkg->Get());
-	s_lpD3DDev->SetFVF(FVF_TRANSFORMED);
-	s_lpD3DDev->DrawPrimitiveUP(D3DPT_TRIANGLEFAN, 2, vMoon, sizeof(__VertexTransformed));
+	RHIDevice()->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
+	RHIDevice()->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TEXTURE);
+	RHIDevice()->SetTexture(0, m_pTexBkg->Get());
+	RHIDevice()->SetFVF(FVF_TRANSFORMED);
+	RHIDevice()->DrawPrimitiveUP(D3DPT_TRIANGLEFAN, 2, vMoon, sizeof(__VertexTransformed));
 
-	s_lpD3DDev->SetRenderState(D3DRS_ZWRITEENABLE, dwZWrite);
+	RHIDevice()->SetRenderState(D3DRS_ZWRITEENABLE, dwZWrite);
 	// 달그리기..
 	////////////////////////////////////////////
 
@@ -270,7 +270,7 @@ void CGameProcLogIn_1098::Render()
 
 	CGameProcedure::Render();       // UI 나 그밖의 기본적인 것들 렌더링..
 
-	s_pEng->s_lpD3DDev->EndScene(); // 씬 렌더 시작...
+	s_pEng->RHIDevice()->EndScene(); // 씬 렌더 시작...
 	s_pEng->Present(CN3Base::s_hWndBase);
 }
 

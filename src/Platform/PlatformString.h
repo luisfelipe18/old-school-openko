@@ -5,6 +5,16 @@
 
 #include <string>
 
+#ifndef _WIN32
+#include <strings.h>
+
+// Win32 case-insensitive compare used by legacy call sites.
+inline int lstrcmpi(const char* lhs, const char* rhs)
+{
+	return strcasecmp(lhs, rhs);
+}
+#endif
+
 /// \brief In-place ASCII-only lowercasing.
 ///
 /// POSIX replacement for the Win32 CharLower() call sites: only the bytes

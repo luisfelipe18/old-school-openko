@@ -16,6 +16,7 @@
 #ifndef _WIN32
 
 #include <cstdint>
+#include <cstring>
 
 using BOOL     = int;
 using INT      = int;
@@ -31,6 +32,20 @@ using FLOAT    = float;
 using LPBYTE   = BYTE*;
 using LPDWORD  = DWORD*;
 using HRESULT  = LONG;
+
+#ifndef ZeroMemory
+#define ZeroMemory(dest, len)      std::memset((dest), 0, (len))
+#define CopyMemory(dest, src, len) std::memcpy((dest), (src), (len))
+#endif
+
+// COM result helpers (match winerror.h semantics).
+#ifndef SUCCEEDED
+#define SUCCEEDED(hr) (((HRESULT) (hr)) >= 0)
+#define FAILED(hr)    (((HRESULT) (hr)) < 0)
+#define S_OK          ((HRESULT) 0)
+#define S_FALSE       ((HRESULT) 1)
+#define E_FAIL        ((HRESULT) 0x80004005L)
+#endif
 
 #ifndef TRUE
 #define TRUE  1
@@ -77,6 +92,30 @@ using COLORREF = DWORD;
 #define GetBValue(rgb) ((BYTE) ((rgb) >> 16))
 #endif
 
+// Small Win32 RECT helpers used by UI/render code.
+inline BOOL SetRect(RECT* rc, LONG left, LONG top, LONG right, LONG bottom)
+{
+	if (rc == nullptr)
+		return FALSE;
+	rc->left   = left;
+	rc->top    = top;
+	rc->right  = right;
+	rc->bottom = bottom;
+	return TRUE;
+}
+
+inline BOOL SetRectEmpty(RECT* rc)
+{
+	return SetRect(rc, 0, 0, 0, 0);
+}
+
+inline BOOL PtInRect(const RECT* rc, POINT pt)
+{
+	if (rc == nullptr)
+		return FALSE;
+	return pt.x >= rc->left && pt.x < rc->right && pt.y >= rc->top && pt.y < rc->bottom;
+}
+
 #ifndef MAKEFOURCC
 #define MAKEFOURCC(ch0, ch1, ch2, ch3)                                          \
 	((DWORD) (BYTE) (ch0) | ((DWORD) (BYTE) (ch1) << 8) | ((DWORD) (BYTE) (ch2) << 16) \
@@ -85,6 +124,11 @@ using COLORREF = DWORD;
 
 #ifndef _MAX_PATH
 #define _MAX_PATH 1024
+#endif
+
+// Windows value (260): legacy structs size their name buffers with it.
+#ifndef MAX_PATH
+#define MAX_PATH 260
 #endif
 
 #endif // !_WIN32

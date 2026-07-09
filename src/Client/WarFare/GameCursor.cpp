@@ -82,11 +82,11 @@ void CGameCursor::Render()
 	{
 		CGameProcedure::s_pUIMgr->RenderStateSet();
 		DWORD dwZ = 0;
-		CN3Base::s_lpD3DDev->GetRenderState(D3DRS_ZENABLE, &dwZ);
-		CN3Base::s_lpD3DDev->SetRenderState(D3DRS_ZENABLE, FALSE);
+		CN3Base::RHIDevice()->GetRenderState(D3DRS_ZENABLE, &dwZ);
+		CN3Base::RHIDevice()->SetRenderState(D3DRS_ZENABLE, FALSE);
 
 		m_pImageCursor[m_eCurGameCursor]->Render();
-		CN3Base::s_lpD3DDev->SetRenderState(D3DRS_ZENABLE, dwZ);
+		CN3Base::RHIDevice()->SetRenderState(D3DRS_ZENABLE, dwZ);
 		CGameProcedure::s_pUIMgr->RenderStateRestore();
 	}
 }

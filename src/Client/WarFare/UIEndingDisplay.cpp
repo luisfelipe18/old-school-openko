@@ -31,12 +31,12 @@ void CUIEndingDisplay::Render()
 
 	D3DCOLOR crEnv = 0x00000000;
 	CGameEng::Clear(crEnv);             // 배경은 검은색
-	CGameEng::s_lpD3DDev->BeginScene(); // 씬 렌더 ㅅ작...
+	CGameEng::RHIDevice()->BeginScene(); // 씬 렌더 ㅅ작...
 
 	CUIManager::RenderStateSet();
 	CN3UIBase::Render();
 	CUIManager::RenderStateRestore();
 
-	CGameEng::s_lpD3DDev->EndScene(); // 씬 렌더 시작...
+	CGameEng::RHIDevice()->EndScene(); // 씬 렌더 시작...
 	CGameEng::Present(CN3Base::s_hWndBase);
 }

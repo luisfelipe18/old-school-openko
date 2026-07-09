@@ -399,22 +399,22 @@ bool CN3Camera::Save(File& file)
 
 void CN3Camera::Apply()
 {
-	s_lpD3DDev->SetTransform(D3DTS_VIEW, m_Data.mtxView.toD3D());
-	s_lpD3DDev->SetTransform(
+	RHIDevice()->SetTransform(D3DTS_VIEW, m_Data.mtxView.toD3D());
+	RHIDevice()->SetTransform(
 		D3DTS_PROJECTION, m_Data.mtxProjection.toD3D()); // Projection Matrix Setting
 
 	s_CameraData = m_Data;                               // Static Data Update...
 
 	// 안개 색깔 맞추기..
-	s_lpD3DDev->SetRenderState(D3DRS_FOGENABLE, m_bFogUse);
-	s_lpD3DDev->SetRenderState(D3DRS_FOGCOLOR, m_FogColor);
+	RHIDevice()->SetRenderState(D3DRS_FOGENABLE, m_bFogUse);
+	RHIDevice()->SetRenderState(D3DRS_FOGCOLOR, m_FogColor);
 
-	s_lpD3DDev->SetRenderState(D3DRS_FOGVERTEXMODE, D3DFOG_EXP2);
-	s_lpD3DDev->SetRenderState(D3DRS_FOGTABLEMODE, D3DFOG_EXP2);
-	//	s_lpD3DDev->SetRenderState( D3DRS_FOGTABLEMODE,   D3DFOG_NONE);
-	//	s_lpD3DDev->SetRenderState( D3DRS_FOGVERTEXMODE,  D3DFOG_LINEAR);
+	RHIDevice()->SetRenderState(D3DRS_FOGVERTEXMODE, D3DFOG_EXP2);
+	RHIDevice()->SetRenderState(D3DRS_FOGTABLEMODE, D3DFOG_EXP2);
+	//	RHIDevice()->SetRenderState( D3DRS_FOGTABLEMODE,   D3DFOG_NONE);
+	//	RHIDevice()->SetRenderState( D3DRS_FOGVERTEXMODE,  D3DFOG_LINEAR);
 
-	s_lpD3DDev->SetRenderState(D3DRS_RANGEFOGENABLE, TRUE);
+	RHIDevice()->SetRenderState(D3DRS_RANGEFOGENABLE, TRUE);
 
 	// Range Fog : 장점 - 거리기반으로 fog가 적용된다. 단점 - poligon단위로 같은 fog값이 적용된다.(큰 폴리곤이 있을경우 어색한 fog가 될 수 있다.)
 	// range fog = FALSE로 했을때는 depth버퍼 기반으로 fog가 계산되어 적용된다.
@@ -426,20 +426,20 @@ void CN3Camera::Apply()
 
 	// 위의 모든 fog의 차이를 보려면 큰판을 하나 그려서 fog를 넣어보면 쉽게 관찰할 수 있다.
 
-	//	s_lpD3DDev->SetRenderState( D3DRS_FOGSTART,   *(uint32_t*)&m_fFogStart);
-	//	s_lpD3DDev->SetRenderState( D3DRS_FOGEND,     *(uint32_t*)&m_fFogEnd);
-	//	s_lpD3DDev->SetRenderState( D3DRS_FOGDENSITY, *(uint32_t*)&m_fFogDensity);
+	//	RHIDevice()->SetRenderState( D3DRS_FOGSTART,   *(uint32_t*)&m_fFogStart);
+	//	RHIDevice()->SetRenderState( D3DRS_FOGEND,     *(uint32_t*)&m_fFogEnd);
+	//	RHIDevice()->SetRenderState( D3DRS_FOGDENSITY, *(uint32_t*)&m_fFogDensity);
 
 	float fFogDensity = 1.0f / (0.37f * m_Data.fFP); //0.33f/23.0f;
 	float fFogStart   = m_Data.fFP * 0.75f;
 	float fFogEnd     = m_Data.fFP;
 
-	s_lpD3DDev->SetRenderState(D3DRS_FOGSTART, std::bit_cast<uint32_t>(fFogStart));
-	s_lpD3DDev->SetRenderState(D3DRS_FOGEND, std::bit_cast<uint32_t>(fFogEnd));
-	s_lpD3DDev->SetRenderState(D3DRS_FOGDENSITY, std::bit_cast<uint32_t>(fFogDensity));
+	RHIDevice()->SetRenderState(D3DRS_FOGSTART, std::bit_cast<uint32_t>(fFogStart));
+	RHIDevice()->SetRenderState(D3DRS_FOGEND, std::bit_cast<uint32_t>(fFogEnd));
+	RHIDevice()->SetRenderState(D3DRS_FOGDENSITY, std::bit_cast<uint32_t>(fFogDensity));
 }
 
-void CN3Camera::Render(float fUnitSize)
+void CN3Camera::Render(float /*fUnitSize*/)
 {
 }
 
@@ -461,7 +461,7 @@ void CN3Camera::Tick(float fFrm)
 
 	m_Data.mtxView.LookAtLH(m_Data.vEye, m_Data.vAt, m_Data.vUp); // Look At 적용
 	m_Data.mtxViewInverse = m_Data.mtxView.Inverse();             // View Inverse 행렬 구하기..
-	CN3Base::s_lpD3DDev->GetViewport(&m_Data.vp);                 // View port 가져오기...
+	CN3Base::RHIDevice()->GetViewport(&m_Data.vp);                 // View port 가져오기...
 
 	m_Data.fAspect = (float) m_Data.vp.Width / (float) m_Data.vp.Height; // 종횡비
 	if (m_bOrtho)

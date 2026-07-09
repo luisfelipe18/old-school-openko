@@ -277,7 +277,7 @@ void CGameProcCharacterSelect::Tick()
 		if ((nMFlags & MOUSE_LBCLICK) && (m_eCurProcess != PROCESS_ROTATEING))
 		{
 			D3DVIEWPORT9 vp {};
-			CN3Base::s_lpD3DDev->GetViewport(&vp);
+			CN3Base::RHIDevice()->GetViewport(&vp);
 
 			RECT rc  = { (int) (vp.Width * 0.36f), (int) (vp.Height * 0.44f), (int) (vp.Width * 0.64f), (int) (vp.Height * 0.86f) };
 			POINT pt = s_pLocalInput->MouseGetPos();
@@ -289,7 +289,7 @@ void CGameProcCharacterSelect::Tick()
 
 	// 라이트..
 	for (int i = 0; i < 8; i++)
-		s_pEng->s_lpD3DDev->LightEnable(i, FALSE); // 일단 라이트 다 끄고..
+		s_pEng->RHIDevice()->LightEnable(i, FALSE); // 일단 라이트 다 끄고..
 
 	for (int i = 0; i < 2; i++)
 	{
@@ -307,11 +307,11 @@ void CGameProcCharacterSelect::Render()
 {
 	D3DCOLOR crEnv = 0x00000000;
 	s_pEng->Clear(crEnv);             // 배경은 검은색
-	s_pEng->s_lpD3DDev->BeginScene(); // 씬 렌더 ㅅ작...
+	s_pEng->RHIDevice()->BeginScene(); // 씬 렌더 ㅅ작...
 
 	__Matrix44 mtxWorld;
 	mtxWorld.Identity();
-	CN3Base::s_lpD3DDev->SetTransform(D3DTS_WORLD, mtxWorld.toD3D());
+	CN3Base::RHIDevice()->SetTransform(D3DTS_WORLD, mtxWorld.toD3D());
 
 	m_pCamera->EyePosSet(m_vEye);
 	m_pCamera->AtPosSet(m_vAt);
@@ -352,7 +352,7 @@ void CGameProcCharacterSelect::Render()
 	if (m_bFadeOutRender)
 		FadeOutRender();
 
-	s_pEng->s_lpD3DDev->EndScene(); // 씬 렌더 시작...
+	s_pEng->RHIDevice()->EndScene(); // 씬 렌더 시작...
 	s_pEng->Present(CN3Base::s_hWndBase);
 }
 
@@ -780,15 +780,15 @@ void CGameProcCharacterSelect::ProcessOnReturn()
 			case NATION_KARUS:
 				m_lgt[iIndex].Theta = KARUS_THETA_MAX;
 
-				s_pEng->s_lpD3DDev->LightEnable(iIndex + 4, TRUE);
-				s_pEng->s_lpD3DDev->SetLight(iIndex + 4, m_lgt[iIndex].toD3D());
+				s_pEng->RHIDevice()->LightEnable(iIndex + 4, TRUE);
+				s_pEng->RHIDevice()->SetLight(iIndex + 4, m_lgt[iIndex].toD3D());
 				break;
 
 			case NATION_ELMORAD:
 				m_lgt[iIndex].Theta = ELMORAD_THERA_MAX;
 
-				s_pEng->s_lpD3DDev->LightEnable(iIndex + 4, TRUE);
-				s_pEng->s_lpD3DDev->SetLight(iIndex + 4, m_lgt[iIndex].toD3D());
+				s_pEng->RHIDevice()->LightEnable(iIndex + 4, TRUE);
+				s_pEng->RHIDevice()->SetLight(iIndex + 4, m_lgt[iIndex].toD3D());
 				break;
 
 			default:
@@ -1145,8 +1145,8 @@ void CGameProcCharacterSelect::CharacterSelect()
 			}
 
 			m_lgt[iIndex].Theta = m_fCurTheta;
-			s_pEng->s_lpD3DDev->LightEnable(iIndex + 4, TRUE);
-			s_pEng->s_lpD3DDev->SetLight(iIndex + 4, m_lgt[iIndex].toD3D());
+			s_pEng->RHIDevice()->LightEnable(iIndex + 4, TRUE);
+			s_pEng->RHIDevice()->SetLight(iIndex + 4, m_lgt[iIndex].toD3D());
 		}
 	}
 
@@ -1184,8 +1184,8 @@ void CGameProcCharacterSelect::DoSelectedChrProc()
 	}
 
 	// Light..
-	s_lpD3DDev->LightEnable(iIndex + 4, TRUE);
-	s_lpD3DDev->SetLight(iIndex + 4, m_lgt[iIndex].toD3D());
+	RHIDevice()->LightEnable(iIndex + 4, TRUE);
+	RHIDevice()->SetLight(iIndex + 4, m_lgt[iIndex].toD3D());
 
 	if (!m_pChrs[iIndex]->IsAnimEnd())
 	{
@@ -1220,77 +1220,77 @@ void CGameProcCharacterSelect::FadeOutRender()
 	pVertices[3].Set(0.0f, (float) s_CameraData.vp.Height, 0.000002f, 0.99f, D3DCOLOR_ARGB((uint8_t) m_fFadeOut, 0x00, 0x00, 0x00));
 
 	DWORD dwUsefog = TRUE;
-	s_lpD3DDev->GetRenderState(D3DRS_FOGENABLE, &dwUsefog);
+	RHIDevice()->GetRenderState(D3DRS_FOGENABLE, &dwUsefog);
 
 	DWORD dwUseLighting = TRUE;
-	s_lpD3DDev->GetRenderState(D3DRS_LIGHTING, &dwUseLighting);
+	RHIDevice()->GetRenderState(D3DRS_LIGHTING, &dwUseLighting);
 
 	DWORD dwUseColorVertex = FALSE;
-	s_lpD3DDev->GetRenderState(D3DRS_COLORVERTEX, &dwUseColorVertex);
+	RHIDevice()->GetRenderState(D3DRS_COLORVERTEX, &dwUseColorVertex);
 
 	DWORD bUseAlphaBlend = TRUE;
-	s_lpD3DDev->GetRenderState(D3DRS_ALPHABLENDENABLE, &bUseAlphaBlend);
+	RHIDevice()->GetRenderState(D3DRS_ALPHABLENDENABLE, &bUseAlphaBlend);
 
 	BOOL bLight[8] = {};
 	for (int i = 0; i < 8; i++)
-		s_lpD3DDev->GetLightEnable(i, &bLight[i]);
+		RHIDevice()->GetLightEnable(i, &bLight[i]);
 
 	if (bUseAlphaBlend == FALSE)
-		s_lpD3DDev->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+		RHIDevice()->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
 
 	if (dwUseLighting)
-		s_lpD3DDev->SetRenderState(D3DRS_LIGHTING, FALSE);
+		RHIDevice()->SetRenderState(D3DRS_LIGHTING, FALSE);
 
 	if (dwUsefog)
-		s_lpD3DDev->SetRenderState(D3DRS_FOGENABLE, FALSE);
+		RHIDevice()->SetRenderState(D3DRS_FOGENABLE, FALSE);
 
 	// set render states
 	if (dwUseColorVertex == FALSE)
-		s_lpD3DDev->SetRenderState(D3DRS_COLORVERTEX, TRUE);
+		RHIDevice()->SetRenderState(D3DRS_COLORVERTEX, TRUE);
 
 	for (int i = 0; i < 8; i++)
-		s_lpD3DDev->LightEnable(i, FALSE);
+		RHIDevice()->LightEnable(i, FALSE);
 
 	DWORD dwTexStageCO = 0, dwTexStageCARG1 = 0, dwTexStageAO = 0, dwTexStageAARG1 = 0, dwRSSB = 0, dwRSDB = 0;
 
-	s_lpD3DDev->GetTextureStageState(0, D3DTSS_COLOROP, &dwTexStageCO);
-	s_lpD3DDev->GetTextureStageState(0, D3DTSS_COLORARG1, &dwTexStageCARG1);
-	s_lpD3DDev->GetTextureStageState(0, D3DTSS_ALPHAOP, &dwTexStageAO);
-	s_lpD3DDev->GetTextureStageState(0, D3DTSS_ALPHAARG1, &dwTexStageAARG1);
-	s_lpD3DDev->GetRenderState(D3DRS_SRCBLEND, &dwRSSB);
-	s_lpD3DDev->GetRenderState(D3DRS_DESTBLEND, &dwRSDB);
+	RHIDevice()->GetTextureStageState(0, D3DTSS_COLOROP, &dwTexStageCO);
+	RHIDevice()->GetTextureStageState(0, D3DTSS_COLORARG1, &dwTexStageCARG1);
+	RHIDevice()->GetTextureStageState(0, D3DTSS_ALPHAOP, &dwTexStageAO);
+	RHIDevice()->GetTextureStageState(0, D3DTSS_ALPHAARG1, &dwTexStageAARG1);
+	RHIDevice()->GetRenderState(D3DRS_SRCBLEND, &dwRSSB);
+	RHIDevice()->GetRenderState(D3DRS_DESTBLEND, &dwRSDB);
 
-	s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
-	s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_DIFFUSE);
-	s_lpD3DDev->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
-	s_lpD3DDev->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_DIFFUSE);
-	s_lpD3DDev->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
-	s_lpD3DDev->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+	RHIDevice()->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
+	RHIDevice()->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_DIFFUSE);
+	RHIDevice()->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
+	RHIDevice()->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_DIFFUSE);
+	RHIDevice()->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
+	RHIDevice()->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
 
-	s_lpD3DDev->SetTexture(0, nullptr);
+	RHIDevice()->SetTexture(0, nullptr);
 
-	s_lpD3DDev->SetFVF(FVF_TRANSFORMEDCOLOR);
-	s_lpD3DDev->DrawPrimitiveUP(D3DPT_TRIANGLEFAN, 2, pVertices, sizeof(__VertexTransformedColor));
+	RHIDevice()->SetFVF(FVF_TRANSFORMEDCOLOR);
+	RHIDevice()->DrawPrimitiveUP(D3DPT_TRIANGLEFAN, 2, pVertices, sizeof(__VertexTransformedColor));
 
-	s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLOROP, dwTexStageCO);
-	s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLORARG1, dwTexStageCARG1);
-	s_lpD3DDev->SetTextureStageState(0, D3DTSS_ALPHAOP, dwTexStageAO);
-	s_lpD3DDev->SetTextureStageState(0, D3DTSS_ALPHAARG1, dwTexStageAARG1);
-	s_lpD3DDev->SetRenderState(D3DRS_SRCBLEND, dwRSSB);
-	s_lpD3DDev->SetRenderState(D3DRS_DESTBLEND, dwRSDB);
+	RHIDevice()->SetTextureStageState(0, D3DTSS_COLOROP, dwTexStageCO);
+	RHIDevice()->SetTextureStageState(0, D3DTSS_COLORARG1, dwTexStageCARG1);
+	RHIDevice()->SetTextureStageState(0, D3DTSS_ALPHAOP, dwTexStageAO);
+	RHIDevice()->SetTextureStageState(0, D3DTSS_ALPHAARG1, dwTexStageAARG1);
+	RHIDevice()->SetRenderState(D3DRS_SRCBLEND, dwRSSB);
+	RHIDevice()->SetRenderState(D3DRS_DESTBLEND, dwRSDB);
 
-	s_lpD3DDev->SetRenderState(D3DRS_COLORVERTEX, dwUseColorVertex);
-	s_lpD3DDev->SetRenderState(D3DRS_ALPHABLENDENABLE, bUseAlphaBlend);
-	s_lpD3DDev->SetRenderState(D3DRS_LIGHTING, dwUseLighting);
-	s_lpD3DDev->SetRenderState(D3DRS_FOGENABLE, dwUsefog);
+	RHIDevice()->SetRenderState(D3DRS_COLORVERTEX, dwUseColorVertex);
+	RHIDevice()->SetRenderState(D3DRS_ALPHABLENDENABLE, bUseAlphaBlend);
+	RHIDevice()->SetRenderState(D3DRS_LIGHTING, dwUseLighting);
+	RHIDevice()->SetRenderState(D3DRS_FOGENABLE, dwUsefog);
 	for (int i = 0; i < 8; i++)
-		s_lpD3DDev->LightEnable(i, bLight[i]);
+		RHIDevice()->LightEnable(i, bLight[i]);
 }
 
 void CGameProcCharacterSelect::DoProcPreselect()
 {
 	D3DVIEWPORT9 vp {};
-	s_lpD3DDev->GetViewport(&vp);
+	RHIDevice()->GetViewport(&vp);
 
 	float left = 0.0f, right = 0.0f, top = 0.0f, bottom = 0.0f;
 	left          = vp.Width * 0.36f;
@@ -1353,12 +1353,12 @@ void CGameProcCharacterSelect::DoProcPreselect()
 
 	if (m_lgt[iPosIndex].Theta != 0.0f)
 	{
-		s_lpD3DDev->LightEnable(iPosIndex + 4, TRUE);
-		s_lpD3DDev->SetLight(iPosIndex + 4, m_lgt[iPosIndex].toD3D());
+		RHIDevice()->LightEnable(iPosIndex + 4, TRUE);
+		RHIDevice()->SetLight(iPosIndex + 4, m_lgt[iPosIndex].toD3D());
 	}
 	else
 	{
-		s_lpD3DDev->LightEnable(iPosIndex + 4, FALSE);
+		RHIDevice()->LightEnable(iPosIndex + 4, FALSE);
 	}
 }
 

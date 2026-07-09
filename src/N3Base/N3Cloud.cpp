@@ -141,7 +141,7 @@ void CN3Cloud::Render()
 {
 	__Matrix44 matWorld;
 	matWorld.Identity();
-	s_lpD3DDev->SetTransform(D3DTS_WORLD, matWorld.toD3D());
+	RHIDevice()->SetTransform(D3DTS_WORLD, matWorld.toD3D());
 
 	static uint16_t CloudIndex[30] = { 0, 1, 4, 1, 2, 5, 2, 3, 6, 3, 0, 7, 5, 4, 1, 6, 5, 2, 7, 6,
 		3, 4, 7, 0, 4, 5, 7, 5, 6, 7 };
@@ -151,21 +151,21 @@ void CN3Cloud::Render()
 
 	// backup state
 	DWORD dwAlphaOp = 0, dwAlphaArg1 = 0, dwAlphaArg2 = 0;
-	s_lpD3DDev->GetTextureStageState(0, D3DTSS_ALPHAOP, &dwAlphaOp);
-	s_lpD3DDev->GetTextureStageState(0, D3DTSS_ALPHAARG1, &dwAlphaArg1);
-	s_lpD3DDev->GetTextureStageState(0, D3DTSS_ALPHAARG2, &dwAlphaArg2);
+	RHIDevice()->GetTextureStageState(0, D3DTSS_ALPHAOP, &dwAlphaOp);
+	RHIDevice()->GetTextureStageState(0, D3DTSS_ALPHAARG1, &dwAlphaArg1);
+	RHIDevice()->GetTextureStageState(0, D3DTSS_ALPHAARG2, &dwAlphaArg2);
 	// set state
-	s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_MODULATE);
-	s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TEXTURE);
-	s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLORARG2, D3DTA_DIFFUSE);
+	RHIDevice()->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_MODULATE);
+	RHIDevice()->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TEXTURE);
+	RHIDevice()->SetTextureStageState(0, D3DTSS_COLORARG2, D3DTA_DIFFUSE);
 	if (D3DTOP_MODULATE != dwAlphaOp)
-		s_lpD3DDev->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_MODULATE);
+		RHIDevice()->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_MODULATE);
 	if (D3DTA_TEXTURE != dwAlphaArg1)
-		s_lpD3DDev->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_TEXTURE);
+		RHIDevice()->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_TEXTURE);
 	if (D3DTA_DIFFUSE != dwAlphaArg2)
-		s_lpD3DDev->SetTextureStageState(0, D3DTSS_ALPHAARG2, D3DTA_DIFFUSE);
+		RHIDevice()->SetTextureStageState(0, D3DTSS_ALPHAARG2, D3DTA_DIFFUSE);
 
-	s_lpD3DDev->SetFVF(FVF_XYZCOLORT2);
+	RHIDevice()->SetFVF(FVF_XYZCOLORT2);
 
 	D3DCOLOR color1 = m_Color1.GetCurColor();
 	D3DCOLOR color2 = m_Color2.GetCurColor();
@@ -177,11 +177,11 @@ void CN3Cloud::Render()
 		m_pVertices[i].color = color1 & 0x00ffffff;
 	for (i = 4; i < NUM_CLOUD_VERTEX; ++i)
 		m_pVertices[i].color = color1;
-	s_lpD3DDev->SetTexture(0, GetTex(m_eCloud1));
-	s_lpD3DDev->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, 8, 10, CloudIndex, D3DFMT_INDEX16,
+	RHIDevice()->SetTexture(0, GetTex(m_eCloud1));
+	RHIDevice()->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, 8, 10, CloudIndex, D3DFMT_INDEX16,
 		m_pVertices, sizeof(__VertexXyzColorT2));
 
-	s_lpD3DDev->SetTextureStageState(0, D3DTSS_TEXCOORDINDEX, 1);
+	RHIDevice()->SetTextureStageState(0, D3DTSS_TEXCOORDINDEX, 1);
 	if (CLOUD_NONE != m_eCloud3)
 	{
 		D3DCOLOR Alpha = m_Alpha.GetCurColor();
@@ -197,16 +197,16 @@ void CN3Cloud::Render()
 		for (i = 4; i < NUM_CLOUD_VERTEX; ++i)
 			m_pVertices[i].color = color2;
 
-		s_lpD3DDev->SetTexture(0, GetTex(m_eCloud2));
-		s_lpD3DDev->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, 8, 10, CloudIndex, D3DFMT_INDEX16,
+		RHIDevice()->SetTexture(0, GetTex(m_eCloud2));
+		RHIDevice()->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, 8, 10, CloudIndex, D3DFMT_INDEX16,
 			m_pVertices, sizeof(__VertexXyzColorT2));
 		// render cloud 3
 		D3DCOLOR color3 = ((0xff - (color2 >> 24)) << 24)
 						  | (color2 & 0x00ffffff); // color2의 alpha값을 0xff에서 뺀 값으로 바꿈
 		for (i = 4; i < NUM_CLOUD_VERTEX; ++i)
 			m_pVertices[i].color = color3;
-		s_lpD3DDev->SetTexture(0, GetTex(m_eCloud3));
-		s_lpD3DDev->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, 8, 10, CloudIndex, D3DFMT_INDEX16,
+		RHIDevice()->SetTexture(0, GetTex(m_eCloud3));
+		RHIDevice()->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, 8, 10, CloudIndex, D3DFMT_INDEX16,
 			m_pVertices, sizeof(__VertexXyzColorT2));
 	}
 	else
@@ -216,19 +216,19 @@ void CN3Cloud::Render()
 			m_pVertices[i].color = color2 & 0x00ffffff;
 		for (i = 4; i < NUM_CLOUD_VERTEX; ++i)
 			m_pVertices[i].color = color2;
-		s_lpD3DDev->SetTexture(0, GetTex(m_eCloud2));
-		s_lpD3DDev->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, 8, 10, CloudIndex, D3DFMT_INDEX16,
+		RHIDevice()->SetTexture(0, GetTex(m_eCloud2));
+		RHIDevice()->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, 8, 10, CloudIndex, D3DFMT_INDEX16,
 			m_pVertices, sizeof(__VertexXyzColorT2));
 	}
-	s_lpD3DDev->SetTextureStageState(0, D3DTSS_TEXCOORDINDEX, 0);
+	RHIDevice()->SetTextureStageState(0, D3DTSS_TEXCOORDINDEX, 0);
 
 	// restore state
 	if (D3DTOP_MODULATE != dwAlphaOp)
-		s_lpD3DDev->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_MODULATE);
+		RHIDevice()->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_MODULATE);
 	if (D3DTA_TEXTURE != dwAlphaArg1)
-		s_lpD3DDev->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_TEXTURE);
+		RHIDevice()->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_TEXTURE);
 	if (D3DTA_DIFFUSE != dwAlphaArg2)
-		s_lpD3DDev->SetTextureStageState(0, D3DTSS_ALPHAARG2, D3DTA_DIFFUSE);
+		RHIDevice()->SetTextureStageState(0, D3DTSS_ALPHAARG2, D3DTA_DIFFUSE);
 }
 
 LPDIRECT3DTEXTURE9 CN3Cloud::GetTex(e_CLOUDTEX tex)

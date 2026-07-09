@@ -362,15 +362,20 @@ superficie de API pequeña y repetitiva.
       round-trip), cuenta draws/presents y permite cargar assets sin GPU;
       instalado por el main SDL, que ya ejecuta la secuencia de frame
       Begin/Clear/End/Present por el RHI en cada tick (visible en el smoke).
-* [ ] Migrar módulo a módulo: **primera tajada hecha** (~212 llamadas):
-      `N3Base::RenderLines`, `CN3AlphaPrimitiveManager::Render` completo,
-      `CN3VMesh` íntegro (primera clase de malla portable, compila y carga
-      en POSIX) y los renderers de debug de `N3TransformCollision` (ya sin
-      gates `_WIN32`). Restante (~1.350 llamadas, solo compila en Windows
-      hoy): terreno, cielo, personajes/skins, efectos, UI, `N3Eng`,
-      `DFont`, `N3Texture` y el código de juego WarFare — se migran por
-      módulos en PRs pequeños con screenshot-diff en Windows, y cada módulo
-      migrado se suma al subconjunto POSIX.
+* [ ] Migrar módulo a módulo — **~1.139 de ~1.560 llamadas migradas (73%)**.
+      Migración masiva clasificada por archivo (solo archivos cuyo conjunto
+      de métodos ⊆ RHI): 45 archivos de N3Base + WarFare, incluyendo la
+      familia de mallas completa (que resultó dibujar solo con draws UP
+      desde memoria de sistema — sin buffers GPU), personajes/skins/joints,
+      cámara/luces/escena/shapes, cielo completo y todos los FX. El
+      subconjunto POSIX de `N3Base_client` ahora compila **geometría,
+      personajes, cielo y efectos** además del núcleo. Quedan (usan métodos
+      fuera de la RHI): `N3Eng` (gestión de device — es el backend),
+      `N3Texture`/`DFont` (CreateTexture/GDI → F6/F7), `N3TerrainPatch`/
+      `N3GERain`/`N3GESnow`/`N3UIImage` (CreateVertexBuffer),
+      `N3Cloak`/`N3EngTool` (SetVertexShader), `N3Terrain`
+      (ValidateDevice), `UIHotKeyDlg` (SetScissorRect) — la mayoría cae al
+      añadir buffers RHI junto con el backend GL.
 
 **Aceptación (parcial):** la abstracción está validada en ambos sentidos —
 en Windows compila con el forwarder D3D9 instalado por `CN3Eng` (verifica

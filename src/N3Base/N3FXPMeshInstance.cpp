@@ -288,7 +288,7 @@ void CN3FXPMeshInstance::Render()
 {
 	if (m_pFXPMesh == nullptr)
 		return;
-	s_lpD3DDev->SetFVF(FVF_VNT1);
+	RHIDevice()->SetFVF(FVF_VNT1);
 
 	const int iPCToRender = 1000; // primitive count to render
 	if (m_iNumIndices > 3)
@@ -299,14 +299,14 @@ void CN3FXPMeshInstance::Render()
 		int i   = 0;
 		for (; i < iLC; ++i)
 		{
-			s_lpD3DDev->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, m_iNumVertices, iPCToRender,
+			RHIDevice()->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, m_iNumVertices, iPCToRender,
 				m_pIndices + i * iPCToRender * 3, D3DFMT_INDEX16, m_pColorVertices,
 				sizeof(__VertexXyzColorT1));
 		}
 
 		int iRPC = iPC % iPCToRender;
 		if (iRPC > 0)
-			s_lpD3DDev->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, m_iNumVertices, iRPC,
+			RHIDevice()->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, m_iNumVertices, iRPC,
 				m_pIndices + i * iPCToRender * 3, D3DFMT_INDEX16, m_pColorVertices,
 				sizeof(__VertexXyzColorT1));
 	}
@@ -323,7 +323,7 @@ void CN3FXPMeshInstance::RenderTwoUV()
 	if (nullptr == m_pFXPMesh->GetVertices2())
 		return;
 
-	s_lpD3DDev->SetFVF(FVF_VNT2);
+	RHIDevice()->SetFVF(FVF_VNT2);
 
 	const int iPCToRender = 1000; // primitive count to render
 	if (m_iNumIndices > 3)
@@ -334,14 +334,14 @@ void CN3FXPMeshInstance::RenderTwoUV()
 		int i   = 0;
 		for (; i < iLC; ++i)
 		{
-			s_lpD3DDev->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, m_iNumVertices, iPCToRender,
+			RHIDevice()->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, m_iNumVertices, iPCToRender,
 				m_pIndices + i * iPCToRender * 3, D3DFMT_INDEX16, m_pFXPMesh->m_pVertices2,
 				sizeof(__VertexT2));
 		}
 
 		int iRPC = iPC % iPCToRender;
 		if (iRPC > 0)
-			s_lpD3DDev->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, m_iNumVertices, iRPC,
+			RHIDevice()->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, m_iNumVertices, iRPC,
 				m_pIndices + i * iPCToRender * 3, D3DFMT_INDEX16, m_pFXPMesh->m_pVertices2,
 				sizeof(__VertexT2));
 	}

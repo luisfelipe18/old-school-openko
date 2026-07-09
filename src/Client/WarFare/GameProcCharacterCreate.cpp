@@ -71,7 +71,7 @@ void CGameProcCharacterCreate::Init()
 void CGameProcCharacterCreate::Render()
 {
 	s_pEng->Clear(0);                 // 클리어..
-	s_pEng->s_lpD3DDev->BeginScene(); // 씬 렌더 ㅅ작...
+	s_pEng->RHIDevice()->BeginScene(); // 씬 렌더 ㅅ작...
 
 	s_pUIMgr->Render();
 
@@ -81,7 +81,7 @@ void CGameProcCharacterCreate::Render()
 	if (s_pGameCursor)
 		s_pGameCursor->Render();
 
-	s_pEng->s_lpD3DDev->EndScene(); // 씬 렌더 시작...
+	s_pEng->RHIDevice()->EndScene(); // 씬 렌더 시작...
 	s_pEng->Present(CN3Base::s_hWndBase);
 }
 

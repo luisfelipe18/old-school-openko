@@ -68,20 +68,20 @@ void CN3UITooltip::Render()
 			static_cast<float>(m_rcRegion.bottom) - 1, UI_DEFAULT_Z, UI_DEFAULT_RHW, BorderColorIn);
 
 		// set texture stage state
-		s_lpD3DDev->SetTexture(0, nullptr);
-		s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
-		s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_DIFFUSE);
+		RHIDevice()->SetTexture(0, nullptr);
+		RHIDevice()->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
+		RHIDevice()->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_DIFFUSE);
 
 		// draw
-		s_lpD3DDev->SetFVF(FVF_TRANSFORMEDCOLOR);
-		s_lpD3DDev->DrawPrimitiveUP(
+		RHIDevice()->SetFVF(FVF_TRANSFORMEDCOLOR);
+		RHIDevice()->DrawPrimitiveUP(
 			D3DPT_TRIANGLEFAN, 2, pVB, sizeof(__VertexTransformedColor)); // 배경색 칠하기
 
 		__VertexTransformedColor* pTemp = pVB;
 		for (int i = 0; i < 4; ++i, ++pTemp)
 			pTemp->color = BorderColorOut;     // 바깥 테두리 색을 바꾼다.
 
-		s_lpD3DDev->DrawIndexedPrimitiveUP(D3DPT_LINELIST, 0, 8, 8, pIB, D3DFMT_INDEX16, pVB,
+		RHIDevice()->DrawIndexedPrimitiveUP(D3DPT_LINELIST, 0, 8, 8, pIB, D3DFMT_INDEX16, pVB,
 			sizeof(__VertexTransformedColor)); // 테두리 칠하기
 
 		// 글씨 그리기

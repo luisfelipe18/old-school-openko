@@ -260,20 +260,20 @@ void CServerMesh::Render()
 {
 	__Matrix44 mtxWorld;
 	mtxWorld.Identity();
-	s_lpD3DDev->SetTransform(D3DTS_WORLD, mtxWorld.toD3D());
-	s_lpD3DDev->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+	RHIDevice()->SetTransform(D3DTS_WORLD, mtxWorld.toD3D());
+	RHIDevice()->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
 
 	DWORD dwFillPrev = 0;
-	s_lpD3DDev->GetRenderState(D3DRS_FILLMODE, &dwFillPrev);
+	RHIDevice()->GetRenderState(D3DRS_FILLMODE, &dwFillPrev);
 
-	s_lpD3DDev->SetRenderState(D3DRS_FILLMODE, D3DFILL_SOLID);
-	s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
-	s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TEXTURE);
-	s_lpD3DDev->SetTexture(0, nullptr);
+	RHIDevice()->SetRenderState(D3DRS_FILLMODE, D3DFILL_SOLID);
+	RHIDevice()->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
+	RHIDevice()->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TEXTURE);
+	RHIDevice()->SetTexture(0, nullptr);
 
-	s_lpD3DDev->SetFVF(D3DFVF_XYZ);
-	s_lpD3DDev->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 16, &m_vSMesh, sizeof(__Vector3));
+	RHIDevice()->SetFVF(D3DFVF_XYZ);
+	RHIDevice()->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 16, &m_vSMesh, sizeof(__Vector3));
 
-	s_lpD3DDev->SetRenderState(D3DRS_FILLMODE, dwFillPrev);
-	s_lpD3DDev->SetRenderState(D3DRS_CULLMODE, D3DCULL_CCW);
+	RHIDevice()->SetRenderState(D3DRS_FILLMODE, dwFillPrev);
+	RHIDevice()->SetRenderState(D3DRS_CULLMODE, D3DCULL_CCW);
 }
