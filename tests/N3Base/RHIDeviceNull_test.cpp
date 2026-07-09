@@ -104,3 +104,30 @@ TEST(RHIDeviceNullTest, LightsRoundTrip)
 	EXPECT_EQ(device.GetLightEnable(7, &enabled), D3D_OK);
 	EXPECT_FALSE(enabled);
 }
+
+TEST(RHIDeviceNullTest, ValidateDeviceAlwaysSucceedsInOnePass)
+{
+	RHIDeviceNull device;
+
+	DWORD numPasses = 0xDEAD;
+	EXPECT_EQ(device.ValidateDevice(&numPasses), D3D_OK);
+	EXPECT_EQ(numPasses, 1u);
+
+	EXPECT_NE(device.ValidateDevice(nullptr), D3D_OK);
+}
+
+TEST(RHIDeviceNullTest, SetScissorRectRoundTrips)
+{
+	RHIDeviceNull device;
+
+	const RECT rc = {10, 20, 110, 220};
+	EXPECT_EQ(device.SetScissorRect(&rc), D3D_OK);
+
+	const RECT readBack = device.ScissorRect();
+	EXPECT_EQ(readBack.left, 10);
+	EXPECT_EQ(readBack.top, 20);
+	EXPECT_EQ(readBack.right, 110);
+	EXPECT_EQ(readBack.bottom, 220);
+
+	EXPECT_NE(device.SetScissorRect(nullptr), D3D_OK);
+}

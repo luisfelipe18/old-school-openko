@@ -232,6 +232,8 @@ set(N3BASE_POSIX_PORTABLE_SOURCES
   N3Camera.h
   N3Chr.cpp
   N3Chr.h
+  N3Cloak.cpp
+  N3Cloak.h
   N3ColorChange.cpp
   N3ColorChange.h
   N3IMesh.cpp

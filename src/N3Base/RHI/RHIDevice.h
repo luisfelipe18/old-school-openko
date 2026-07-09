@@ -47,6 +47,8 @@ struct IRHIDevice
 	virtual HRESULT GetLightEnable(DWORD index, BOOL* pbEnabled)                           = 0;
 	virtual HRESULT SetViewport(const D3DVIEWPORT9* pViewport)                             = 0;
 	virtual HRESULT GetViewport(D3DVIEWPORT9* pViewport)                                   = 0;
+	virtual HRESULT ValidateDevice(DWORD* pNumPasses)                                      = 0;
+	virtual HRESULT SetScissorRect(const RECT* pRect)                                      = 0;
 
 	// --- Textures & geometry ----------------------------------------------------
 	virtual HRESULT SetTexture(DWORD stage, IRHITexture* pTexture)                         = 0;

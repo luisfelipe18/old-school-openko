@@ -1001,40 +1001,40 @@ void CUIHotKeyDlg::RenderSelectIcon(CN3UIIcon* pUIIcon)
 	vLines[4] = vLines[0];
 
 	DWORD dwZ = 0, dwFog = 0, dwAlpha = 0, dwCOP = 0, dwCA1 = 0, dwSrcBlend = 0, dwDestBlend = 0, dwVertexShader = 0, dwAOP = 0, dwAA1 = 0;
-	CN3Base::s_lpD3DDev->GetRenderState(D3DRS_ZENABLE, &dwZ);
-	CN3Base::s_lpD3DDev->GetRenderState(D3DRS_FOGENABLE, &dwFog);
-	CN3Base::s_lpD3DDev->GetRenderState(D3DRS_ALPHABLENDENABLE, &dwAlpha);
-	CN3Base::s_lpD3DDev->GetRenderState(D3DRS_SRCBLEND, &dwSrcBlend);
-	CN3Base::s_lpD3DDev->GetRenderState(D3DRS_DESTBLEND, &dwDestBlend);
-	CN3Base::s_lpD3DDev->GetTextureStageState(0, D3DTSS_COLOROP, &dwCOP);
-	CN3Base::s_lpD3DDev->GetTextureStageState(0, D3DTSS_COLORARG1, &dwCA1);
-	CN3Base::s_lpD3DDev->GetTextureStageState(0, D3DTSS_ALPHAOP, &dwAOP);
-	CN3Base::s_lpD3DDev->GetTextureStageState(0, D3DTSS_ALPHAARG1, &dwAA1);
-	CN3Base::s_lpD3DDev->GetFVF(&dwVertexShader);
+	CN3Base::RHIDevice()->GetRenderState(D3DRS_ZENABLE, &dwZ);
+	CN3Base::RHIDevice()->GetRenderState(D3DRS_FOGENABLE, &dwFog);
+	CN3Base::RHIDevice()->GetRenderState(D3DRS_ALPHABLENDENABLE, &dwAlpha);
+	CN3Base::RHIDevice()->GetRenderState(D3DRS_SRCBLEND, &dwSrcBlend);
+	CN3Base::RHIDevice()->GetRenderState(D3DRS_DESTBLEND, &dwDestBlend);
+	CN3Base::RHIDevice()->GetTextureStageState(0, D3DTSS_COLOROP, &dwCOP);
+	CN3Base::RHIDevice()->GetTextureStageState(0, D3DTSS_COLORARG1, &dwCA1);
+	CN3Base::RHIDevice()->GetTextureStageState(0, D3DTSS_ALPHAOP, &dwAOP);
+	CN3Base::RHIDevice()->GetTextureStageState(0, D3DTSS_ALPHAARG1, &dwAA1);
+	CN3Base::RHIDevice()->GetFVF(&dwVertexShader);
 
-	CN3Base::s_lpD3DDev->SetRenderState(D3DRS_ZENABLE, FALSE);
-	CN3Base::s_lpD3DDev->SetRenderState(D3DRS_FOGENABLE, FALSE);
-	CN3Base::s_lpD3DDev->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
-	CN3Base::s_lpD3DDev->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
-	CN3Base::s_lpD3DDev->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
-	CN3Base::s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
-	CN3Base::s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_DIFFUSE);
-	CN3Base::s_lpD3DDev->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
-	CN3Base::s_lpD3DDev->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_DIFFUSE);
+	CN3Base::RHIDevice()->SetRenderState(D3DRS_ZENABLE, FALSE);
+	CN3Base::RHIDevice()->SetRenderState(D3DRS_FOGENABLE, FALSE);
+	CN3Base::RHIDevice()->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+	CN3Base::RHIDevice()->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
+	CN3Base::RHIDevice()->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+	CN3Base::RHIDevice()->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
+	CN3Base::RHIDevice()->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_DIFFUSE);
+	CN3Base::RHIDevice()->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
+	CN3Base::RHIDevice()->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_DIFFUSE);
 
-	CN3Base::s_lpD3DDev->SetFVF(FVF_TRANSFORMEDCOLOR);
-	CN3Base::s_lpD3DDev->DrawPrimitiveUP(D3DPT_LINESTRIP, 4, vLines, sizeof(__VertexTransformedColor));
+	CN3Base::RHIDevice()->SetFVF(FVF_TRANSFORMEDCOLOR);
+	CN3Base::RHIDevice()->DrawPrimitiveUP(D3DPT_LINESTRIP, 4, vLines, sizeof(__VertexTransformedColor));
 
-	CN3Base::s_lpD3DDev->SetRenderState(D3DRS_ZENABLE, dwZ);
-	CN3Base::s_lpD3DDev->SetRenderState(D3DRS_FOGENABLE, dwFog);
-	CN3Base::s_lpD3DDev->SetRenderState(D3DRS_ALPHABLENDENABLE, dwAlpha);
-	CN3Base::s_lpD3DDev->SetRenderState(D3DRS_SRCBLEND, dwSrcBlend);
-	CN3Base::s_lpD3DDev->SetRenderState(D3DRS_DESTBLEND, dwDestBlend);
-	CN3Base::s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLOROP, dwCOP);
-	CN3Base::s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLORARG1, dwCA1);
-	CN3Base::s_lpD3DDev->SetTextureStageState(0, D3DTSS_ALPHAOP, dwAOP);
-	CN3Base::s_lpD3DDev->SetTextureStageState(0, D3DTSS_ALPHAARG1, dwAA1);
-	CN3Base::s_lpD3DDev->SetFVF(dwVertexShader);
+	CN3Base::RHIDevice()->SetRenderState(D3DRS_ZENABLE, dwZ);
+	CN3Base::RHIDevice()->SetRenderState(D3DRS_FOGENABLE, dwFog);
+	CN3Base::RHIDevice()->SetRenderState(D3DRS_ALPHABLENDENABLE, dwAlpha);
+	CN3Base::RHIDevice()->SetRenderState(D3DRS_SRCBLEND, dwSrcBlend);
+	CN3Base::RHIDevice()->SetRenderState(D3DRS_DESTBLEND, dwDestBlend);
+	CN3Base::RHIDevice()->SetTextureStageState(0, D3DTSS_COLOROP, dwCOP);
+	CN3Base::RHIDevice()->SetTextureStageState(0, D3DTSS_COLORARG1, dwCA1);
+	CN3Base::RHIDevice()->SetTextureStageState(0, D3DTSS_ALPHAOP, dwAOP);
+	CN3Base::RHIDevice()->SetTextureStageState(0, D3DTSS_ALPHAARG1, dwAA1);
+	CN3Base::RHIDevice()->SetFVF(dwVertexShader);
 }
 
 void CUIHotKeyDlg::RenderCooldown(const __IconItemSkill* pSkill, float fCooldown)
@@ -1101,45 +1101,45 @@ void CUIHotKeyDlg::RenderCooldown(const __IconItemSkill* pSkill, float fCooldown
 	//}
 
 	DWORD dwZ = 0, dwFog = 0, dwAlpha = 0, dwCOP = 0, dwCA1 = 0, dwSrcBlend = 0, dwDestBlend = 0, dwVertexShader = 0, dwAOP = 0, dwAA1 = 0;
-	CN3Base::s_lpD3DDev->GetRenderState(D3DRS_ZENABLE, &dwZ);
-	CN3Base::s_lpD3DDev->GetRenderState(D3DRS_FOGENABLE, &dwFog);
-	CN3Base::s_lpD3DDev->GetRenderState(D3DRS_ALPHABLENDENABLE, &dwAlpha);
-	CN3Base::s_lpD3DDev->GetRenderState(D3DRS_SRCBLEND, &dwSrcBlend);
-	CN3Base::s_lpD3DDev->GetRenderState(D3DRS_DESTBLEND, &dwDestBlend);
-	CN3Base::s_lpD3DDev->GetTextureStageState(0, D3DTSS_COLOROP, &dwCOP);
-	CN3Base::s_lpD3DDev->GetTextureStageState(0, D3DTSS_COLORARG1, &dwCA1);
-	CN3Base::s_lpD3DDev->GetTextureStageState(0, D3DTSS_ALPHAOP, &dwAOP);
-	CN3Base::s_lpD3DDev->GetTextureStageState(0, D3DTSS_ALPHAARG1, &dwAA1);
-	CN3Base::s_lpD3DDev->GetFVF(&dwVertexShader);
+	CN3Base::RHIDevice()->GetRenderState(D3DRS_ZENABLE, &dwZ);
+	CN3Base::RHIDevice()->GetRenderState(D3DRS_FOGENABLE, &dwFog);
+	CN3Base::RHIDevice()->GetRenderState(D3DRS_ALPHABLENDENABLE, &dwAlpha);
+	CN3Base::RHIDevice()->GetRenderState(D3DRS_SRCBLEND, &dwSrcBlend);
+	CN3Base::RHIDevice()->GetRenderState(D3DRS_DESTBLEND, &dwDestBlend);
+	CN3Base::RHIDevice()->GetTextureStageState(0, D3DTSS_COLOROP, &dwCOP);
+	CN3Base::RHIDevice()->GetTextureStageState(0, D3DTSS_COLORARG1, &dwCA1);
+	CN3Base::RHIDevice()->GetTextureStageState(0, D3DTSS_ALPHAOP, &dwAOP);
+	CN3Base::RHIDevice()->GetTextureStageState(0, D3DTSS_ALPHAARG1, &dwAA1);
+	CN3Base::RHIDevice()->GetFVF(&dwVertexShader);
 
-	CN3Base::s_lpD3DDev->SetRenderState(D3DRS_ZENABLE, FALSE);
-	CN3Base::s_lpD3DDev->SetRenderState(D3DRS_FOGENABLE, FALSE);
-	CN3Base::s_lpD3DDev->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
-	CN3Base::s_lpD3DDev->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
-	CN3Base::s_lpD3DDev->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
-	CN3Base::s_lpD3DDev->SetRenderState(D3DRS_SCISSORTESTENABLE, TRUE);
-	CN3Base::s_lpD3DDev->SetScissorRect(&rc);
-	CN3Base::s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
-	CN3Base::s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_DIFFUSE);
-	CN3Base::s_lpD3DDev->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
-	CN3Base::s_lpD3DDev->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_DIFFUSE);
+	CN3Base::RHIDevice()->SetRenderState(D3DRS_ZENABLE, FALSE);
+	CN3Base::RHIDevice()->SetRenderState(D3DRS_FOGENABLE, FALSE);
+	CN3Base::RHIDevice()->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+	CN3Base::RHIDevice()->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
+	CN3Base::RHIDevice()->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+	CN3Base::RHIDevice()->SetRenderState(D3DRS_SCISSORTESTENABLE, TRUE);
+	CN3Base::RHIDevice()->SetScissorRect(&rc);
+	CN3Base::RHIDevice()->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
+	CN3Base::RHIDevice()->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_DIFFUSE);
+	CN3Base::RHIDevice()->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
+	CN3Base::RHIDevice()->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_DIFFUSE);
 
-	CN3Base::s_lpD3DDev->SetFVF(FVF_TRANSFORMED);
-	// CN3Base::s_lpD3DDev->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
-	CN3Base::s_lpD3DDev->DrawPrimitiveUP(
+	CN3Base::RHIDevice()->SetFVF(FVF_TRANSFORMED);
+	// CN3Base::RHIDevice()->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+	CN3Base::RHIDevice()->DrawPrimitiveUP(
 		D3DPT_TRIANGLEFAN, static_cast<UINT>(vertices.size()) - 2, &vertices[0], sizeof(__VertexTransformedColor));
 
-	CN3Base::s_lpD3DDev->SetRenderState(D3DRS_ZENABLE, dwZ);
-	CN3Base::s_lpD3DDev->SetRenderState(D3DRS_FOGENABLE, dwFog);
-	CN3Base::s_lpD3DDev->SetRenderState(D3DRS_ALPHABLENDENABLE, dwAlpha);
-	CN3Base::s_lpD3DDev->SetRenderState(D3DRS_SRCBLEND, dwSrcBlend);
-	CN3Base::s_lpD3DDev->SetRenderState(D3DRS_DESTBLEND, dwDestBlend);
-	CN3Base::s_lpD3DDev->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
-	CN3Base::s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLOROP, dwCOP);
-	CN3Base::s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLORARG1, dwCA1);
-	CN3Base::s_lpD3DDev->SetTextureStageState(0, D3DTSS_ALPHAOP, dwAOP);
-	CN3Base::s_lpD3DDev->SetTextureStageState(0, D3DTSS_ALPHAARG1, dwAA1);
-	CN3Base::s_lpD3DDev->SetFVF(dwVertexShader);
+	CN3Base::RHIDevice()->SetRenderState(D3DRS_ZENABLE, dwZ);
+	CN3Base::RHIDevice()->SetRenderState(D3DRS_FOGENABLE, dwFog);
+	CN3Base::RHIDevice()->SetRenderState(D3DRS_ALPHABLENDENABLE, dwAlpha);
+	CN3Base::RHIDevice()->SetRenderState(D3DRS_SRCBLEND, dwSrcBlend);
+	CN3Base::RHIDevice()->SetRenderState(D3DRS_DESTBLEND, dwDestBlend);
+	CN3Base::RHIDevice()->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
+	CN3Base::RHIDevice()->SetTextureStageState(0, D3DTSS_COLOROP, dwCOP);
+	CN3Base::RHIDevice()->SetTextureStageState(0, D3DTSS_COLORARG1, dwCA1);
+	CN3Base::RHIDevice()->SetTextureStageState(0, D3DTSS_ALPHAOP, dwAOP);
+	CN3Base::RHIDevice()->SetTextureStageState(0, D3DTSS_ALPHAARG1, dwAA1);
+	CN3Base::RHIDevice()->SetFVF(dwVertexShader);
 }
 
 //this_ui_add_start

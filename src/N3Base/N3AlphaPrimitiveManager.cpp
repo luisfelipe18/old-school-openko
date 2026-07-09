@@ -23,7 +23,7 @@ void CN3AlphaPrimitiveManager::Render()
 		return;
 	}
 
-	__ASSERT(CN3Base::s_lpD3DDev, "3d device pointer is NULL!!!");
+	__ASSERT(CN3Base::RHIDevice(), "RHI device pointer is NULL!!!");
 	if (m_nToDrawCount <= 0)
 		return;
 

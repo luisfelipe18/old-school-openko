@@ -168,6 +168,26 @@ HRESULT RHIDeviceNull::GetViewport(D3DVIEWPORT9* pViewport)
 	return D3D_OK;
 }
 
+HRESULT RHIDeviceNull::ValidateDevice(DWORD* pNumPasses)
+{
+	if (pNumPasses == nullptr)
+		return RHI_E_FAIL;
+
+	// The Null backend never rejects a fixed-function state combination, so
+	// the whole pipeline always renders in a single pass.
+	*pNumPasses = 1;
+	return D3D_OK;
+}
+
+HRESULT RHIDeviceNull::SetScissorRect(const RECT* pRect)
+{
+	if (pRect == nullptr)
+		return RHI_E_FAIL;
+
+	m_ScissorRect = *pRect;
+	return D3D_OK;
+}
+
 HRESULT RHIDeviceNull::SetTexture(DWORD /*stage*/, IRHITexture* /*pTexture*/)
 {
 	return D3D_OK;

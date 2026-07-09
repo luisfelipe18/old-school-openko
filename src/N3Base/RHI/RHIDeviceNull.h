@@ -124,6 +124,14 @@ public:
 	HRESULT GetLightEnable(DWORD index, BOOL* pbEnabled) override;
 	HRESULT SetViewport(const D3DVIEWPORT9* pViewport) override;
 	HRESULT GetViewport(D3DVIEWPORT9* pViewport) override;
+	HRESULT ValidateDevice(DWORD* pNumPasses) override;
+	HRESULT SetScissorRect(const RECT* pRect) override;
+
+	// Diagnostics for tests: the last rect passed to SetScissorRect.
+	RECT ScissorRect() const
+	{
+		return m_ScissorRect;
+	}
 
 	HRESULT SetTexture(DWORD stage, IRHITexture* pTexture) override;
 	HRESULT SetFVF(DWORD fvf) override;
@@ -178,6 +186,7 @@ protected:
 	std::map<DWORD, _D3DLIGHT9> m_Lights;
 	std::map<DWORD, BOOL> m_LightsEnabled;
 	D3DVIEWPORT9 m_Viewport = {};
+	RECT m_ScissorRect      = {};
 	DWORD m_dwFVF           = 0;
 	IRHIVertexBuffer* m_pBoundVB = nullptr;
 	IRHIIndexBuffer* m_pBoundIB  = nullptr;

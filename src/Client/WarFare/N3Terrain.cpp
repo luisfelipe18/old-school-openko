@@ -260,44 +260,44 @@ void CN3Terrain::TestAvailableTile()
 
 	DWORD ColorOP[3] {}, ColorArg1[3] {}, ColorArg2[3] {};
 
-	s_lpD3DDev->GetTextureStageState(0, D3DTSS_COLOROP, &ColorOP[0]);
-	s_lpD3DDev->GetTextureStageState(0, D3DTSS_COLORARG1, &ColorArg1[0]);
+	RHIDevice()->GetTextureStageState(0, D3DTSS_COLOROP, &ColorOP[0]);
+	RHIDevice()->GetTextureStageState(0, D3DTSS_COLORARG1, &ColorArg1[0]);
 
-	s_lpD3DDev->GetTextureStageState(1, D3DTSS_COLOROP, &ColorOP[1]);
-	s_lpD3DDev->GetTextureStageState(1, D3DTSS_COLORARG1, &ColorArg1[1]);
-	s_lpD3DDev->GetTextureStageState(1, D3DTSS_COLORARG2, &ColorArg2[1]);
+	RHIDevice()->GetTextureStageState(1, D3DTSS_COLOROP, &ColorOP[1]);
+	RHIDevice()->GetTextureStageState(1, D3DTSS_COLORARG1, &ColorArg1[1]);
+	RHIDevice()->GetTextureStageState(1, D3DTSS_COLORARG2, &ColorArg2[1]);
 
-	s_lpD3DDev->GetTextureStageState(2, D3DTSS_COLOROP, &ColorOP[2]);
-	s_lpD3DDev->GetTextureStageState(2, D3DTSS_COLORARG1, &ColorArg1[2]);
-	s_lpD3DDev->GetTextureStageState(2, D3DTSS_COLORARG2, &ColorArg2[2]);
+	RHIDevice()->GetTextureStageState(2, D3DTSS_COLOROP, &ColorOP[2]);
+	RHIDevice()->GetTextureStageState(2, D3DTSS_COLORARG1, &ColorArg1[2]);
+	RHIDevice()->GetTextureStageState(2, D3DTSS_COLORARG2, &ColorArg2[2]);
 
-	s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
-	s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TEXTURE);
+	RHIDevice()->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
+	RHIDevice()->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TEXTURE);
 
-	s_lpD3DDev->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_ADD);
-	s_lpD3DDev->SetTextureStageState(1, D3DTSS_COLORARG1, D3DTA_TEXTURE);
-	s_lpD3DDev->SetTextureStageState(1, D3DTSS_COLORARG2, D3DTA_CURRENT);
+	RHIDevice()->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_ADD);
+	RHIDevice()->SetTextureStageState(1, D3DTSS_COLORARG1, D3DTA_TEXTURE);
+	RHIDevice()->SetTextureStageState(1, D3DTSS_COLORARG2, D3DTA_CURRENT);
 
-	s_lpD3DDev->SetTextureStageState(2, D3DTSS_COLOROP, D3DTOP_MODULATE);
-	s_lpD3DDev->SetTextureStageState(2, D3DTSS_COLORARG1, D3DTA_CURRENT);
-	s_lpD3DDev->SetTextureStageState(2, D3DTSS_COLORARG2, D3DTA_DIFFUSE);
+	RHIDevice()->SetTextureStageState(2, D3DTSS_COLOROP, D3DTOP_MODULATE);
+	RHIDevice()->SetTextureStageState(2, D3DTSS_COLORARG1, D3DTA_CURRENT);
+	RHIDevice()->SetTextureStageState(2, D3DTSS_COLORARG2, D3DTA_DIFFUSE);
 
 	DWORD dwNumPasses = 0;
-	HRESULT hr        = s_lpD3DDev->ValidateDevice(&dwNumPasses);
+	HRESULT hr        = RHIDevice()->ValidateDevice(&dwNumPasses);
 
 	if (hr == D3DERR_TOOMANYOPERATIONS || hr == D3DERR_UNSUPPORTEDCOLORARG || hr == D3DERR_UNSUPPORTEDCOLOROPERATION)
 		m_bAvailableTile = false;
 
-	s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLOROP, ColorOP[0]);
-	s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLORARG1, ColorArg1[0]);
+	RHIDevice()->SetTextureStageState(0, D3DTSS_COLOROP, ColorOP[0]);
+	RHIDevice()->SetTextureStageState(0, D3DTSS_COLORARG1, ColorArg1[0]);
 
-	s_lpD3DDev->SetTextureStageState(1, D3DTSS_COLOROP, ColorOP[1]);
-	s_lpD3DDev->SetTextureStageState(1, D3DTSS_COLORARG1, ColorArg1[1]);
-	s_lpD3DDev->SetTextureStageState(1, D3DTSS_COLORARG2, ColorArg2[1]);
+	RHIDevice()->SetTextureStageState(1, D3DTSS_COLOROP, ColorOP[1]);
+	RHIDevice()->SetTextureStageState(1, D3DTSS_COLORARG1, ColorArg1[1]);
+	RHIDevice()->SetTextureStageState(1, D3DTSS_COLORARG2, ColorArg2[1]);
 
-	s_lpD3DDev->SetTextureStageState(2, D3DTSS_COLOROP, ColorOP[2]);
-	s_lpD3DDev->SetTextureStageState(2, D3DTSS_COLORARG1, ColorArg1[2]);
-	s_lpD3DDev->SetTextureStageState(2, D3DTSS_COLORARG2, ColorArg2[2]);
+	RHIDevice()->SetTextureStageState(2, D3DTSS_COLOROP, ColorOP[2]);
+	RHIDevice()->SetTextureStageState(2, D3DTSS_COLORARG1, ColorArg1[2]);
+	RHIDevice()->SetTextureStageState(2, D3DTSS_COLORARG2, ColorArg2[2]);
 }
 
 //
@@ -1198,55 +1198,55 @@ void CN3Terrain::Render()
 {
 	__Matrix44 WorldMtx;
 	WorldMtx.Identity();
-	s_lpD3DDev->SetTransform(D3DTS_WORLD, WorldMtx.toD3D());
+	RHIDevice()->SetTransform(D3DTS_WORLD, WorldMtx.toD3D());
 
 	__Material mtl;
 	mtl.Init();
-	s_lpD3DDev->SetMaterial(&mtl);
+	RHIDevice()->SetMaterial(&mtl);
 
-	s_lpD3DDev->SetRenderState(D3DRS_FILLMODE, m_FillMode);
-	s_lpD3DDev->SetRenderState(D3DRS_SHADEMODE, m_ShadeMode);
+	RHIDevice()->SetRenderState(D3DRS_FILLMODE, m_FillMode);
+	RHIDevice()->SetRenderState(D3DRS_SHADEMODE, m_ShadeMode);
 
 	DWORD CullMode = 0, ZEnable = 0;
-	s_lpD3DDev->GetRenderState(D3DRS_CULLMODE, &CullMode);
-	s_lpD3DDev->GetRenderState(D3DRS_ZENABLE, &ZEnable);
+	RHIDevice()->GetRenderState(D3DRS_CULLMODE, &CullMode);
+	RHIDevice()->GetRenderState(D3DRS_ZENABLE, &ZEnable);
 
-	s_lpD3DDev->SetRenderState(D3DRS_CULLMODE, D3DCULL_CCW);
-	s_lpD3DDev->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);
-	//s_lpD3DDev->SetRenderState(D3DRS_ZBIAS, 1);
+	RHIDevice()->SetRenderState(D3DRS_CULLMODE, D3DCULL_CCW);
+	RHIDevice()->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);
+	//RHIDevice()->SetRenderState(D3DRS_ZBIAS, 1);
 
 	DWORD ColorOP0 = 0, ColorOP1 = 0, ColorOP2 = 0;
 	DWORD ColorArg01 = 0, ColorArg02 = 0, ColorArg11 = 0, ColorArg12 = 0, ColorArg21 = 0, ColorArg22 = 0;
 
-	s_lpD3DDev->GetTextureStageState(0, D3DTSS_COLOROP, &ColorOP0);
-	s_lpD3DDev->GetTextureStageState(0, D3DTSS_COLORARG1, &ColorArg01);
-	s_lpD3DDev->GetTextureStageState(0, D3DTSS_COLORARG2, &ColorArg02);
-	s_lpD3DDev->GetTextureStageState(1, D3DTSS_COLOROP, &ColorOP1);
-	s_lpD3DDev->GetTextureStageState(1, D3DTSS_COLORARG1, &ColorArg11);
-	s_lpD3DDev->GetTextureStageState(1, D3DTSS_COLORARG2, &ColorArg12);
-	s_lpD3DDev->GetTextureStageState(2, D3DTSS_COLOROP, &ColorOP2);
-	s_lpD3DDev->GetTextureStageState(2, D3DTSS_COLORARG1, &ColorArg21);
-	s_lpD3DDev->GetTextureStageState(2, D3DTSS_COLORARG2, &ColorArg22);
+	RHIDevice()->GetTextureStageState(0, D3DTSS_COLOROP, &ColorOP0);
+	RHIDevice()->GetTextureStageState(0, D3DTSS_COLORARG1, &ColorArg01);
+	RHIDevice()->GetTextureStageState(0, D3DTSS_COLORARG2, &ColorArg02);
+	RHIDevice()->GetTextureStageState(1, D3DTSS_COLOROP, &ColorOP1);
+	RHIDevice()->GetTextureStageState(1, D3DTSS_COLORARG1, &ColorArg11);
+	RHIDevice()->GetTextureStageState(1, D3DTSS_COLORARG2, &ColorArg12);
+	RHIDevice()->GetTextureStageState(2, D3DTSS_COLOROP, &ColorOP2);
+	RHIDevice()->GetTextureStageState(2, D3DTSS_COLORARG1, &ColorArg21);
+	RHIDevice()->GetTextureStageState(2, D3DTSS_COLORARG2, &ColorArg22);
 
 	DWORD AddressU1 = 0, AddressV1 = 0, AddressU2 = 0, AddressV2 = 0;
-	// s_lpD3DDev->GetTextureStageState( 0, D3DTSS_ADDRESSU, &AddressU1 );
-	// s_lpD3DDev->GetTextureStageState( 0, D3DTSS_ADDRESSV, &AddressV1 );
-	// s_lpD3DDev->GetTextureStageState(1, D3DTSS_ADDRESSU, &AddressU2);
-	// s_lpD3DDev->GetTextureStageState(1, D3DTSS_ADDRESSV, &AddressV2);
-	s_lpD3DDev->GetSamplerState(0, D3DSAMP_ADDRESSU, &AddressU1);
-	s_lpD3DDev->GetSamplerState(0, D3DSAMP_ADDRESSV, &AddressV1);
-	s_lpD3DDev->GetSamplerState(1, D3DSAMP_ADDRESSU, &AddressU2);
-	s_lpD3DDev->GetSamplerState(1, D3DSAMP_ADDRESSV, &AddressV2);
+	// RHIDevice()->GetTextureStageState( 0, D3DTSS_ADDRESSU, &AddressU1 );
+	// RHIDevice()->GetTextureStageState( 0, D3DTSS_ADDRESSV, &AddressV1 );
+	// RHIDevice()->GetTextureStageState(1, D3DTSS_ADDRESSU, &AddressU2);
+	// RHIDevice()->GetTextureStageState(1, D3DTSS_ADDRESSV, &AddressV2);
+	RHIDevice()->GetSamplerState(0, D3DSAMP_ADDRESSU, &AddressU1);
+	RHIDevice()->GetSamplerState(0, D3DSAMP_ADDRESSV, &AddressV1);
+	RHIDevice()->GetSamplerState(1, D3DSAMP_ADDRESSU, &AddressU2);
+	RHIDevice()->GetSamplerState(1, D3DSAMP_ADDRESSV, &AddressV2);
 
 	// 각각의 텍스쳐들을 연결했을때 경계선을 없앨 수 있다..^^
-	// s_lpD3DDev->SetTextureStageState( 0, D3DTSS_ADDRESSU,  D3DTADDRESS_MIRROR );
-	// s_lpD3DDev->SetTextureStageState( 0, D3DTSS_ADDRESSV,  D3DTADDRESS_MIRROR );
-	// s_lpD3DDev->SetTextureStageState( 1, D3DTSS_ADDRESSU,  D3DTADDRESS_MIRROR );
-	// s_lpD3DDev->SetTextureStageState( 1, D3DTSS_ADDRESSV,  D3DTADDRESS_MIRROR );
-	s_lpD3DDev->SetSamplerState(0, D3DSAMP_ADDRESSU, D3DTADDRESS_MIRROR);
-	s_lpD3DDev->SetSamplerState(0, D3DSAMP_ADDRESSV, D3DTADDRESS_MIRROR);
-	s_lpD3DDev->SetSamplerState(1, D3DSAMP_ADDRESSU, D3DTADDRESS_MIRROR);
-	s_lpD3DDev->SetSamplerState(1, D3DSAMP_ADDRESSV, D3DTADDRESS_MIRROR);
+	// RHIDevice()->SetTextureStageState( 0, D3DTSS_ADDRESSU,  D3DTADDRESS_MIRROR );
+	// RHIDevice()->SetTextureStageState( 0, D3DTSS_ADDRESSV,  D3DTADDRESS_MIRROR );
+	// RHIDevice()->SetTextureStageState( 1, D3DTSS_ADDRESSU,  D3DTADDRESS_MIRROR );
+	// RHIDevice()->SetTextureStageState( 1, D3DTSS_ADDRESSV,  D3DTADDRESS_MIRROR );
+	RHIDevice()->SetSamplerState(0, D3DSAMP_ADDRESSU, D3DTADDRESS_MIRROR);
+	RHIDevice()->SetSamplerState(0, D3DSAMP_ADDRESSV, D3DTADDRESS_MIRROR);
+	RHIDevice()->SetSamplerState(1, D3DSAMP_ADDRESSU, D3DTADDRESS_MIRROR);
+	RHIDevice()->SetSamplerState(1, D3DSAMP_ADDRESSV, D3DTADDRESS_MIRROR);
 
 	for (int x = m_pat_BoundRect.left; x <= m_pat_BoundRect.right; x++)
 	{
@@ -1260,32 +1260,32 @@ void CN3Terrain::Render()
 	}
 
 	/*
-	 s_lpD3DDev->SetTextureStageState( 0, D3DTSS_ADDRESSU, AddressU1 );
-	 s_lpD3DDev->SetTextureStageState( 0, D3DTSS_ADDRESSV, AddressV1 );
-	 s_lpD3DDev->SetTextureStageState( 1, D3DTSS_ADDRESSU, AddressU2 );
-	 s_lpD3DDev->SetTextureStageState( 1, D3DTSS_ADDRESSV, AddressV2 );
+	 RHIDevice()->SetTextureStageState( 0, D3DTSS_ADDRESSU, AddressU1 );
+	 RHIDevice()->SetTextureStageState( 0, D3DTSS_ADDRESSV, AddressV1 );
+	 RHIDevice()->SetTextureStageState( 1, D3DTSS_ADDRESSU, AddressU2 );
+	 RHIDevice()->SetTextureStageState( 1, D3DTSS_ADDRESSV, AddressV2 );
 	*/
-	s_lpD3DDev->SetSamplerState(0, D3DSAMP_ADDRESSU, AddressU1);
-	s_lpD3DDev->SetSamplerState(0, D3DSAMP_ADDRESSV, AddressV1);
-	s_lpD3DDev->SetSamplerState(1, D3DSAMP_ADDRESSU, AddressU2);
-	s_lpD3DDev->SetSamplerState(1, D3DSAMP_ADDRESSV, AddressV2);
+	RHIDevice()->SetSamplerState(0, D3DSAMP_ADDRESSU, AddressU1);
+	RHIDevice()->SetSamplerState(0, D3DSAMP_ADDRESSV, AddressV1);
+	RHIDevice()->SetSamplerState(1, D3DSAMP_ADDRESSU, AddressU2);
+	RHIDevice()->SetSamplerState(1, D3DSAMP_ADDRESSV, AddressV2);
 
 	// restor texture stage state settings...
-	s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLOROP, ColorOP0);
-	s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLORARG1, ColorArg01);
-	s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLORARG2, ColorArg02);
-	s_lpD3DDev->SetTextureStageState(1, D3DTSS_COLOROP, ColorOP1);
-	s_lpD3DDev->SetTextureStageState(1, D3DTSS_COLORARG1, ColorArg11);
-	s_lpD3DDev->SetTextureStageState(1, D3DTSS_COLORARG2, ColorArg12);
-	s_lpD3DDev->SetTextureStageState(2, D3DTSS_COLOROP, ColorOP2);
-	s_lpD3DDev->SetTextureStageState(2, D3DTSS_COLORARG1, ColorArg21);
-	s_lpD3DDev->SetTextureStageState(2, D3DTSS_COLORARG2, ColorArg22);
-	s_lpD3DDev->SetTexture(0, nullptr);
-	s_lpD3DDev->SetTexture(1, nullptr);
-	s_lpD3DDev->SetTexture(2, nullptr);
+	RHIDevice()->SetTextureStageState(0, D3DTSS_COLOROP, ColorOP0);
+	RHIDevice()->SetTextureStageState(0, D3DTSS_COLORARG1, ColorArg01);
+	RHIDevice()->SetTextureStageState(0, D3DTSS_COLORARG2, ColorArg02);
+	RHIDevice()->SetTextureStageState(1, D3DTSS_COLOROP, ColorOP1);
+	RHIDevice()->SetTextureStageState(1, D3DTSS_COLORARG1, ColorArg11);
+	RHIDevice()->SetTextureStageState(1, D3DTSS_COLORARG2, ColorArg12);
+	RHIDevice()->SetTextureStageState(2, D3DTSS_COLOROP, ColorOP2);
+	RHIDevice()->SetTextureStageState(2, D3DTSS_COLORARG1, ColorArg21);
+	RHIDevice()->SetTextureStageState(2, D3DTSS_COLORARG2, ColorArg22);
+	RHIDevice()->SetTexture(0, nullptr);
+	RHIDevice()->SetTexture(1, nullptr);
+	RHIDevice()->SetTexture(2, nullptr);
 
-	s_lpD3DDev->SetRenderState(D3DRS_CULLMODE, CullMode);
-	s_lpD3DDev->SetRenderState(D3DRS_ZENABLE, ZEnable);
+	RHIDevice()->SetRenderState(D3DRS_CULLMODE, CullMode);
+	RHIDevice()->SetRenderState(D3DRS_ZENABLE, ZEnable);
 
 	if (m_pRiver != nullptr)
 		m_pRiver->Render();

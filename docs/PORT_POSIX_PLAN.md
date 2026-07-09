@@ -414,7 +414,7 @@ sobre RHI" se alcanza al completar la migración por módulos.
       y cargarlo headless; si `OPENKO_FETCH_CLIENT_ASSETS=ON`, smoke con una
       textura real. *Aceptación:* `N3Texture` en el subset POSIX; carga DXT
       headless testeada.
-* [ ] **T6.3 — Rezagados de device (mecánica).** `ValidateDevice` y
+* [x] **T6.3 — Rezagados de device (mecánica).** `ValidateDevice` y
       `SetScissorRect` entran a `IRHIDevice` (Null: no-op OK; D3D9: forward);
       migrar `N3Terrain.cpp` y `UIHotKeyDlg.cpp`. `N3Cloak`
       (`SetVertexShader(nullptr)` x2) se migra gateando esas 2 líneas.

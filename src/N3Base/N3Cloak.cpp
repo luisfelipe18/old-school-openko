@@ -109,29 +109,29 @@ void CN3Cloak::Render(__Matrix44& mtx)
 	if (m_nLOD < 0)
 		return;
 
-	s_lpD3DDev->SetTransform(D3DTS_WORLD, mtx.toD3D());
+	RHIDevice()->SetTransform(D3DTS_WORLD, mtx.toD3D());
 
 	DWORD dwCull = 0, dwLight = 0;
-	s_lpD3DDev->GetRenderState(D3DRS_LIGHTING, &dwLight);
-	s_lpD3DDev->GetRenderState(D3DRS_CULLMODE, &dwCull);
+	RHIDevice()->GetRenderState(D3DRS_LIGHTING, &dwLight);
+	RHIDevice()->GetRenderState(D3DRS_CULLMODE, &dwCull);
 
 	//
-	//s_lpD3DDev->SetRenderState( D3DRS_LIGHTING, FALSE);
+	//RHIDevice()->SetRenderState( D3DRS_LIGHTING, FALSE);
 	if (dwCull != D3DCULL_NONE)
-		s_lpD3DDev->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+		RHIDevice()->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
 
-	s_lpD3DDev->SetTexture(0, m_pTex->GetRawD3D());
-	s_lpD3DDev->SetTexture(1, nullptr);
+	RHIDevice()->SetTexture(0, m_pTex->Get());
+	RHIDevice()->SetTexture(1, nullptr);
 
-	s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_MODULATE);
-	s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_DIFFUSE);
-	s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLORARG2, D3DTA_TEXTURE);
-	//	s_lpD3DDev->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_DISABLE);
-	//	s_lpD3DDev->SetTextureStageState(1, D3DTSS_ALPHAOP, D3DTOP_DISABLE);
-	//	s_lpD3DDev->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
+	RHIDevice()->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_MODULATE);
+	RHIDevice()->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_DIFFUSE);
+	RHIDevice()->SetTextureStageState(0, D3DTSS_COLORARG2, D3DTA_TEXTURE);
+	//	RHIDevice()->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_DISABLE);
+	//	RHIDevice()->SetTextureStageState(1, D3DTSS_ALPHAOP, D3DTOP_DISABLE);
+	//	RHIDevice()->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
 
-	s_lpD3DDev->SetFVF(FVF_VNT1);
-	s_lpD3DDev->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, m_nVertexCount, m_nIndexCount / 3,
+	RHIDevice()->SetFVF(FVF_VNT1);
+	RHIDevice()->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, m_nVertexCount, m_nIndexCount / 3,
 		m_pIndex, D3DFMT_INDEX16, m_pVertex, sizeof(__VertexT1));
 
 	//
@@ -140,13 +140,13 @@ void CN3Cloak::Render(__Matrix44& mtx)
 	__VertexT1 *pTemp = m_pVertex;
 	Vtx[0].Set(pTemp->x, pTemp->y, pTemp->z, 0xffffffff);
 	Vtx[1].Set(1.0f, 1.0f, 1.0f, 0xffffffff);
-	s_lpD3DDev->SetVertexShader(FVF_CV);
-	s_lpD3DDev->DrawPrimitiveUP(D3DPT_LINELIST, 1, Vtx, sizeof(__VertexXyzColor));
+	RHIDevice()->SetVertexShader(FVF_CV);
+	RHIDevice()->DrawPrimitiveUP(D3DPT_LINELIST, 1, Vtx, sizeof(__VertexXyzColor));
 	pTemp++;
 	Vtx[0].Set(pTemp->x, pTemp->y, pTemp->z, 0xffff0000);
 	Vtx[1].Set(1.0f, 1.0f, 1.0f, 0xffffffff);
-	s_lpD3DDev->SetVertexShader(FVF_CV);
-	s_lpD3DDev->DrawPrimitiveUP(D3DPT_LINELIST, 1, Vtx, sizeof(__VertexXyzColor));
+	RHIDevice()->SetVertexShader(FVF_CV);
+	RHIDevice()->DrawPrimitiveUP(D3DPT_LINELIST, 1, Vtx, sizeof(__VertexXyzColor));
 */
 
 	for (int i = 0; i < m_nGridH; i++)
@@ -160,8 +160,8 @@ void CN3Cloak::Render(__Matrix44& mtx)
 			nIndex++;
 			Vtx[1].Set(
 				m_pParticle[nIndex].x, m_pParticle[nIndex].y, m_pParticle[nIndex].z, 0xffffffff);
-			s_lpD3DDev->SetFVF(FVF_CV);
-			s_lpD3DDev->DrawPrimitiveUP(D3DPT_LINELIST, 1, Vtx, sizeof(__VertexXyzColor));
+			RHIDevice()->SetFVF(FVF_CV);
+			RHIDevice()->DrawPrimitiveUP(D3DPT_LINELIST, 1, Vtx, sizeof(__VertexXyzColor));
 		}
 	}
 	for (int i = 0; i < m_nGridH - 1; i++)
@@ -175,14 +175,14 @@ void CN3Cloak::Render(__Matrix44& mtx)
 			nIndex += m_nGridW;
 			Vtx[1].Set(
 				m_pParticle[nIndex].x, m_pParticle[nIndex].y, m_pParticle[nIndex].z, 0xffffffff);
-			s_lpD3DDev->SetFVF(FVF_CV);
-			s_lpD3DDev->DrawPrimitiveUP(D3DPT_LINELIST, 1, Vtx, sizeof(__VertexXyzColor));
+			RHIDevice()->SetFVF(FVF_CV);
+			RHIDevice()->DrawPrimitiveUP(D3DPT_LINELIST, 1, Vtx, sizeof(__VertexXyzColor));
 		}
 	}
 
 	// restore renderstate.
 	if (dwCull != D3DCULL_NONE)
-		s_lpD3DDev->SetRenderState(D3DRS_CULLMODE, dwCull);
+		RHIDevice()->SetRenderState(D3DRS_CULLMODE, dwCull);
 }
 
 constexpr float SPRING_TOLERANCE   = 0.000001f;
@@ -368,7 +368,7 @@ void CN3Cloak::SetLOD(int nLevel)
 	//TRACE ("CN3Cloak Set LOD lvl {}", nLevel);
 }
 
-void CN3Cloak::ApplyOffset(__Vector3& vDif)
+void CN3Cloak::ApplyOffset(__Vector3& /*vDif*/)
 {
 	/*
 	if (m_fOffsetRecoveryTime == 0.0f)

@@ -258,6 +258,16 @@ public:
 		return m_pDevice->GetViewport(pViewport);
 	}
 
+	HRESULT ValidateDevice(DWORD* pNumPasses) override
+	{
+		return m_pDevice->ValidateDevice(pNumPasses);
+	}
+
+	HRESULT SetScissorRect(const RECT* pRect) override
+	{
+		return m_pDevice->SetScissorRect(pRect);
+	}
+
 	HRESULT SetTexture(DWORD stage, IRHITexture* pTexture) override
 	{
 		LPDIRECT3DTEXTURE9 pD3DTexture =
