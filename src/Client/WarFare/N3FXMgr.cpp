@@ -1,4 +1,7 @@
 ﻿#include "StdAfx.h"
+#ifndef _WIN32
+#include <Platform/PlatformString.h> // _strlwr
+#endif
 #include "N3FXMgr.h"
 #include "GameBase.h"
 #include "GameProcMain.h"

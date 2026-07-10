@@ -16,6 +16,7 @@
 #ifndef _WIN32
 
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 
 using BOOL     = int;
@@ -185,6 +186,33 @@ inline BOOL PtInRect(const RECT* rc, POINT pt)
 	if (rc == nullptr)
 		return FALSE;
 	return pt.x >= rc->left && pt.x < rc->right && pt.y >= rc->top && pt.y < rc->bottom;
+}
+
+inline BOOL EqualRect(const RECT* r1, const RECT* r2)
+{
+	if (r1 == nullptr || r2 == nullptr)
+		return FALSE;
+	return r1->left == r2->left && r1->top == r2->top && r1->right == r2->right
+		&& r1->bottom == r2->bottom;
+}
+
+// Win32 global-memory shims used by the terrain heightmap allocation. GMEM_FIXED
+// returns a plain pointer (no HLOCAL/Lock dance), so malloc/free suffice.
+#ifndef GMEM_FIXED
+#define GMEM_FIXED    0x0000
+#define GMEM_ZEROINIT 0x0040
+#endif
+inline void* GlobalAlloc(UINT uFlags, size_t dwBytes)
+{
+	void* p = std::malloc(dwBytes);
+	if (p != nullptr && (uFlags & GMEM_ZEROINIT) != 0)
+		std::memset(p, 0, dwBytes);
+	return p;
+}
+inline void* GlobalFree(void* hMem)
+{
+	std::free(hMem);
+	return nullptr;
 }
 
 #ifndef MAKEFOURCC

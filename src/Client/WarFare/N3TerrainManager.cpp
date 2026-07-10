@@ -3,6 +3,9 @@
 //////////////////////////////////////////////////////////////////////
 
 #include "StdAfx.h"
+#ifndef _WIN32
+#include <Platform/PlatformPaths.h> // _splitpath / _makepath / _MAX_*
+#endif
 #include "N3TerrainManager.h"
 #include "N3Terrain.h"
 #include "N3ClientShapeMgr.h"

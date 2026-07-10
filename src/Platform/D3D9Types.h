@@ -193,6 +193,19 @@ typedef enum _D3DMULTISAMPLE_TYPE
 #define D3DERR_OUTOFVIDEOMEMORY  ((HRESULT) 0x8876017CL)
 #endif
 
+// D3D texture-blend validation results (from ValidateDevice), read by the
+// terrain multitexture setup. Values match d3d9.h.
+#ifndef D3DERR_TOOMANYOPERATIONS
+#define D3DERR_TOOMANYOPERATIONS         ((HRESULT) 0x8876086AL)
+#define D3DERR_UNSUPPORTEDCOLORARG       ((HRESULT) 0x8876086FL)
+#define D3DERR_UNSUPPORTEDCOLOROPERATION ((HRESULT) 0x88760870L)
+#endif
+
+// D3DPMISCCAPS_BLENDOP (d3d9caps.h): device supports SetRenderState(D3DRS_BLENDOP).
+#ifndef D3DPMISCCAPS_BLENDOP
+#define D3DPMISCCAPS_BLENDOP 0x00000800L
+#endif
+
 typedef enum _D3DRESOURCETYPE
 {
 	D3DRTYPE_SURFACE       = 1,

@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
+#include <string>
 
 // Header-only so the Windows MSBuild projects can consume it without linking
 // anything new (same rule as PlatformTime.h).
@@ -91,6 +92,31 @@ inline void _splitpath(const char* path, char* drive, char* dir, char* fname, ch
 	}
 	if (ext != nullptr && pDot != nullptr)
 		std::strcpy(ext, pDot);
+}
+
+/// Win32 _makepath shim: assembles a path from its components. Drive is ignored
+/// on POSIX; the engine's paths use backslashes as on Windows, so a backslash
+/// separator is inserted between dir and fname when the dir lacks a trailing one
+/// (matching the CRT's behavior closely enough for the asset-path call sites).
+inline void _makepath(char* path, const char* /*drive*/, const char* dir, const char* fname, const char* ext)
+{
+	std::string out;
+	if (dir != nullptr && dir[0] != '\0')
+	{
+		out = dir;
+		char last = out.back();
+		if (last != '/' && last != '\\')
+			out += '\\';
+	}
+	if (fname != nullptr)
+		out += fname;
+	if (ext != nullptr && ext[0] != '\0')
+	{
+		if (ext[0] != '.')
+			out += '.';
+		out += ext;
+	}
+	std::strcpy(path, out.c_str());
 }
 
 /// Win32 SetCurrentDirectory shim: changes the process working directory.

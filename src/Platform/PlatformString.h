@@ -31,6 +31,21 @@ inline int lstrcmpA(const char* lhs, const char* rhs)
 	return strcmp(lhs, rhs);
 }
 
+// Win32 _strlwr: in-place ASCII lowercasing of a C string, returning it. Only
+// 'A'..'Z' are touched, matching StrLowerAscii's UTF-8-safe behavior.
+inline char* _strlwr(char* str)
+{
+	if (str != nullptr)
+	{
+		for (char* p = str; *p != '\0'; ++p)
+		{
+			if (*p >= 'A' && *p <= 'Z')
+				*p += 'a' - 'A';
+		}
+	}
+	return str;
+}
+
 // Win32 lstrcpy / lstrcat: thin wrappers over the CRT, returning the
 // destination like the Win32 API.
 inline char* lstrcpy(char* dest, const char* src)
