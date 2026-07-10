@@ -3,17 +3,82 @@
 
 #pragma once
 
-// OpenGL RHI backend, bring-up stage (docs/PORT_POSIX_PLAN.md, T6.5).
+// OpenGL RHI backend (docs/PORT_POSIX_PLAN.md, T6.5-T6.7).
 //
-// It derives from RHIDeviceNull so it inherits all the fixed-function state
-// bookkeeping and no-op stubs, and only overrides the frame boundary to talk
-// to a real GL context: clear the window to the requested colour and present
-// via SDL_GL_SwapWindow. Geometry, textures and the fixed-function
-// über-shader arrive in T6.6/T6.7, overriding more of the base as they land.
+// Derives from RHIDeviceNull so all the fixed-function state bookkeeping
+// (render states, stage states, sampler states, transforms, lights, material,
+// viewport) is inherited; this class turns that recorded state into GL state
+// and a fixed-function "uber-shader" at draw time:
+//
+//   T6.5 - context, clear, present, vsync.
+//   T6.6 - VBO/IBO mirrors of the RHI buffers, a streaming buffer for the
+//          Draw*UP calls, DXT/BGRA texture uploads, BGRA vertex colors.
+//   T6.7 - GLSL 330 uber-shader: WVP matrices with D3D->GL depth remap,
+//          3 texture stages (DISABLE/SELECTARG/MODULATE(2X/4X)/ADD),
+//          per-vertex lighting (directional+point), linear fog, alpha test,
+//          and the pre-transformed (XYZRHW) screen-space path.
+//
+// GL resources (textures/buffers) extend the Null ones: the system-memory
+// copy stays the source of truth (Lock/Unlock keep working identically), and
+// the GL object is (re)uploaded lazily at bind time after each Unlock.
+
+#include "GLTranslate.h"
 
 #include <N3Base/RHI/RHIDeviceNull.h>
 
 struct SDL_Window;
+
+/// GL texture: RHITextureNull storage + a lazily created/uploaded GL object.
+class RHITextureGL : public RHITextureNull
+{
+public:
+	using RHITextureNull::RHITextureNull;
+
+	HRESULT UnlockRect(UINT level) override;
+	ULONG Release() override;
+
+	/// Returns the GL texture name, creating/uploading it if needed.
+	/// Requires the GL context to be current.
+	gl::Uint GLTexture();
+
+protected:
+	gl::Uint m_uTexture = 0;
+	bool m_bDirtyGL     = true;
+};
+
+/// GL vertex buffer: system-memory storage mirrored into a VBO on demand.
+class RHIVertexBufferGL : public RHIVertexBufferNull
+{
+public:
+	using RHIVertexBufferNull::RHIVertexBufferNull;
+
+	HRESULT Unlock() override;
+	ULONG Release() override;
+
+	/// Returns the VBO name, creating/uploading it if needed (binds ARRAY_BUFFER).
+	gl::Uint GLBuffer();
+
+protected:
+	gl::Uint m_uBuffer = 0;
+	bool m_bDirtyGL    = true;
+};
+
+class RHIIndexBufferGL : public RHIIndexBufferNull
+{
+public:
+	using RHIIndexBufferNull::RHIIndexBufferNull;
+
+	HRESULT Unlock() override;
+	ULONG Release() override;
+
+	/// Returns the IBO name, creating/uploading it if needed
+	/// (binds ELEMENT_ARRAY_BUFFER).
+	gl::Uint GLBuffer();
+
+protected:
+	gl::Uint m_uBuffer = 0;
+	bool m_bDirtyGL    = true;
+};
 
 class RHIDeviceGL : public RHIDeviceNull
 {
@@ -27,19 +92,120 @@ public:
 	RHIDeviceGL(const RHIDeviceGL&)            = delete;
 	RHIDeviceGL& operator=(const RHIDeviceGL&) = delete;
 
-	// True once the context is created and every GL entry point resolved.
+	// True once the context is created, every GL entry point resolved and the
+	// uber-shader linked.
 	bool IsValid() const
 	{
 		return m_bValid;
 	}
 
+	bool SupportsS3TC() const
+	{
+		return m_bS3TC;
+	}
+
+	/// Reads the RGBA of the framebuffer's center pixel (diagnostics/smoke).
+	bool ReadCenterPixel(uint8_t rgbaOut[4]);
+
+	/// Dumps the current back buffer to a binary PPM (diagnostics: lets CI and
+	/// the Mac bring-up inspect real frames without window-system capture).
+	bool DumpFramePPM(const char* szPath);
+
+	// --- Frame ---------------------------------------------------------------
 	HRESULT Clear(DWORD flags, D3DCOLOR color, float z, DWORD stencil) override;
 	HRESULT Present() override;
 
+	// --- Resources -------------------------------------------------------------
+	HRESULT CreateTexture(UINT width, UINT height, UINT levels, DWORD usage, D3DFORMAT format,
+		D3DPOOL pool, IRHITexture** ppTexture) override;
+	HRESULT CreateVertexBuffer(
+		UINT length, DWORD usage, DWORD fvf, D3DPOOL pool, IRHIVertexBuffer** ppBuffer) override;
+	HRESULT CreateIndexBuffer(
+		UINT length, DWORD usage, D3DFORMAT format, D3DPOOL pool, IRHIIndexBuffer** ppBuffer) override;
+
+	HRESULT SetTexture(DWORD stage, IRHITexture* pTexture) override;
+	HRESULT SetStreamSource(
+		UINT streamNumber, IRHIVertexBuffer* pBuffer, UINT offsetInBytes, UINT stride) override;
+
+	// --- Draws -----------------------------------------------------------------
+	HRESULT DrawPrimitive(
+		D3DPRIMITIVETYPE primitiveType, UINT startVertex, UINT primitiveCount) override;
+	HRESULT DrawIndexedPrimitive(D3DPRIMITIVETYPE primitiveType, INT baseVertexIndex,
+		UINT minVertexIndex, UINT numVertices, UINT startIndex, UINT primitiveCount) override;
+	HRESULT DrawPrimitiveUP(D3DPRIMITIVETYPE primitiveType, UINT primitiveCount,
+		const void* pVertexData, UINT vertexStride) override;
+	HRESULT DrawIndexedPrimitiveUP(D3DPRIMITIVETYPE primitiveType, UINT minVertexIndex,
+		UINT numVertices, UINT primitiveCount, const void* pIndexData, D3DFORMAT indexFormat,
+		const void* pVertexData, UINT vertexStride) override;
+
 private:
-	SDL_Window* m_pWindow  = nullptr;
-	void* m_pGLContext     = nullptr; // SDL_GLContext (opaque)
-	bool m_bValid          = false;
+	static constexpr DWORD MAX_GL_STAGES = 3; // terrain uses stages 0..2
+	static constexpr int MAX_GL_LIGHTS   = 8;
+
+	bool BuildProgram();
+	void SeedD3DDefaults();
+
+	// Turns the recorded D3D state into GL state/uniforms for the next draw.
+	bool BeginDraw(const gltr::FVFLayout& layout);
+	void ApplyFixedState();
+	void ApplyViewport(bool bPreTransformed);
+	void ApplyUniforms(const gltr::FVFLayout& layout);
+	void ApplyTexturesAndSamplers();
+	void SetupVertexAttribs(const gltr::FVFLayout& layout, intptr_t baseOffset);
+
+	SDL_Window* m_pWindow = nullptr;
+	void* m_pGLContext    = nullptr; // SDL_GLContext (opaque)
+	bool m_bValid         = false;
+	bool m_bS3TC          = false;
+	int m_iWinPixelW      = 0;
+	int m_iWinPixelH      = 0;
+
+	gl::Uint m_uVAO      = 0;
+	gl::Uint m_uProgram  = 0;
+	gl::Uint m_uStreamVB = 0; // Draw*UP staging
+	gl::Uint m_uStreamIB = 0;
+	gl::Uint m_auSamplers[MAX_GL_STAGES] = {};
+
+	IRHITexture* m_apTextures[MAX_GL_STAGES] = {};
+	UINT m_nStreamOffset = 0;
+	UINT m_nStreamStride = 0;
+
+	// Uniform locations, cached at link time.
+	struct Locations
+	{
+		gl::Int wvp            = -1;
+		gl::Int world          = -1;
+		gl::Int wv             = -1;
+		gl::Int preTransformed = -1;
+		gl::Int viewportSize   = -1;
+		gl::Int hasNormal      = -1;
+		gl::Int hasColor       = -1;
+		gl::Int lighting       = -1;
+		gl::Int globalAmbient  = -1;
+		gl::Int matDiffuse     = -1;
+		gl::Int matAmbient     = -1;
+		gl::Int matEmissive    = -1;
+		gl::Int lightCount     = -1;
+		gl::Int lightPos       = -1; // vec4[8]: xyz + range
+		gl::Int lightDir       = -1; // vec4[8]: xyz + D3DLIGHTTYPE
+		gl::Int lightDiffuse   = -1;
+		gl::Int lightAmbient   = -1;
+		gl::Int lightAtt       = -1; // vec4[8]: att0 att1 att2 -
+		gl::Int texBound       = -1;
+		gl::Int colorOp        = -1;
+		gl::Int colorArg1      = -1;
+		gl::Int colorArg2      = -1;
+		gl::Int alphaOp        = -1;
+		gl::Int alphaArg1      = -1;
+		gl::Int alphaArg2      = -1;
+		gl::Int tfactor        = -1;
+		gl::Int alphaTestFunc  = -1;
+		gl::Int alphaRef       = -1;
+		gl::Int fogEnable      = -1;
+		gl::Int fogColor       = -1;
+		gl::Int fogStart       = -1;
+		gl::Int fogEnd         = -1;
+	} m_Locs;
 };
 
 #endif // CLIENT_WARFARE_RHIDEVICEGL_H

@@ -109,7 +109,11 @@ HRESULT RHIDeviceNull::GetTransform(DWORD state, _D3DMATRIX* pMatrix)
 
 HRESULT RHIDeviceNull::SetMaterial(const _D3DMATERIAL9* pMaterial)
 {
-	return (pMaterial != nullptr) ? D3D_OK : RHI_E_FAIL;
+	if (pMaterial == nullptr)
+		return RHI_E_FAIL;
+
+	m_Material = *pMaterial;
+	return D3D_OK;
 }
 
 HRESULT RHIDeviceNull::SetLight(DWORD index, const _D3DLIGHT9* pLight)

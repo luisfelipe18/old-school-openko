@@ -187,6 +187,7 @@ protected:
 	std::map<DWORD, BOOL> m_LightsEnabled;
 	D3DVIEWPORT9 m_Viewport = {};
 	RECT m_ScissorRect      = {};
+	_D3DMATERIAL9 m_Material = {};
 	DWORD m_dwFVF           = 0;
 	IRHIVertexBuffer* m_pBoundVB = nullptr;
 	IRHIIndexBuffer* m_pBoundIB  = nullptr;

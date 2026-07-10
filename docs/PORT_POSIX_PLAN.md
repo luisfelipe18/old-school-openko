@@ -447,12 +447,23 @@ sobre RHI" se alcanza al completar la migración por módulos.
       Renderer=GL` o flag `--renderer gl`; default Null. Degrada a Null si el
       driver no tiene GL (p.ej. dummy de CI). **Falta validación visual en un
       Mac** — no hay GL real en el contenedor de build.)*
-* [ ] **T6.6 — Backend GL b: geometría + texturas.** VBO/IBO desde los
+* [x] **T6.6 — Backend GL b: geometría + texturas.** VBO/IBO desde los
       buffers RHI, ring-buffer transitorio para `Draw*UP`, texturas
       (DXT vía `GL_EXT_texture_compression_s3tc`, RGBA/565 sin comprimir),
       conversión BGRA de `D3DCOLOR` en vertex colors, flip V.
       *Aceptación:* test visual con la malla del smoke (quad) dibujada.
-* [ ] **T6.7 — Backend GL c: über-shader fixed-function v1.** Matrices
+      *(Hecho: `RHIVertexBufferGL`/`RHIIndexBufferGL`/`RHITextureGL` extienden
+      los Null — la copia en RAM sigue siendo la fuente de verdad y el objeto
+      GL se (re)sube perezosamente al bindear tras cada Unlock. Buffer de
+      streaming para `Draw*UP`. Texturas: DXT1/3/5 comprimidas, BGRA 8888,
+      1555/4444 REV, RGB; `TEXTURE_MAX_LEVEL` para cadenas que paran en 4x4;
+      caps S3TC/max-size publicados a `s_dwTextureCaps`/`s_DevCaps` como hace
+      CN3Eng. Vertex colors BGRA por `ARB_vertex_array_bgra`. El flip V
+      resultó innecesario para sampling (mismo orden de filas que D3D).
+      **Validado con píxeles reales** en Linux headless (Xvfb + Mesa
+      llvmpipe): quad texturizado dibujado y verificado por lectura de
+      framebuffer nativa (`--dump-frame`); la escena está en `--test-scene`.)*
+* [x] **T6.7 — Backend GL c: über-shader fixed-function v1.** Matrices
       world/view/proj, 2 texture stages (MODULATE/SELECTARG1/ADD/DISABLE),
       alpha blend/test, fog lineal, iluminación por vértice
       (direccional+punto), materiales. Estados D3D del RHI → uniforms/estado
@@ -460,6 +471,17 @@ sobre RHI" se alcanza al completar la migración por módulos.
       *Aceptación:* con assets reales en un Mac, `GameProcLogIn` (T6.8)
       o en su defecto una escena de prueba con `.n3shape` real se ve
       correcta; comparar contra captura D3D9 de referencia.
+      *(Hecho: über-shader GLSL 330 único — WVP con remap de depth
+      [0,1]→[-1,1] en clip space, path XYZRHW pantalla-espacio, 3 stages
+      (terreno usa 0..2) con DISABLE/SELECTARG/MODULATE(2X/4X)/ADD + TFACTOR,
+      alpha test por discard, fog lineal en depth de vista, iluminación
+      por vértice direccional+puntual con material/ambient global, culling
+      con FrontFace(CW) por la diferencia de winding D3D/GL. Estados leídos
+      de los mapas heredados del Null en cada draw (correcto primero,
+      optimizable después). Verificado en Linux con la escena sintética
+      (esquinas/centro exactos por readback nativo). **Pendiente para
+      T6.8/Mac:** validación con `.n3shape`/assets reales contra captura
+      D3D9 de referencia.)*
 * [ ] **T6.8 — Conectar CGameProcedure (hito C).** Compilar en POSIX
       `GameBase`/`GameEng`/`GameProcedure` + escena de login + los `N3UI*` de
       N3Base (menos `N3UIEdit`, F7) con el patrón de gates ya establecido;

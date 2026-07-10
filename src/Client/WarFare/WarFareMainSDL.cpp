@@ -17,6 +17,7 @@
 #include "LocalInput.h"
 #include "LocalInputSDL.h"
 #include "RHIDeviceGL.h"
+#include "TestScene.h"
 
 #include <N3Base/LogWriter.h>
 #include <N3Base/N3Base.h>
@@ -133,14 +134,22 @@ int main(int argc, char* argv[])
 {
 	// CI/diagnostics: --smoke <N> pumps N frames and exits.
 	// --renderer <gl|null> overrides the Option.ini backend for a quick test.
+	// --test-scene draws the RHI diagnostic scene (docs/PORT_POSIX_PLAN.md,
+	// T6.6/T6.7): gradient background, spinning triangle, lit textured quad.
 	long smokeFrames             = -1;
+	bool bTestScene              = false;
 	std::string rendererOverride;
-	for (int i = 1; i < argc - 1; ++i)
+	std::string dumpFramePath;
+	for (int i = 1; i < argc; ++i)
 	{
-		if (std::strcmp(argv[i], "--smoke") == 0)
+		if (std::strcmp(argv[i], "--smoke") == 0 && i + 1 < argc)
 			smokeFrames = std::strtol(argv[i + 1], nullptr, 10);
-		else if (std::strcmp(argv[i], "--renderer") == 0)
+		else if (std::strcmp(argv[i], "--renderer") == 0 && i + 1 < argc)
 			rendererOverride = argv[i + 1];
+		else if (std::strcmp(argv[i], "--test-scene") == 0)
+			bTestScene = true;
+		else if (std::strcmp(argv[i], "--dump-frame") == 0 && i + 1 < argc)
+			dumpFramePath = argv[i + 1];
 	}
 
 	LoadGameOptions();
@@ -258,11 +267,17 @@ int main(int argc, char* argv[])
 		if (localInput.IsKeyPressed(DIK_ESCAPE))
 			g_bQuitRequested = true;
 
-		// TODO(F6): CGameProcedure::TickActive() + RenderActive() replace the
+		// TODO(F6.8): CGameProcedure::TickActive() + RenderActive() replace the
 		// diagnostics below; the RHI frame sequence already runs here. The
 		// clear colour is a dim blue so the GL backend is visibly not-black.
 		pRHIDevice->BeginScene();
 		pRHIDevice->Clear(D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, 0xFF102040, 1.0f, 0);
+		if (bTestScene)
+		{
+			int pixelW = 0, pixelH = 0;
+			SDL_GetWindowSizeInPixels(g_pWindow, &pixelW, &pixelH);
+			TestSceneTick(pRHIDevice.get(), static_cast<float>(frame) * 0.02f, pixelW, pixelH);
+		}
 		pRHIDevice->EndScene();
 		pRHIDevice->Present();
 
@@ -280,6 +295,31 @@ int main(int argc, char* argv[])
 	// that returns with CGameProcedure in the render phases).
 	if (auto* pNull = dynamic_cast<RHIDeviceNull*>(pRHIDevice.get()))
 		spdlog::info("frames presented through the RHI: {}", pNull->PresentCount());
+
+	// Smoke diagnostics: with the GL backend, prove pixels actually landed by
+	// rendering one final frame and sampling its center before the swap
+	// (glReadPixels reads the back buffer).
+	if (auto* pGL = dynamic_cast<RHIDeviceGL*>(pRHIDevice.get()))
+	{
+		pGL->BeginScene();
+		pGL->Clear(D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, 0xFF102040, 1.0f, 0);
+		if (bTestScene)
+		{
+			int pixelW = 0, pixelH = 0;
+			SDL_GetWindowSizeInPixels(g_pWindow, &pixelW, &pixelH);
+			TestSceneTick(pRHIDevice.get(), static_cast<float>(frame) * 0.02f, pixelW, pixelH);
+		}
+		pGL->EndScene();
+
+		uint8_t rgba[4] = {};
+		if (pGL->ReadCenterPixel(rgba))
+			spdlog::info("GL center pixel: R={} G={} B={} A={}", rgba[0], rgba[1], rgba[2], rgba[3]);
+
+		if (!dumpFramePath.empty() && pGL->DumpFramePPM(dumpFramePath.c_str()))
+			spdlog::info("GL frame dumped to {}", dumpFramePath);
+	}
+
+	TestSceneRelease(); // GL resources must go before the context
 	CN3Base::RHIDeviceSet(nullptr);
 	pRHIDevice.reset(); // destroy the GL context before the window
 	if (g_pCursor != nullptr)

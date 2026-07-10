@@ -22,6 +22,7 @@ if(NOT WIN32)
   # POSIX client-layer tests (cursor decoding + SDL scancode mapping).
   add_executable(WarFareClient.Tests
     CursorDecoder_test.cpp
+    GLTranslate_test.cpp
     ScancodeMap_test.cpp
     TextResource_test.cpp)
 

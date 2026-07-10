@@ -318,6 +318,7 @@ else()
     GameOptions.h
     GLLoader.cpp
     GLLoader.h
+    GLTranslate.h
     LocalInput.h
     LocalInputSDL.cpp
     LocalInputSDL.h
@@ -326,6 +327,8 @@ else()
     RHIDeviceGL.cpp
     RHIDeviceGL.h
     StdAfx.h
+    TestScene.cpp
+    TestScene.h
     text_resources.h
     ${WARFARE_NETWORK_SOURCES}
   )
