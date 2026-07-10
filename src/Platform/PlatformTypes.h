@@ -30,6 +30,7 @@ using LONGLONG = int64_t;
 using FLOAT    = float;
 
 using LPBYTE   = BYTE*;
+using LPWORD   = WORD*;
 using LPDWORD  = DWORD*;
 using HRESULT  = LONG;
 

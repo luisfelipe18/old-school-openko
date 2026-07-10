@@ -408,9 +408,10 @@ void CPlayerBase::RenderChrInRect(CN3Chr* pChr, const RECT& Rect)
 	if (FALSE != dwFog)
 		RHIDevice()->SetRenderState(D3DRS_FOGENABLE, FALSE);
 
-	// render
-	D3DRECT rc = { Rect.left, Rect.top, Rect.right, Rect.bottom };
-	RHIDevice()->Clear(1, &rc, D3DCLEAR_ZBUFFER, 0, 1.0f, 0); // Z Buffer Clear
+	// render: clear the Z buffer over the viewport set just above (which is
+	// already constrained to the character-icon rect, so the RHI viewport-scoped
+	// Clear matches the old explicit-rect Clear).
+	RHIDevice()->Clear(D3DCLEAR_ZBUFFER, 0, 1.0f, 0); // Z Buffer Clear
 
 	int iLODPrev = CN3Chr::LODDelta();
 	CN3Chr::LODDeltaSet(0);
@@ -1686,7 +1687,7 @@ bool CPlayerBase::CheckCollisionToTargetByPlug(CPlayerBase* pTarget, int nPlug, 
 		m_pShapeExtraRef->CollisionMesh()->Render((D3DCOLOR) 0xffff0000); // 충돌 박스를 그려본다.
 	}
 	RHIDevice()->EndScene();
-	RHIDevice()->Present(nullptr, nullptr, s_hWndBase, nullptr);
+	RHIDevice()->Present();
 #endif
 
 	if (m_pShapeExtraRef && m_pShapeExtraRef->CollisionMesh())

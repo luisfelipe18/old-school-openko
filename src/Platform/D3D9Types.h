@@ -108,6 +108,14 @@ typedef struct _D3DLIGHT9
 	float Phi;
 } D3DLIGHT9;
 
+typedef struct _D3DRECT
+{
+	LONG x1;
+	LONG y1;
+	LONG x2;
+	LONG y2;
+} D3DRECT;
+
 typedef struct _D3DVIEWPORT9
 {
 	DWORD X;
@@ -293,6 +301,16 @@ typedef enum _D3DBLEND
 	D3DBLEND_SRCALPHASAT  = 11,
 	D3DBLEND_FORCE_DWORD  = 0x7fffffff
 } D3DBLEND;
+
+typedef enum _D3DBLENDOP
+{
+	D3DBLENDOP_ADD         = 1,
+	D3DBLENDOP_SUBTRACT    = 2,
+	D3DBLENDOP_REVSUBTRACT = 3,
+	D3DBLENDOP_MIN         = 4,
+	D3DBLENDOP_MAX         = 5,
+	D3DBLENDOP_FORCE_DWORD = 0x7fffffff
+} D3DBLENDOP;
 
 typedef enum _D3DTEXTUREOP
 {

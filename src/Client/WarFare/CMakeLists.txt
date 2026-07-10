@@ -335,6 +335,8 @@ else()
     TestScene.h
     text_resources.h
     ${WARFARE_NETWORK_SOURCES}
+    ${WARFARE_PLAYERS_SOURCES}
+    ${WARFARE_WORLD_SOURCES}
   )
 endif()
 

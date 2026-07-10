@@ -3,6 +3,9 @@
 //////////////////////////////////////////////////////////////////////
 
 #include "StdAfx.h"
+#ifndef _WIN32
+#include <Platform/PlatformPaths.h> // _splitpath / _MAX_* for model-filename building
+#endif
 #include "PlayerMySelf.h"
 #include "PacketDef.h"
 #include "PlayerOtherMgr.h"
