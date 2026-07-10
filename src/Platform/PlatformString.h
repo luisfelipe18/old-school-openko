@@ -30,6 +30,34 @@ inline int lstrcmpA(const char* lhs, const char* rhs)
 {
 	return strcmp(lhs, rhs);
 }
+
+// Win32 lstrcpy / lstrcat: thin wrappers over the CRT, returning the
+// destination like the Win32 API.
+inline char* lstrcpy(char* dest, const char* src)
+{
+	return strcpy(dest, src);
+}
+
+inline char* lstrcat(char* dest, const char* src)
+{
+	return strcat(dest, src);
+}
+
+// Win32 lstrcpyn: copy at most (count-1) chars and always null-terminate within
+// count. Returns the destination like the Win32 API.
+inline char* lstrcpyn(char* dest, const char* src, int count)
+{
+	if (dest == nullptr || count <= 0)
+		return dest;
+	int i = 0;
+	if (src != nullptr)
+	{
+		for (; i < count - 1 && src[i] != '\0'; ++i)
+			dest[i] = src[i];
+	}
+	dest[i] = '\0';
+	return dest;
+}
 #endif
 
 /// \brief In-place ASCII-only lowercasing.

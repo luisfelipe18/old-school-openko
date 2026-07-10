@@ -1,5 +1,10 @@
 ﻿#include "StdAfx.h"
 
+#ifndef _WIN32
+#include <Platform/PlatformIni.h>    // GetPrivateProfileString/Int (Server.Ini)
+#include <Platform/PlatformString.h> // lstrcpy / lstrcat
+#endif
+
 #if !defined(LOGIN_SCENE_VERSION) || LOGIN_SCENE_VERSION == 1298
 #include "GameProcLogIn_1298.h"
 #include "GameEng.h"

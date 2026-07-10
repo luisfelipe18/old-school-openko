@@ -11,7 +11,9 @@
 #include <N3Base/N3UIString.h>
 
 #include <algorithm>
+#ifdef _WIN32
 #include <shellapi.h>
+#endif
 
 CUILogIn_1298::CUILogIn_1298()
 {
@@ -101,7 +103,11 @@ bool CUILogIn_1298::ReceiveMessage(CN3UIBase* pSender, uint32_t dwMsg)
 		{
 			if (!CGameProcedure::s_pProcLogIn->m_szRegistrationSite.empty())
 			{
+#ifdef _WIN32
 				ShellExecute(nullptr, "open", CGameProcedure::s_pProcLogIn->m_szRegistrationSite.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+#endif
+				// POSIX: opening the registration site in a browser lands with a
+				// later phase (SDL_OpenURL).
 			}
 
 			return true;

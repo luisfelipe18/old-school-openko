@@ -37,11 +37,17 @@
 #include <N3Base/N3SndObj.h>
 #include <N3Base/N3FXBundle.h>
 
-#include <N3Base/BitMapFile.h>
+#ifdef _WIN32
+#include <N3Base/BitMapFile.h> // Win32 GDI DIB path, screen capture only
+#endif
 
 #include <JpegFile/JpegFile.h>
 
 #include <shared/lzf.h>
+
+#ifndef _WIN32
+#include <Platform/PlatformTime.h> // Sleep()
+#endif
 
 #include <cassert>
 
@@ -113,6 +119,7 @@ void CGameProcedure::Init()
 	s_pUIMgr->SetFocusedUI(nullptr);
 }
 
+#ifdef _WIN32
 void CGameProcedure::StaticMemberInit(HINSTANCE hInstance, HWND hWndMain)
 {
 	//////////////////////////////////////////////////////////////////////////////////////////
@@ -219,7 +226,58 @@ void CGameProcedure::StaticMemberInit(HINSTANCE hInstance, HWND hWndMain)
 	s_pProcCharacterCreate = new CGameProcCharacterCreate(); // 캐릭터 만들기
 	s_pProcMain            = new CGameProcMain();            // 메인 게임 프로시져
 }
+#else  // !_WIN32
+// POSIX login-milestone bring-up (docs/PORT_POSIX_PLAN.md, T6.8). The SDL entry
+// point already owns the window + GL/Null context and has installed the RHI
+// backend, so there is no D3D device or display-mode work here. Only the login
+// procedure is created; the nation-select / character / main procedures rejoin
+// as those scenes are ported.
+void CGameProcedure::StaticMemberInit(HINSTANCE /*hInstance*/, HWND /*hWndMain*/)
+{
+	s_bWindowed = true;
 
+	s_pEng = new CGameEng();
+	// CN3Eng::Init is a POSIX no-op that just verifies the RHI backend exists.
+	if (!s_pEng->Init(s_bWindowed, nullptr, s_Options.iViewWidth, s_Options.iViewHeight,
+			s_Options.iViewColorDepth, TRUE))
+		exit(-1);
+
+	CGameBase::StaticMemberInit(); // tables + world/player managers
+
+	s_pSocket    = new CAPISocket();
+	s_pSocketSub = new CAPISocket();
+
+	if (!CN3Base::s_Options.bWindowCursor)
+	{
+		s_pGameCursor = new CGameCursor();
+		s_pGameCursor->LoadFromFile("ui\\cursor.uif");
+	}
+
+	s_pLocalInput = new CLocalInput();
+	s_pLocalInput->Init(nullptr, nullptr); // SDL keyboard/mouse
+
+	if (s_Options.bSndEnable)
+		s_SndMgr.Init();
+
+	CN3FXBundle::SetEffectSndDistance(static_cast<float>(s_Options.iEffectSndDist));
+	s_pFX = new CN3FXMgr();
+
+	__TABLE_UI_RESRC* pTblUI = s_pTbl_UI.Find(NATION_ELMORAD); // 기본은 엘모라드 UI 로 한다..
+	if (pTblUI == nullptr)
+	{
+		CLogWriter::Write("UI resources not found for {}", static_cast<int>(NATION_ELMORAD));
+		exit(-1);
+	}
+
+	s_pUIMgr     = new CUIManager();
+	s_pMsgBoxMgr = new CUIMessageBoxManager();
+	CN3UIBase::EnableTooltip(pTblUI->szToolTip);
+
+	s_pProcLogIn = new CGameProcLogIn(); // 로그인 프로시져 (only the login scene on POSIX)
+}
+#endif // _WIN32
+
+#ifdef _WIN32
 void CGameProcedure::StaticMemberRelease()
 {
 	delete s_pSocket;
@@ -335,6 +393,37 @@ void CGameProcedure::StaticMemberRelease()
 	delete s_pEng;
 	s_pEng = nullptr; // 젤 마지막에 엔진 날리기.!!!!!
 }
+#else  // !_WIN32
+// POSIX teardown: release only the objects the POSIX StaticMemberInit created,
+// in reverse order. No registry writes, display-mode restore, or ending screen.
+void CGameProcedure::StaticMemberRelease()
+{
+	delete s_pSocket;
+	s_pSocket = nullptr;
+	delete s_pSocketSub;
+	s_pSocketSub = nullptr;
+	delete s_pFX;
+	s_pFX = nullptr;
+
+	delete s_pProcLogIn;
+	s_pProcLogIn = nullptr;
+
+	CGameBase::StaticMemberRelease();
+
+	delete s_pUILoading;
+	s_pUILoading = nullptr;
+	delete s_pMsgBoxMgr;
+	s_pMsgBoxMgr = nullptr;
+	delete s_pUIMgr;
+	s_pUIMgr = nullptr;
+	delete s_pLocalInput;
+	s_pLocalInput = nullptr;
+	delete s_pGameCursor;
+	s_pGameCursor = nullptr;
+	delete s_pEng;
+	s_pEng = nullptr;
+}
+#endif // _WIN32
 
 void CGameProcedure::Tick()
 {
@@ -378,7 +467,9 @@ void CGameProcedure::Tick()
 
 	CN3Base::s_SndMgr.Tick();              // Sound Engine...
 
-	// Screen capture hotkey (NUM-)
+#ifdef _WIN32
+	// Screen capture hotkey (NUM-). The DIB screen grab is Win32 GDI; the SDL
+	// backend gets its own capture path in a later phase.
 	if (s_pLocalInput->IsKeyPress(DIK_NUMPADMINUS))
 	{
 		SYSTEMTIME st;
@@ -387,6 +478,7 @@ void CGameProcedure::Tick()
 		std::string szFN = fmt::format("{}_{}_{}_{}.{}.{}.ksc", st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
 		CaptureScreenAndSaveToFile(szFN);
 	}
+#endif
 
 	//////////////////////////////////
 	// Network Msg 처리하기
@@ -460,6 +552,12 @@ void CGameProcedure::RenderActive()
 
 bool CGameProcedure::CaptureScreenAndSaveToFile(const std::string& szFN)
 {
+#ifndef _WIN32
+	// Win32 GDI screen grab (CopyScreenToDIB); the SDL/GL capture path lands
+	// with a later phase.
+	(void) szFN;
+	return false;
+#else
 	if (szFN.empty())
 		return false;
 
@@ -492,6 +590,7 @@ bool CGameProcedure::CaptureScreenAndSaveToFile(const std::string& szFN)
 
 	CLogWriter::Write("Screen captured: {}", szFN);
 	return true;
+#endif
 }
 
 void CGameProcedure::ProcActiveSet(CGameProcedure* pProc)
@@ -531,6 +630,20 @@ void CGameProcedure::MessageBoxClose(int iMsgBoxIndex)
 		s_pMsgBoxMgr->MessageBoxCloseAll();
 }
 
+#ifndef _WIN32
+// POSIX: per-user settings persistence (window positions, camera/run mode) is
+// deferred to a later phase; treat every read as "no saved value" so callers
+// fall back to their defaults, and every write as a successful no-op.
+bool CGameProcedure::RegPutSetting(const char* /*ValueName*/, void* /*pValueData*/, long /*length*/)
+{
+	return true;
+}
+
+bool CGameProcedure::RegGetSetting(const char* /*ValueName*/, void* /*pValueData*/, long /*length*/)
+{
+	return false;
+}
+#else
 bool CGameProcedure::RegPutSetting(const char* ValueName, void* pValueData, long length)
 {
 	HKEY hKey = nullptr;
@@ -594,6 +707,7 @@ bool CGameProcedure::RegGetSetting(const char* ValueName, void* pValueData, long
 
 	return true;
 }
+#endif // _WIN32
 
 void CGameProcedure::UIPostData_Write(const std::string& szKey, CN3UIBase* pUI)
 {
@@ -677,14 +791,20 @@ void CGameProcedure::SetGameCursor(HCURSOR hCursor, bool bLocked)
 			return;
 		else if (((m_bCursorLocked) && bLocked) || ((!m_bCursorLocked) && !bLocked))
 		{
+#ifdef _WIN32
 			SetCursor(hCursor);
+#endif
 			return;
 		}
 		else if ((!m_bCursorLocked) && bLocked)
 		{
+#ifdef _WIN32
 			m_hPrevGameCursor = GetCursor();
+#endif
 			m_bCursorLocked   = true;
+#ifdef _WIN32
 			SetCursor(hCursor);
+#endif
 		}
 	}
 }
@@ -711,7 +831,9 @@ void CGameProcedure::RestoreGameCursor()
 		if (m_bCursorLocked)
 			m_bCursorLocked = false;
 
+#ifdef _WIN32
 		SetCursor(m_hPrevGameCursor);
+#endif
 	}
 }
 

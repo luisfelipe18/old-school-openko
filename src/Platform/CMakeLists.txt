@@ -4,6 +4,8 @@ add_library(Platform STATIC
   PlatformCrypto.h
   PlatformEncoding.cpp
   PlatformEncoding.h
+  PlatformIni.h
+  PlatformPaths.h
   PlatformString.h
   PlatformTime.h
   PlatformTypes.h
