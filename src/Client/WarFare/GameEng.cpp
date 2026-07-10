@@ -16,12 +16,15 @@ CGameEng::CGameEng()
 {
 	m_pActiveCam = nullptr;
 
-	// 프로그램이 실행된 경로..
+#ifdef _WIN32
+	// 프로그램이 실행된 경로.. (the derived path is unused; the base run path is
+	// set by the entry point. POSIX has no GetModuleFileName equivalent here.)
 	char szBuf[_MAX_PATH];
 	char szDrive[_MAX_DRIVE], szDir[_MAX_DIR];
 	::GetModuleFileName(nullptr, szBuf, _MAX_PATH);
 	_splitpath(szBuf, szDrive, szDir, nullptr, nullptr);
 	_makepath(szBuf, szDrive, szDir, nullptr, nullptr);
+#endif
 
 	///////////////////////////////////////////////////////////////
 	// 기본 카메라 세팅..

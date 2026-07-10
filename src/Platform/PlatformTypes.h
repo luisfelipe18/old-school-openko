@@ -66,6 +66,11 @@ using HINSTANCE = HINSTANCE__*;
 using HDC   = void*;
 using HFONT = void*;
 
+// Win32 cursor handle held (but not dereferenced) by the game-procedure and
+// cursor layers until the SDL cursor path lands. Kept as an opaque pointer so
+// the legacy signatures still typecheck on POSIX.
+using HCURSOR = void*;
+
 // GetDeviceCaps index used by DFont; only LOGPIXELSY is referenced.
 #ifndef LOGPIXELSY
 #define LOGPIXELSY 90
@@ -83,6 +88,16 @@ inline int MulDiv(int nNumber, int nNumerator, int nDenominator)
 		return -1;
 	return static_cast<int>(
 		(static_cast<long long>(nNumber) * nNumerator + nDenominator / 2) / nDenominator);
+}
+
+// Win32 LANGID used to pick the language-suffixed .tbl files. POSIX builds
+// default to US English (0x0409); the Taiwan path (0x0404) is Windows-only.
+#ifndef LANG_ENGLISH_US
+#define LANG_ENGLISH_US 0x0409
+#endif
+inline WORD GetUserDefaultLangID()
+{
+	return LANG_ENGLISH_US;
 }
 
 struct POINT

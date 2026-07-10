@@ -313,7 +313,11 @@ else()
     ClientResourceFormatter.h
     CursorDecoder.cpp
     CursorDecoder.h
+    GameBase.cpp
+    GameBase.h
     GameDef.h
+    GameEng.cpp
+    GameEng.h
     GameOptions.cpp
     GameOptions.h
     GLLoader.cpp
