@@ -11,14 +11,18 @@
 
 #include "N3SndMgr.h"
 #include "N3SndObj.h"
+#ifdef _WIN32
 #include <imm.h>
+#endif
 
 constexpr float CARET_FLICKERING_TIME = 0.4f;
 
+#ifdef _WIN32
 //HWND CN3UIEdit::s_hWndParent = nullptr;
 HWND CN3UIEdit::s_hWndEdit            = nullptr;
 HWND CN3UIEdit::s_hWndParent          = nullptr;
 WNDPROC CN3UIEdit::s_lpfnEditProc     = nullptr;
+#endif
 char CN3UIEdit::s_szBuffTmp[512]      = "";
 
 //////////////////////////////////////////////////////////////////////
@@ -63,7 +67,7 @@ void CN3UIEdit::CN3Caret::SetColor(D3DCOLOR color)
 	m_pVB[0].color = color;
 	m_pVB[1].color = color;
 }
-void CN3UIEdit::CN3Caret::Render(LPDIRECT3DDEVICE9 lpD3DDev)
+void CN3UIEdit::CN3Caret::Render(LPDIRECT3DDEVICE9 /*lpD3DDev*/)
 {
 	if (FALSE == m_bVisible)
 		return;
@@ -78,12 +82,11 @@ void CN3UIEdit::CN3Caret::Render(LPDIRECT3DDEVICE9 lpD3DDev)
 	if (!m_bFlickerStatus)
 		return;
 
-	__ASSERT(lpD3DDev, "DIRECT3DDEVICE8 is null");
-	lpD3DDev->SetTexture(0, nullptr);
-	//	lpD3DDev->SetTextureStageState( 0, D3DTSS_COLOROP,    D3DTOP_SELECTARG1 );
-	//	lpD3DDev->SetTextureStageState( 0, D3DTSS_COLORARG1,  D3DTA_DIFFUSE );
-	lpD3DDev->SetFVF(FVF_TRANSFORMEDCOLOR);
-	lpD3DDev->DrawPrimitiveUP(D3DPT_LINELIST, 1, m_pVB, sizeof(m_pVB[0]));
+	// Draw through the RHI (byte-identical on Windows via the D3D9 forwarder;
+	// the raw s_lpD3DDev is null on POSIX where only the RHI backend exists).
+	CN3Base::RHIDevice()->SetTexture(0, nullptr);
+	CN3Base::RHIDevice()->SetFVF(FVF_TRANSFORMEDCOLOR);
+	CN3Base::RHIDevice()->DrawPrimitiveUP(D3DPT_LINELIST, 1, m_pVB, sizeof(m_pVB[0]));
 }
 void CN3UIEdit::CN3Caret::InitFlckering()
 {
@@ -95,6 +98,7 @@ void CN3UIEdit::CN3Caret::InitFlckering()
 // CN3UIEdit
 //////////////////////////////////////////////////////////////////////
 
+#ifdef _WIN32
 BOOL CN3UIEdit::CreateEditWindow(HWND hParent, RECT rect)
 {
 	if (nullptr == hParent)
@@ -186,6 +190,7 @@ LRESULT APIENTRY CN3UIEdit::EditWndProc(HWND hWnd, uint16_t Message, WPARAM wPar
 
 	return CallWindowProc(s_lpfnEditProc, hWnd, Message, wParam, lParam);
 }
+#endif // _WIN32
 
 CN3UIEdit::CN3Caret CN3UIEdit::s_Caret;
 
@@ -245,11 +250,13 @@ void CN3UIEdit::KillFocus()
 		s_pFocusedEdit     = nullptr;
 		s_Caret.m_bVisible = FALSE;
 
+#ifdef _WIN32
 		if (s_hWndEdit)
 		{
 			::SetWindowText(s_hWndEdit, "");
 			::SetFocus(s_hWndParent);
 		}
+#endif
 	}
 }
 
@@ -269,6 +276,7 @@ bool CN3UIEdit::SetFocus()
 
 	s_Caret.m_bVisible = TRUE;
 	s_Caret.InitFlckering();
+#ifdef _WIN32
 	CN3UIEdit::UpdateCaretPosFromEditCtrl(); // 캐럿 포지션 설정
 
 	if (s_hWndEdit)
@@ -294,6 +302,7 @@ bool CN3UIEdit::SetFocus()
 				::SetWindowText(s_hWndEdit, "");
 		}
 	}
+#endif // _WIN32
 
 	return true;
 }
@@ -560,6 +569,7 @@ std::string CN3UIEdit::GetSndFName_Typing() const
 }
 #endif
 
+#ifdef _WIN32
 void CN3UIEdit::UpdateTextFromEditCtrl()
 {
 	if (nullptr == s_pFocusedEdit || nullptr == s_hWndEdit)
@@ -612,6 +622,7 @@ void CN3UIEdit::SetImeStatus(POINT ptPos, bool bOpen)
 	}
 #endif
 }
+#endif // _WIN32
 
 /*
 ///////////////////////////////////////////////////////////////////////////////////////////////////////

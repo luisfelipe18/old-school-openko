@@ -71,6 +71,8 @@ set(N3BASE_POSIX_UI_SOURCES
   N3UIButton.cpp
   N3UIButton.h
   N3UIDef.h
+  N3UIEdit.cpp
+  N3UIEdit.h
   N3UIList.cpp
   N3UIList.h
   N3UIProgress.cpp
