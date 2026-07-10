@@ -21,6 +21,11 @@
 using BOOL     = int;
 using INT      = int;
 using BYTE     = uint8_t;
+// Win32 defines a global `byte` (unsigned char, from rpcndr.h) that legacy
+// signatures use; mirror it so those headers parse. Kept distinct from
+// std::byte, exactly as on Windows (code here never does `using namespace std`
+// at global scope, so there is no ambiguity).
+using byte     = unsigned char;
 using WORD     = uint16_t;
 using DWORD    = uint32_t;
 using UINT     = uint32_t;
@@ -99,6 +104,32 @@ inline int MulDiv(int nNumber, int nNumerator, int nDenominator)
 inline WORD GetUserDefaultLangID()
 {
 	return LANG_ENGLISH_US;
+}
+
+// Win32 MessageBox style flags, reused by the game's own UI message box as its
+// style enum. Values match winuser.h.
+#ifndef MB_OK
+#define MB_OK          0x00000000
+#define MB_OKCANCEL    0x00000001
+#define MB_YESNOCANCEL 0x00000003
+#define MB_YESNO       0x00000004
+#endif
+
+// Win32 PostQuitMessage shim. There is no Win32 message loop on POSIX; instead
+// the request is recorded in a process-global flag that the SDL entry point
+// polls to break its loop. PlatformQuitRequested() is the query side.
+inline bool& PlatformQuitFlag()
+{
+	static bool bQuit = false;
+	return bQuit;
+}
+inline void PostQuitMessage(int /*nExitCode*/)
+{
+	PlatformQuitFlag() = true;
+}
+inline bool PlatformQuitRequested()
+{
+	return PlatformQuitFlag();
 }
 
 struct POINT

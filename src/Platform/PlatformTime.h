@@ -6,6 +6,16 @@
 #include <chrono>
 #include <cstdint>
 
+#ifndef _WIN32
+#include <thread>
+
+// Win32 Sleep() shim: block the current thread for the given milliseconds.
+inline void Sleep(uint32_t dwMilliseconds)
+{
+	std::this_thread::sleep_for(std::chrono::milliseconds(dwMilliseconds));
+}
+#endif
+
 // Header-only on purpose: the MSBuild (Windows) projects pick these up with
 // no extra library to link, and the CMake targets get them the same way.
 
