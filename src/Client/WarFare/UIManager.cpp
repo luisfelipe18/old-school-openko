@@ -211,7 +211,7 @@ void CUIManager::Render()
 	every game procedure which is somewhat unwanted right now...
 	*/
 	////////////////////////////////////////////////////////
-#ifdef _DEBUG
+#if defined(_DEBUG) && defined(_WIN32)
 	if (m_pDFont == nullptr)
 	{
 		m_pDFont = new CDFont("굴림", 10);
@@ -261,7 +261,7 @@ void CUIManager::Render()
 
 void CUIManager::RenderStateSet()
 {
-	if (nullptr == s_lpD3DDev)
+	if (nullptr == RHIDevice())
 		return;
 
 #ifdef _DEBUG
