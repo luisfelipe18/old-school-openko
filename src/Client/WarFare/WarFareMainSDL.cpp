@@ -252,6 +252,28 @@ int main(int argc, char* argv[])
 	// files, hence the opt-in flag.
 	if (bLoginScene)
 	{
+		// StaticMemberInit loads the game's data tables and UI from the working
+		// directory (the base path is set to the CWD in LoadGameOptions). If the
+		// game data isn't there it fails deep inside with exit(-1); surface a
+		// clear reason up front so a missing-data run isn't a silent exit.
+		const std::filesystem::path dataDir =
+			std::filesystem::path(CN3Base::PathGet()) / "Data";
+		std::error_code ec;
+		if (!std::filesystem::exists(dataDir, ec))
+		{
+			spdlog::error(
+				"--scene login: game data not found at '{}'. Run KnightOnLine from a "
+				"directory that contains the Knight Online client data (Data/, UI/, ...).",
+				dataDir.string());
+			CN3Base::RHIDeviceSet(nullptr);
+			pRHIDevice.reset();
+			if (g_pCursor != nullptr)
+				SDL_DestroyCursor(g_pCursor);
+			SDL_DestroyWindow(g_pWindow);
+			SDL_Quit();
+			return -1;
+		}
+
 		CGameProcedure::StaticMemberInit(nullptr, nullptr);
 		CGameProcedure::ProcActiveSet(CGameProcedure::s_pProcLogIn);
 		spdlog::info("login scene: CGameProcedure brought up");
