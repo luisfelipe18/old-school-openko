@@ -490,6 +490,15 @@ sobre RHI" se alcanza al completar la migración por módulos.
       sockets al salir. `DFont` provisional: stub que no dibuja texto (el
       real llega en F7). *Aceptación:* **pantalla de login renderizando en
       macOS** (sin texto es aceptable para el hito).
+      *(En progreso — incrementos base ya integrados y verdes en Linux:*
+      *(1) stub POSIX de `DFont` que no dibuja texto + shims GDI, con test*
+      *`DFontStub_test` que fija el contrato del stub; (2) framework `N3UI*`*
+      *de N3Base — `N3UIArea/Base/Button/List/Progress/ScrollBar/Static/`*
+      *`String/Tooltip/TrackBar`, menos `N3UIEdit` — dentro del subset POSIX*
+      *con sus gates `#ifdef _WIN32`. Falta el incremento grande: reducir*
+      *`GameProcedure::StaticMemberInit` a solo el proc de login, portar*
+      *`GameProcLogIn`/`UILogin` + adaptar `GameEng`, y cablear el main SDL*
+      *a `TickActive`/`RenderActive` para alcanzar el hito de login.)*
 
 **Aceptación de fase:** hito C — login visible en macOS con backend GL;
 CI verde en las 3 plataformas; el subset POSIX incluye terreno/UI base.
