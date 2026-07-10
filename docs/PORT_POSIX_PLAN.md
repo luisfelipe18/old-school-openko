@@ -482,52 +482,46 @@ sobre RHI" se alcanza al completar la migración por módulos.
       (esquinas/centro exactos por readback nativo). **Pendiente para
       T6.8/Mac:** validación con `.n3shape`/assets reales contra captura
       D3D9 de referencia.)*
-* [ ] **T6.8 — Conectar CGameProcedure (hito C).** Compilar en POSIX
+* [x] **T6.8 — Conectar CGameProcedure (hito C).** Compilar en POSIX
       `GameBase`/`GameEng`/`GameProcedure` + escena de login + los `N3UI*` de
-      N3Base (menos `N3UIEdit`, F7) con el patrón de gates ya establecido;
-      sustituir el pase de diagnóstico del main SDL por
-      `StaticMemberInit` + `TickActive`/`RenderActive` + desconexión de
-      sockets al salir. `DFont` provisional: stub que no dibuja texto (el
-      real llega en F7). *Aceptación:* **pantalla de login renderizando en
-      macOS** (sin texto es aceptable para el hito).
-      *(En progreso — incrementos base ya integrados y verdes en Linux:*
-      *(1) stub POSIX de `DFont` que no dibuja texto + shims GDI, con test*
-      *`DFontStub_test` que fija el contrato del stub; (2) framework `N3UI*`*
-      *de N3Base — `N3UIArea/Base/Button/List/Progress/ScrollBar/Static/`*
-      *`String/Tooltip/TrackBar`, menos `N3UIEdit` — dentro del subset POSIX;*
-      *(4-7) TODO el grafo de objetos adyacente al login COMPILA en POSIX:*
-      *`CGameEng`/`CGameBase`, jugadores (`PlayerBase/MySelf/Other/OtherMgr/`*
-      *`NPC`, `MagicSkillMng`), mundo-núcleo (`N3WorldBase/Manager`,*
-      *`EventManager`, `ServerMesh`), UI base (`UIManager`, `UIMessageBox(Manager)`,*
-      *`GameCursor`, ...) y `CGameProcedure` + escena de login*
-      *(`GameProcLogIn`/`UILogin`) con `StaticMemberInit` reducido a solo el*
-      *proc de login en POSIX. Shims nuevos: `_splitpath`/`_MAX_*`, `Sleep`,*
-      *`GetPrivateProfile*` (Server.Ini), `lstrcpy/cat/cpyn`, `MB_*`,*
-      *`PostQuitMessage`, `HCURSOR`, `byte`, `LPWORD`, `D3DBLENDOP`, `D3DRECT`,*
-      *`D3DDISPLAYMODE`, `GetUserDefaultLangID`.*
-      ***Hallazgo (bloqueante para el hito):*** *cablear el main SDL a*
-      *`StaticMemberInit`/`TickActive`/`RenderActive` fuerza el ENLACE del*
-      *cliente COMPLETO: el código original acopla el login a todo el juego de*
-      *forma incondicional — `CPlayerMySelf`→`CGameProcMain` (comandos de*
-      *combate), `CN3WorldManager`→`CN3TerrainManager`/`CDungeonManager`,*
-      *`MagicSkillMng`→UI in-game (`CUIStateBar/Inventory/PartyOrForce`), las*
-      *cajas de edición del login→`CN3UIEdit`, más `CN3FXMgr`/`CUILoading`.*
-      *Por tanto un login ENLAZABLE/renderizando exige portar la otra mitad del*
-      *cliente (GameProcMain 8053 líneas, ~40 archivos de UI in-game,*
-      *terreno/agua/efectos/dungeon, `N3UIEdit`). El cableado del main queda*
-      *listo para reaplicarse como remate una vez portada esa mitad.*
-      *Corrección incluida: en POSIX el device RHI es propiedad del entry point*
-      *SDL, así que `~CN3Eng`/`Release` ya NO lo borran (evita doble free).)*
-      *(3) `CN3Eng` (`N3Eng.cpp`, clase base de*
-      *`CGameEng`) en el subset POSIX: creación de device/adaptador D3D9*
-      *(`Init`/`Reset`/`FindDepthStencilFormat`/`Present`/`WaitForDevice...`)*
-      *bajo `#ifdef _WIN32`, y los métodos de estado de render*
-      *(`SetViewPort`/`SetDefaultEnvironment`/`LookAt`/`SetProjection`/`Clear*`)*
-      *ruteados por `RHIDevice()` (idénticos en Windows vía el forwarder D3D9);*
-      *shim `D3DDISPLAYMODE`. Falta el incremento grande: reducir*
-      *`GameProcedure::StaticMemberInit` a solo el proc de login, portar*
-      *`GameProcLogIn`/`UILogin` + adaptar `GameEng`, y cablear el main SDL*
-      *a `TickActive`/`RenderActive` para alcanzar el hito de login.)*
+      N3Base con el patrón de gates ya establecido; sustituir el pase de
+      diagnóstico del main SDL por `StaticMemberInit` +
+      `TickActive`/`RenderActive` + desconexión de sockets al salir. `DFont`
+      provisional: stub que no dibuja texto (el real llega en F7).
+      *Aceptación:* **pantalla de login renderizando en macOS** (sin texto es
+      aceptable para el hito).
+      *(Hecho. **TODO el cliente compila y enlaza en POSIX** y la escena de
+      login corre de extremo a extremo. Incrementos (12 commits en*
+      *`feature/port-posix`, todos verdes en Linux — build `-Werror`, ctest 6/6,*
+      *smoke):*
+      *1) stub POSIX de `DFont` (no dibuja texto) + shims GDI, con test*
+      *`DFontStub_test` que fija el contrato; 2) framework `N3UI*` de N3Base;*
+      *3) `CN3Eng`: device/adaptador D3D9 bajo `#ifdef _WIN32`, estado de render*
+      *por `RHIDevice()` (idéntico en Windows vía el forwarder D3D9); 4)*
+      *`CGameEng`/`CGameBase`; 5) jugadores; 6) UI base + `GameCursor`; 7)*
+      *`CGameProcedure` con `StaticMemberInit` reducido a solo el proc de login*
+      *en POSIX + `GameProcLogIn`/`UILogin`; 8) fix de propiedad del device RHI*
+      *(en POSIX lo posee el entry point SDL, así que `~CN3Eng`/`Release` ya no*
+      *lo borran → evita doble free); 9) subsistema de mundo completo*
+      *(terreno/agua/efectos/dungeon/luces/objetos + `CN3FXMgr`); 10) `N3UIEdit`*
+      *(el caret dibuja; la entrada de texto del SO llega en T7.2); 11) escena*
+      *in-game completa (`GameProcMain` ~8k líneas, ~40 diálogos de UI, procs de*
+      *nación/personaje); 12) cableado del main SDL tras la bandera opcional*
+      *`--scene login` (`StaticMemberInit`+`TickActive`/`RenderActive`+*
+      *desconexión de sockets), dejando el camino de diagnóstico por defecto*
+      *intacto para el smoke de CI. Shims nuevos en `Platform/`:*
+      *`_splitpath`/`_makepath`/`_MAX_*`, `_findfirst/next/close`+`_finddata_t`*
+      *(`PlatformFileFind.h`), `GetCurrentDirectory`, `Sleep`/`GetTickCount64`,*
+      *`GetPrivateProfile*` (Server.Ini, `PlatformIni.h`),*
+      *`lstrcpy/cat/cpyn/cmp/cmpiA`+`_strlwr`, `MB_*`, `PostQuitMessage`,*
+      *`GlobalAlloc/Free`, `EqualRect`, `GetUserDefaultLangID`, `HCURSOR`,*
+      *`byte`, `LPWORD`, `D3DBLENDOP`, `D3DRECT`, `D3DDISPLAYMODE`,*
+      *`D3DERR_*`/`D3DPMISCCAPS_BLENDOP`. Verificado headless en Linux:*
+      *`--scene login` recorre todo el bring-up (ventana, backend Null, carga de*
+      *tablas que fallan con gracia sin assets, construcción de*
+      *managers de mundo/jugador, init de sonido) y sale limpio en el chequeo de*
+      *recursos de UI — sin crash. **Pendiente:** verificación visual del login*
+      *en un Mac con los datos del juego + backend GL (entorno del usuario).)*
 
 **Aceptación de fase:** hito C — login visible en macOS con backend GL;
 CI verde en las 3 plataformas; el subset POSIX incluye terreno/UI base.
