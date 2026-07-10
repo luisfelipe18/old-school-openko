@@ -12,8 +12,11 @@
 // clean shutdown.
 
 #include "StdAfx.h"
+#include "APISocket.h"
 #include "CursorDecoder.h"
 #include "GameOptions.h"
+#include "GameProcedure.h"
+#include "GameProcLogIn.h"
 #include "LocalInput.h"
 #include "LocalInputSDL.h"
 #include "RHIDeviceGL.h"
@@ -138,6 +141,7 @@ int main(int argc, char* argv[])
 	// T6.6/T6.7): gradient background, spinning triangle, lit textured quad.
 	long smokeFrames             = -1;
 	bool bTestScene              = false;
+	bool bLoginScene             = false;
 	std::string rendererOverride;
 	std::string dumpFramePath;
 	for (int i = 1; i < argc; ++i)
@@ -150,6 +154,12 @@ int main(int argc, char* argv[])
 			bTestScene = true;
 		else if (std::strcmp(argv[i], "--dump-frame") == 0 && i + 1 < argc)
 			dumpFramePath = argv[i + 1];
+		// --scene login brings up the real game procedure (login screen). It
+		// needs the game data files present, so it stays opt-in; the default
+		// diagnostics path is what CI smoke exercises.
+		else if (std::strcmp(argv[i], "--scene") == 0 && i + 1 < argc
+			&& std::strcmp(argv[i + 1], "login") == 0)
+			bLoginScene = true;
 	}
 
 	LoadGameOptions();
@@ -236,7 +246,16 @@ int main(int argc, char* argv[])
 		CN3Base::s_Options.iViewHeight,
 		CN3Base::s_Options.bWindowMode ? "windowed" : "fullscreen");
 
-	// TODO(F5/F6): CGameProcedure::StaticMemberInit + ProcActiveSet(s_pProcLogIn)
+	// The real game procedure (login milestone, docs/PORT_POSIX_PLAN.md T6.8).
+	// StaticMemberInit builds the engine/tables/UI and the login procedure over
+	// the RHI device the entry point already installed; it needs the game data
+	// files, hence the opt-in flag.
+	if (bLoginScene)
+	{
+		CGameProcedure::StaticMemberInit(nullptr, nullptr);
+		CGameProcedure::ProcActiveSet(CGameProcedure::s_pProcLogIn);
+		spdlog::info("login scene: CGameProcedure brought up");
+	}
 
 	long frame = 0;
 	while (!g_bQuitRequested)
@@ -251,7 +270,8 @@ int main(int argc, char* argv[])
 			break;
 
 		localInput.Tick();
-		LogInputDiagnostics(localInput);
+		if (!bLoginScene)
+			LogInputDiagnostics(localInput);
 
 		// Alt+Enter (Option+Enter or Cmd+Enter on macOS) toggles
 		// windowed/fullscreen (ChangeDisplaySettings equivalent).
@@ -267,19 +287,30 @@ int main(int argc, char* argv[])
 		if (localInput.IsKeyPressed(DIK_ESCAPE))
 			g_bQuitRequested = true;
 
-		// TODO(F6.8): CGameProcedure::TickActive() + RenderActive() replace the
-		// diagnostics below; the RHI frame sequence already runs here. The
-		// clear colour is a dim blue so the GL backend is visibly not-black.
-		pRHIDevice->BeginScene();
-		pRHIDevice->Clear(D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, 0xFF102040, 1.0f, 0);
-		if (bTestScene)
+		if (bLoginScene)
 		{
-			int pixelW = 0, pixelH = 0;
-			SDL_GetWindowSizeInPixels(g_pWindow, &pixelW, &pixelH);
-			TestSceneTick(pRHIDevice.get(), static_cast<float>(frame) * 0.02f, pixelW, pixelH);
+			// The active procedure (login) drives the whole frame: it clears,
+			// renders its UI through the RHI, and presents via CN3Eng.
+			CGameProcedure::TickActive();
+			CGameProcedure::RenderActive();
+			if (PlatformQuitRequested()) // BEHAVIOR_EXIT / PostQuitMessage
+				g_bQuitRequested = true;
 		}
-		pRHIDevice->EndScene();
-		pRHIDevice->Present();
+		else
+		{
+			// Diagnostics frame: the RHI sequence runs with a dim-blue clear so
+			// the GL backend is visibly not-black.
+			pRHIDevice->BeginScene();
+			pRHIDevice->Clear(D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, 0xFF102040, 1.0f, 0);
+			if (bTestScene)
+			{
+				int pixelW = 0, pixelH = 0;
+				SDL_GetWindowSizeInPixels(g_pWindow, &pixelW, &pixelH);
+				TestSceneTick(pRHIDevice.get(), static_cast<float>(frame) * 0.02f, pixelW, pixelH);
+			}
+			pRHIDevice->EndScene();
+			pRHIDevice->Present();
+		}
 
 		SDL_Delay(g_bWindowInFocus ? 10 : 50);
 
@@ -291,8 +322,19 @@ int main(int argc, char* argv[])
 		}
 	}
 
-	// Clean shutdown (the WndProc used to disconnect the game sockets here;
-	// that returns with CGameProcedure in the render phases).
+	// Clean shutdown: disconnect the game sockets and tear the procedure down
+	// (mirrors the Win32 WndProc close path) before the RHI/window go away. The
+	// engine's RHI pointer is owned here, so StaticMemberRelease must run while
+	// the device is still alive.
+	if (bLoginScene)
+	{
+		if (CGameProcedure::s_pSocket != nullptr)
+			CGameProcedure::s_pSocket->Disconnect();
+		if (CGameProcedure::s_pSocketSub != nullptr)
+			CGameProcedure::s_pSocketSub->Disconnect();
+		CGameProcedure::StaticMemberRelease();
+	}
+
 	if (auto* pNull = dynamic_cast<RHIDeviceNull*>(pRHIDevice.get()))
 		spdlog::info("frames presented through the RHI: {}", pNull->PresentCount());
 
