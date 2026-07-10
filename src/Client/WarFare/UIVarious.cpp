@@ -998,7 +998,7 @@ void CUIKnights::UpdateKnightsGrade(int iVal)
 			m_pImage_Grade[iVal - 1]->SetVisible(true);
 }
 
-void CUIKnights::UpdateKnightsRank(int iVal)
+void CUIKnights::UpdateKnightsRank(int /*iVal*/)
 {
 	// TODO: @Demircivi.
 }

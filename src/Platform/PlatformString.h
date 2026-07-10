@@ -31,6 +31,18 @@ inline int lstrcmpA(const char* lhs, const char* rhs)
 	return strcmp(lhs, rhs);
 }
 
+// Win32 lstrcmp (ANSI build): case-sensitive string compare.
+inline int lstrcmp(const char* lhs, const char* rhs)
+{
+	return strcmp(lhs, rhs);
+}
+
+// Win32 lstrcmpiA: case-insensitive string compare.
+inline int lstrcmpiA(const char* lhs, const char* rhs)
+{
+	return strcasecmp(lhs, rhs);
+}
+
 // Win32 _strlwr: in-place ASCII lowercasing of a C string, returning it. Only
 // 'A'..'Z' are touched, matching StrLowerAscii's UTF-8-safe behavior.
 inline char* _strlwr(char* str)

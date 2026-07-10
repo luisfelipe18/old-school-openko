@@ -73,7 +73,13 @@
 
 #include <N3Base/N3UIButton.h>
 
+#ifdef _WIN32
 #include <io.h>
+#else
+#include <Platform/PlatformFileFind.h> // _findfirst/_findnext/_findclose
+#include <Platform/PlatformPaths.h>    // GetCurrentDirectory / SetCurrentDirectory
+#include <Platform/PlatformString.h>   // lstrcpy / lstrcat
+#endif
 
 std::string g_szCmdMsg[CMD_COUNT]; // 게임상 명령어
 
@@ -7925,9 +7931,13 @@ bool CGameProcMain::OnMouseRbtnDown(POINT ptCur, POINT ptPrev)
 	{
 		SetGameCursor(nullptr);
 
+#ifdef _WIN32
+		// Warp the OS cursor back so mouse-look doesn't drift it off-window.
+		// The SDL relative-mouse path handles this on POSIX.
 		POINT ptScreen = ptPrev;
 		::ClientToScreen(s_hWndBase, &ptScreen);
 		::SetCursorPos(ptScreen.x, ptScreen.y);
+#endif
 		s_pLocalInput->MouseSetPos(ptPrev.x, ptPrev.y);
 	}
 

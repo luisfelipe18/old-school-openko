@@ -3,6 +3,9 @@
 //////////////////////////////////////////////////////////////////////
 
 #include "StdAfx.h"
+#ifndef _WIN32
+#include <Platform/PlatformPaths.h> // _splitpath / _MAX_*
+#endif
 #include "GameProcCharacterSelect.h"
 #include "GameProcedure.h"
 #include "text_resources.h"
@@ -63,7 +66,9 @@ CGameProcCharacterSelect::~CGameProcCharacterSelect()
 	delete m_pActiveBg;
 	delete m_pUICharacterSelect;
 
-	::ShowCursor(TRUE);
+#ifdef _WIN32
+	::ShowCursor(TRUE); // SDL owns OS-cursor visibility on POSIX
+#endif
 }
 
 void CGameProcCharacterSelect::Release()
@@ -90,7 +95,9 @@ void CGameProcCharacterSelect::Release()
 	m_pUICharacterSelect = nullptr;
 	CN3Base::s_SndMgr.ReleaseObj(&m_pSnd_Rotate);
 
-	::ShowCursor(TRUE);
+#ifdef _WIN32
+	::ShowCursor(TRUE); // SDL owns OS-cursor visibility on POSIX
+#endif
 }
 
 void CGameProcCharacterSelect::Init()

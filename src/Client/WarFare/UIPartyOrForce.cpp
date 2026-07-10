@@ -3,6 +3,9 @@
 //////////////////////////////////////////////////////////////////////
 
 #include "StdAfx.h"
+#ifndef _WIN32
+#include <Platform/PlatformTime.h> // GetTickCount64
+#endif
 #include "UIPartyOrForce.h"
 #include "UIManager.h"
 #include "GameProcMain.h"

@@ -129,6 +129,20 @@ inline int SetCurrentDirectory(const char* szPath)
 	std::filesystem::current_path(szPath, ec);
 	return ec ? 0 : 1;
 }
+
+/// Win32 GetCurrentDirectory shim: writes the working directory into szBuffer.
+/// Returns the length written (excluding the null), or 0 on failure.
+inline unsigned long GetCurrentDirectory(unsigned long nBufferLength, char* szBuffer)
+{
+	if (szBuffer == nullptr || nBufferLength == 0)
+		return 0;
+	std::error_code ec;
+	const std::string cwd = std::filesystem::current_path(ec).string();
+	if (ec || cwd.size() >= nBufferLength)
+		return 0;
+	std::strcpy(szBuffer, cwd.c_str());
+	return static_cast<unsigned long>(cwd.size());
+}
 #endif
 
 #endif // PLATFORM_PLATFORMPATHS_H

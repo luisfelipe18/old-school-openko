@@ -76,8 +76,10 @@ bool CUIKnightsOperation::ReceiveMessage(CN3UIBase* pSender, uint32_t dwMsg)
 {
 	if (dwMsg == UIMSG_BUTTON_CLICK)
 	{
-		POINT pt;
+#ifdef _WIN32
+		POINT pt; // unused; kept only to preserve the original Windows code
 		::GetCursorPos(&pt);
+#endif
 
 		if (pSender == m_pBtn_Up)
 		{
