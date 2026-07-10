@@ -59,10 +59,13 @@ CN3Eng::~CN3Eng()
 	CN3Base::ReleaseResrc();
 	delete[] m_DeviceInfo.pModes;
 
+#ifdef _WIN32
+	// On Windows CN3Eng::Init created the RHI backend (RHIDeviceD3D9) over the
+	// D3D device it owns, so it releases both here. On POSIX the RHI device is
+	// created and owned by the SDL entry point, so CN3Eng must not touch it.
 	delete s_pRHIDev;
 	RHIDeviceSet(nullptr);
 
-#ifdef _WIN32
 	if (s_lpD3DDev)
 	{
 		int nRefCount = s_lpD3DDev->Release();
@@ -95,10 +98,11 @@ void CN3Eng::Release()
 	delete[] m_DeviceInfo.pModes;
 	memset(&m_DeviceInfo, 0, sizeof(m_DeviceInfo));
 
+#ifdef _WIN32
+	// See ~CN3Eng: the RHI device is CN3Eng-owned on Windows, SDL-owned on POSIX.
 	delete s_pRHIDev;
 	RHIDeviceSet(nullptr);
 
-#ifdef _WIN32
 	if (s_lpD3DDev)
 	{
 		int nRefCount = s_lpD3DDev->Release();

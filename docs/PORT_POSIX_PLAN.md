@@ -494,8 +494,31 @@ sobre RHI" se alcanza al completar la migración por módulos.
       *(1) stub POSIX de `DFont` que no dibuja texto + shims GDI, con test*
       *`DFontStub_test` que fija el contrato del stub; (2) framework `N3UI*`*
       *de N3Base — `N3UIArea/Base/Button/List/Progress/ScrollBar/Static/`*
-      *`String/Tooltip/TrackBar`, menos `N3UIEdit` — dentro del subset POSIX*
-      *con sus gates `#ifdef _WIN32`; (3) `CN3Eng` (`N3Eng.cpp`, clase base de*
+      *`String/Tooltip/TrackBar`, menos `N3UIEdit` — dentro del subset POSIX;*
+      *(4-7) TODO el grafo de objetos adyacente al login COMPILA en POSIX:*
+      *`CGameEng`/`CGameBase`, jugadores (`PlayerBase/MySelf/Other/OtherMgr/`*
+      *`NPC`, `MagicSkillMng`), mundo-núcleo (`N3WorldBase/Manager`,*
+      *`EventManager`, `ServerMesh`), UI base (`UIManager`, `UIMessageBox(Manager)`,*
+      *`GameCursor`, ...) y `CGameProcedure` + escena de login*
+      *(`GameProcLogIn`/`UILogin`) con `StaticMemberInit` reducido a solo el*
+      *proc de login en POSIX. Shims nuevos: `_splitpath`/`_MAX_*`, `Sleep`,*
+      *`GetPrivateProfile*` (Server.Ini), `lstrcpy/cat/cpyn`, `MB_*`,*
+      *`PostQuitMessage`, `HCURSOR`, `byte`, `LPWORD`, `D3DBLENDOP`, `D3DRECT`,*
+      *`D3DDISPLAYMODE`, `GetUserDefaultLangID`.*
+      ***Hallazgo (bloqueante para el hito):*** *cablear el main SDL a*
+      *`StaticMemberInit`/`TickActive`/`RenderActive` fuerza el ENLACE del*
+      *cliente COMPLETO: el código original acopla el login a todo el juego de*
+      *forma incondicional — `CPlayerMySelf`→`CGameProcMain` (comandos de*
+      *combate), `CN3WorldManager`→`CN3TerrainManager`/`CDungeonManager`,*
+      *`MagicSkillMng`→UI in-game (`CUIStateBar/Inventory/PartyOrForce`), las*
+      *cajas de edición del login→`CN3UIEdit`, más `CN3FXMgr`/`CUILoading`.*
+      *Por tanto un login ENLAZABLE/renderizando exige portar la otra mitad del*
+      *cliente (GameProcMain 8053 líneas, ~40 archivos de UI in-game,*
+      *terreno/agua/efectos/dungeon, `N3UIEdit`). El cableado del main queda*
+      *listo para reaplicarse como remate una vez portada esa mitad.*
+      *Corrección incluida: en POSIX el device RHI es propiedad del entry point*
+      *SDL, así que `~CN3Eng`/`Release` ya NO lo borran (evita doble free).)*
+      *(3) `CN3Eng` (`N3Eng.cpp`, clase base de*
       *`CGameEng`) en el subset POSIX: creación de device/adaptador D3D9*
       *(`Init`/`Reset`/`FindDepthStencilFormat`/`Present`/`WaitForDevice...`)*
       *bajo `#ifdef _WIN32`, y los métodos de estado de render*
