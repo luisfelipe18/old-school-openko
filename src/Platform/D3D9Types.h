@@ -233,6 +233,14 @@ typedef enum _D3DDEVTYPE
 	D3DDEVTYPE_FORCE_DWORD = 0x7fffffff
 } D3DDEVTYPE;
 
+typedef struct _D3DDISPLAYMODE
+{
+	UINT Width;
+	UINT Height;
+	UINT RefreshRate;
+	D3DFORMAT Format;
+} D3DDISPLAYMODE;
+
 typedef struct _D3DPRESENT_PARAMETERS_
 {
 	UINT BackBufferWidth;

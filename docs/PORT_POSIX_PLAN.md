@@ -495,7 +495,13 @@ sobre RHI" se alcanza al completar la migración por módulos.
       *`DFontStub_test` que fija el contrato del stub; (2) framework `N3UI*`*
       *de N3Base — `N3UIArea/Base/Button/List/Progress/ScrollBar/Static/`*
       *`String/Tooltip/TrackBar`, menos `N3UIEdit` — dentro del subset POSIX*
-      *con sus gates `#ifdef _WIN32`. Falta el incremento grande: reducir*
+      *con sus gates `#ifdef _WIN32`; (3) `CN3Eng` (`N3Eng.cpp`, clase base de*
+      *`CGameEng`) en el subset POSIX: creación de device/adaptador D3D9*
+      *(`Init`/`Reset`/`FindDepthStencilFormat`/`Present`/`WaitForDevice...`)*
+      *bajo `#ifdef _WIN32`, y los métodos de estado de render*
+      *(`SetViewPort`/`SetDefaultEnvironment`/`LookAt`/`SetProjection`/`Clear*`)*
+      *ruteados por `RHIDevice()` (idénticos en Windows vía el forwarder D3D9);*
+      *shim `D3DDISPLAYMODE`. Falta el incremento grande: reducir*
       *`GameProcedure::StaticMemberInit` a solo el proc de login, portar*
       *`GameProcLogIn`/`UILogin` + adaptar `GameEng`, y cablear el main SDL*
       *a `TickActive`/`RenderActive` para alcanzar el hito de login.)*

@@ -1,6 +1,8 @@
 ﻿#include "StdAfxBase.h"
 #include "N3Eng.h"
+#ifdef _WIN32
 #include "RHI/RHIDeviceD3D9.h"
+#endif
 #include "N3Light.h"
 #include "LogWriter.h"
 
@@ -22,6 +24,7 @@ CN3Eng::CN3Eng()
 	CLogWriter::Open("Log.txt");
 #endif
 
+#ifdef _WIN32
 	m_lpD3D = Direct3DCreate9(D3D_SDK_VERSION);
 	if (m_lpD3D == nullptr)
 	{
@@ -42,6 +45,11 @@ CN3Eng::CN3Eng()
 		newPath             += szDir;
 		PathSet(newPath); // 경로 설정..
 	}
+#else
+	// POSIX (docs/PORT_POSIX_PLAN.md, T6.8): the window/context and the RHI
+	// backend (Null/GL) are created by the SDL entry point, not here. The base
+	// run path is set by WarFareMainSDL before the engine is constructed.
+#endif
 }
 
 CN3Eng::~CN3Eng()
@@ -54,6 +62,7 @@ CN3Eng::~CN3Eng()
 	delete s_pRHIDev;
 	RHIDeviceSet(nullptr);
 
+#ifdef _WIN32
 	if (s_lpD3DDev)
 	{
 		int nRefCount = s_lpD3DDev->Release();
@@ -71,6 +80,7 @@ CN3Eng::~CN3Eng()
 
 	if (m_lpD3D != nullptr && m_lpD3D->Release() == 0)
 		m_lpD3D = nullptr;
+#endif
 
 #ifdef _N3GAME
 	CLogWriter::Close();
@@ -88,6 +98,7 @@ void CN3Eng::Release()
 	delete s_pRHIDev;
 	RHIDeviceSet(nullptr);
 
+#ifdef _WIN32
 	if (s_lpD3DDev)
 	{
 		int nRefCount = s_lpD3DDev->Release();
@@ -103,12 +114,13 @@ void CN3Eng::Release()
 #endif
 		}
 	}
+#endif
 }
 
 //-----------------------------------------------------------------------------
 void CN3Eng::SetViewPort(RECT& rc)
 {
-	if (s_lpD3DDev == nullptr)
+	if (RHIDevice() == nullptr)
 		return;
 
 	D3DVIEWPORT9 vp;
@@ -119,7 +131,7 @@ void CN3Eng::SetViewPort(RECT& rc)
 	vp.MinZ   = 0.0f;
 	vp.MaxZ   = 1.0f;
 
-	s_lpD3DDev->SetViewport(&vp);
+	RHIDevice()->SetViewport(&vp);
 	memcpy(&s_CameraData.vp, &vp, sizeof(D3DVIEWPORT9));
 }
 
@@ -128,28 +140,28 @@ void CN3Eng::SetDefaultEnvironment()
 	__Matrix44 matWorld;
 	matWorld.Identity();
 
-	s_lpD3DDev->SetTransform(D3DTS_WORLD, matWorld.toD3D());
-	s_lpD3DDev->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);
-	s_lpD3DDev->SetRenderState(D3DRS_LIGHTING, TRUE);
+	RHIDevice()->SetTransform(D3DTS_WORLD, matWorld.toD3D());
+	RHIDevice()->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);
+	RHIDevice()->SetRenderState(D3DRS_LIGHTING, TRUE);
 
-	s_lpD3DDev->SetRenderState(D3DRS_DITHERENABLE, TRUE);
-	s_lpD3DDev->SetRenderState(D3DRS_SPECULARENABLE, TRUE);
+	RHIDevice()->SetRenderState(D3DRS_DITHERENABLE, TRUE);
+	RHIDevice()->SetRenderState(D3DRS_SPECULARENABLE, TRUE);
 
-	s_lpD3DDev->SetRenderState(D3DRS_ALPHATESTENABLE, TRUE);
-	s_lpD3DDev->SetRenderState(D3DRS_ALPHAFUNC, D3DCMP_GREATER);
+	RHIDevice()->SetRenderState(D3DRS_ALPHATESTENABLE, TRUE);
+	RHIDevice()->SetRenderState(D3DRS_ALPHAFUNC, D3DCMP_GREATER);
 
-	s_lpD3DDev->SetRenderState(D3DRS_FILLMODE, D3DFILL_SOLID);
-	s_lpD3DDev->SetRenderState(D3DRS_CULLMODE, D3DCULL_CCW);
+	RHIDevice()->SetRenderState(D3DRS_FILLMODE, D3DFILL_SOLID);
+	RHIDevice()->SetRenderState(D3DRS_CULLMODE, D3DCULL_CCW);
 
 	float fMipMapLODBias = -1.0f;
 
 	for (int i = 0; i < 8; ++i)
 	{
-		s_lpD3DDev->SetTexture(i, nullptr);
-		s_lpD3DDev->SetSamplerState(i, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
-		s_lpD3DDev->SetSamplerState(i, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
-		s_lpD3DDev->SetSamplerState(i, D3DSAMP_MIPFILTER, D3DTEXF_LINEAR);
-		s_lpD3DDev->SetSamplerState(
+		RHIDevice()->SetTexture(i, nullptr);
+		RHIDevice()->SetSamplerState(i, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
+		RHIDevice()->SetSamplerState(i, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
+		RHIDevice()->SetSamplerState(i, D3DSAMP_MIPFILTER, D3DTEXF_LINEAR);
+		RHIDevice()->SetSamplerState(
 			i, D3DSAMP_MIPMAPLODBIAS, std::bit_cast<uint32_t>(fMipMapLODBias));
 	}
 
@@ -159,13 +171,16 @@ void CN3Eng::SetDefaultEnvironment()
 		CN3Light::__Light Lgt;
 		__ColorValue LgtColor = { 1.0f, 1.0f, 1.0f, 1.0f };
 		Lgt.InitPoint(i, { 0, 0, 0 }, LgtColor);
-		s_lpD3DDev->SetLight(i, Lgt.toD3D());
+		RHIDevice()->SetLight(i, Lgt.toD3D());
 	}
 
+#ifdef _WIN32
+	// D3D clip-status is a fixed-function optimization with no RHI/GL analogue.
 	D3DCLIPSTATUS9 cs;
 	cs.ClipUnion = cs.ClipIntersection = D3DCS_ALL;
 
 	s_lpD3DDev->SetClipStatus(&cs);
+#endif
 }
 
 /*!
@@ -175,10 +190,11 @@ void CN3Eng::LookAt(const __Vector3& vEye, const __Vector3& vAt, const __Vector3
 {
 	__Matrix44 matView;
 	matView.LookAtLH(vEye, vAt, vUp);
-	s_lpD3DDev->SetTransform(D3DTS_VIEW, matView.toD3D());
+	RHIDevice()->SetTransform(D3DTS_VIEW, matView.toD3D());
 }
 
 //-----------------------------------------------------------------------------
+#ifdef _WIN32
 bool CN3Eng::Reset(bool bWindowed, uint32_t dwWidth, uint32_t dwHeight, uint32_t dwBPP)
 {
 	if (s_lpD3DDev == nullptr)
@@ -263,6 +279,14 @@ bool CN3Eng::Reset(bool bWindowed, uint32_t dwWidth, uint32_t dwHeight, uint32_t
 
 	return true;
 }
+#else
+bool CN3Eng::Reset(bool /*bWindowed*/, uint32_t /*dwWidth*/, uint32_t /*dwHeight*/, uint32_t /*dwBPP*/)
+{
+	// POSIX (docs/PORT_POSIX_PLAN.md, T6.8): swapchain/backbuffer resizing is
+	// owned by the SDL window + RHI backend, not by a D3D device reset.
+	return false;
+}
+#endif
 
 //-----------------------------------------------------------------------------
 /*!
@@ -272,9 +296,10 @@ void CN3Eng::SetProjection(float fNear, float fFar, float fLens, float fAspect)
 {
 	__Matrix44 matProjection;
 	matProjection.PerspectiveFovLH(fLens, fAspect, fNear, fFar);
-	s_lpD3DDev->SetTransform(D3DTS_PROJECTION, matProjection.toD3D());
+	RHIDevice()->SetTransform(D3DTS_PROJECTION, matProjection.toD3D());
 }
 
+#ifdef _WIN32
 bool CN3Eng::Init(
 	BOOL bWindowed, HWND hWnd, uint32_t dwWidth, uint32_t dwHeight, uint32_t dwBPP, BOOL bUseHW)
 {
@@ -526,7 +551,24 @@ BOOL CN3Eng::FindDepthStencilFormat(
 
 	return FALSE;
 }
+#else  // !_WIN32
+bool CN3Eng::Init(BOOL /*bWindowed*/, HWND /*hWnd*/, uint32_t /*dwWidth*/, uint32_t /*dwHeight*/,
+	uint32_t /*dwBPP*/, BOOL /*bUseHW*/)
+{
+	// POSIX (docs/PORT_POSIX_PLAN.md, T6.8): the SDL entry point owns window +
+	// GL/Null context creation and installs the RHI backend before the engine
+	// runs, so there is no D3D adapter enumeration to perform here.
+	return RHIDevice() != nullptr;
+}
 
+BOOL CN3Eng::FindDepthStencilFormat(UINT /*iAdapter*/, D3DDEVTYPE /*DeviceType*/,
+	D3DFORMAT /*TargetFormat*/, D3DFORMAT* /*pDepthStencilFormat*/)
+{
+	return FALSE;
+}
+#endif // _WIN32
+
+#ifdef _WIN32
 #ifndef _N3TOOL
 void CN3Eng::Present(HWND hWnd, RECT* pRC)
 {
@@ -709,3 +751,73 @@ void CN3Eng::ClearZBuffer(const RECT* pRC)
 		s_lpD3DDev->Clear(0, nullptr, D3DCLEAR_ZBUFFER, 0, 1.0f, 0);
 	}
 }
+#else  // !_WIN32
+// POSIX present/clear go straight through the RHI backend (Null/GL). The SDL
+// entry point owns the actual buffer swap; here Present only drives the frame
+// timer so the engine's per-frame delta stays correct. Rect-limited clears
+// (the D3D windowed-mode GetClientRect path) collapse to a full-target clear,
+// which is what the RHI Clear exposes.
+void CN3Eng::Present(HWND /*hWnd*/, RECT* /*pRC*/)
+{
+	if (RHIDevice() != nullptr)
+		RHIDevice()->Present();
+
+	s_fSecPerFrm = CN3Base::TimerProcess(TIMER_GETELAPSEDTIME);
+
+	if (s_fSecPerFrm <= 0.001f || s_fSecPerFrm >= 1.0f)
+		s_fSecPerFrm = 0.033333f;
+
+	s_fFrmPerSec = 1.0f / s_fSecPerFrm;
+}
+
+void CN3Eng::WaitForDeviceRestoration()
+{
+	// No D3D device-lost state on POSIX backends.
+}
+
+void CN3Eng::Clear(D3DCOLOR crFill, RECT* /*pRC*/)
+{
+	if (RHIDevice() != nullptr)
+		RHIDevice()->Clear(D3DCLEAR_ZBUFFER | D3DCLEAR_TARGET, crFill, 1.0f, 0);
+
+#ifdef _DEBUG
+	s_RenderInfo = {};
+#endif
+}
+
+void CN3Eng::ClearAuto(RECT* pRC)
+{
+	DWORD dwFillColor = D3DCOLOR_ARGB(255, 192, 192, 192); // 기본색
+	DWORD dwUseFog    = FALSE;
+	if (RHIDevice() != nullptr)
+	{
+		RHIDevice()->GetRenderState(D3DRS_FOGENABLE, &dwUseFog);
+		if (dwUseFog != 0)
+		{
+			RHIDevice()->GetRenderState(D3DRS_FOGCOLOR, &dwFillColor);
+		}
+		else
+		{
+			CN3Light::__Light Lgt;
+
+			BOOL bEnable = FALSE;
+			RHIDevice()->GetLightEnable(0, &bEnable);
+			if (bEnable)
+			{
+				RHIDevice()->GetLight(0, Lgt.toD3D());
+				dwFillColor = D3DCOLOR_ARGB((uint8_t) (Lgt.Diffuse.a * 255.0f),
+					(uint8_t) (Lgt.Diffuse.r * 255.0f), (uint8_t) (Lgt.Diffuse.g * 255.0f),
+					(uint8_t) (Lgt.Diffuse.b * 255.0f));
+			}
+		}
+	}
+
+	CN3Eng::Clear(dwFillColor, pRC);
+}
+
+void CN3Eng::ClearZBuffer(const RECT* /*pRC*/)
+{
+	if (RHIDevice() != nullptr)
+		RHIDevice()->Clear(D3DCLEAR_ZBUFFER, 0, 1.0f, 0);
+}
+#endif // _WIN32

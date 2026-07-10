@@ -262,6 +262,8 @@ set(N3BASE_POSIX_PORTABLE_SOURCES
   N3Cloak.h
   N3ColorChange.cpp
   N3ColorChange.h
+  N3Eng.cpp
+  N3Eng.h
   N3IMesh.cpp
   N3IMesh.h
   N3Joint.cpp
