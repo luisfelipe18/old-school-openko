@@ -4,15 +4,19 @@
 #include "StdAfxBase.h"
 #include "DFont.h"
 
+#ifdef _WIN32
 const int MAX_NUM_VERTICES   = 50 * 6;
 const float Z_DEFAULT        = 0.9f;
 const float RHW_DEFAULT      = 1.0f;
+#endif
 //////////////////////////////////////////////////////////////////////
 // Construction/Destruction
 //////////////////////////////////////////////////////////////////////
 HDC CDFont::s_hDC            = nullptr;
 int CDFont::s_iInstanceCount = 0;
 HFONT CDFont::s_hFontOld     = nullptr;
+
+#ifdef _WIN32
 
 CDFont::CDFont(const std::string& szFontName, uint32_t dwHeight, uint32_t dwFlags)
 {
@@ -799,3 +803,92 @@ HRESULT CDFont::SetFontColor(uint32_t dwColor)
 
 	return S_OK;
 }
+
+#else // _WIN32 --------------------------------------------------------------
+
+// POSIX text stub (docs/PORT_POSIX_PLAN.md, T6.8): the GDI/D3DX glyph-atlas
+// path is Windows-only for now, so on POSIX the font renders nothing. The UI
+// still lays out and draws its images; text is filled in with the FreeType
+// backend in T7.1. Every method is a no-op that keeps callers (N3UIString,
+// N3UIBase) working - IsSetText() stays false so DrawText paths are skipped.
+
+CDFont::CDFont(const std::string& szFontName, uint32_t dwHeight, uint32_t dwFlags)
+	: m_szFontName(szFontName), m_dwFontHeight(dwHeight), m_dwFontFlags(dwFlags),
+	  m_pd3dDevice(nullptr), m_pTexture(nullptr), m_pVB(nullptr), m_dwTexWidth(0),
+	  m_dwTexHeight(0), m_fTextScale(1.0f), m_hFont(nullptr), m_iPrimitiveCount(0),
+	  m_dwFontColor(0xffffffff)
+{
+	++s_iInstanceCount;
+	m_PrevLeftTop.Set(0.0f, 0.0f);
+	m_Size.cx = m_Size.cy = 0;
+}
+
+CDFont::~CDFont()
+{
+	DeleteDeviceObjects();
+	--s_iInstanceCount;
+}
+
+HRESULT CDFont::SetFont(const std::string& szFontName, uint32_t dwHeight, uint32_t dwFlags)
+{
+	m_szFontName   = szFontName;
+	m_dwFontHeight = dwHeight;
+	m_dwFontFlags  = dwFlags;
+	return S_OK;
+}
+
+HRESULT CDFont::InitDeviceObjects(LPDIRECT3DDEVICE9 pd3dDevice)
+{
+	m_pd3dDevice = pd3dDevice;
+	return S_OK;
+}
+
+HRESULT CDFont::RestoreDeviceObjects()
+{
+	return S_OK;
+}
+
+HRESULT CDFont::InvalidateDeviceObjects()
+{
+	return S_OK;
+}
+
+HRESULT CDFont::DeleteDeviceObjects()
+{
+	m_pd3dDevice = nullptr;
+	return S_OK;
+}
+
+HRESULT CDFont::SetText(const std::string& /*szText*/, uint32_t /*dwFlags*/)
+{
+	// No glyph atlas yet: report an empty extent and stay "unset".
+	m_Size.cx = m_Size.cy = 0;
+	return S_OK;
+}
+
+void CDFont::Make2DVertex(const int /*iFontHeight*/, const std::string& /*szText*/)
+{
+}
+
+HRESULT CDFont::DrawText(FLOAT /*sx*/, FLOAT /*sy*/, uint32_t /*dwColor*/, uint32_t /*dwFlags*/)
+{
+	return S_OK;
+}
+
+BOOL CDFont::GetTextExtent(const std::string& /*szString*/, int /*iStrLen*/, SIZE* pSize)
+{
+	if (pSize != nullptr)
+	{
+		pSize->cx = 0;
+		pSize->cy = static_cast<LONG>(m_dwFontHeight);
+	}
+	return TRUE;
+}
+
+HRESULT CDFont::SetFontColor(uint32_t dwColor)
+{
+	m_dwFontColor = dwColor;
+	return S_OK;
+}
+
+#endif // _WIN32

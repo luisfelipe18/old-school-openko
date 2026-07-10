@@ -203,6 +203,8 @@ set(N3BASE_POSIX_PORTABLE_SOURCES
   ColorValue.inl
   DebugUtils.cpp
   DebugUtils.h
+  DFont.cpp
+  DFont.h
   LogWriter.cpp
   LogWriter.h
   Material.inl

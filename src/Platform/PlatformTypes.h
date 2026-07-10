@@ -62,6 +62,29 @@ using HWND = HWND__*;
 struct HINSTANCE__;
 using HINSTANCE = HINSTANCE__*;
 
+// GDI handles used by the (POSIX-stubbed) DFont text layer; never dereferenced.
+using HDC   = void*;
+using HFONT = void*;
+
+// GetDeviceCaps index used by DFont; only LOGPIXELSY is referenced.
+#ifndef LOGPIXELSY
+#define LOGPIXELSY 90
+#endif
+
+// Win32 helpers DFont's inline sizing uses. 96 DPI is the classic default.
+inline int GetDeviceCaps(HDC /*hDC*/, int /*index*/)
+{
+	return 96;
+}
+
+inline int MulDiv(int nNumber, int nNumerator, int nDenominator)
+{
+	if (nDenominator == 0)
+		return -1;
+	return static_cast<int>(
+		(static_cast<long long>(nNumber) * nNumerator + nDenominator / 2) / nDenominator);
+}
+
 struct POINT
 {
 	LONG x;
