@@ -43,15 +43,23 @@ protected:
 
 										   // Attributes
 public:
+	static char s_szBuffTmp[512];
+
+	// The native Win32 EDIT control + IME plumbing is Windows-only. The POSIX
+	// text-input path (SDL_StartTextInput / IME) lands with N3UIEdit in T7.2;
+	// until then N3UIEdit itself is out of the POSIX subset, but the header is
+	// still pulled in (N3UIBase/N3UIArea reference the type), so the portable
+	// pieces stay visible and only these members are gated.
+#ifdef _WIN32
 	static HWND s_hWndEdit, s_hWndParent;
 	static WNDPROC s_lpfnEditProc;
-	static char s_szBuffTmp[512];
 
 	static void SetImeStatus(POINT ptPos, bool bOpen);
 	static BOOL CreateEditWindow(HWND hParent, RECT rect);
 	static LRESULT APIENTRY EditWndProc(HWND hWnd, uint16_t Message, WPARAM wParam, LPARAM lParam);
 	static void UpdateTextFromEditCtrl();
 	static void UpdateCaretPosFromEditCtrl();
+#endif
 
 protected:
 	static CN3Caret s_Caret;

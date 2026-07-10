@@ -63,6 +63,30 @@ set(N3BASE_COMMON_SKY_SOURCES
   N3Sun.h
 )
 
+set(N3BASE_POSIX_UI_SOURCES
+  N3UIArea.cpp
+  N3UIArea.h
+  N3UIBase.cpp
+  N3UIBase.h
+  N3UIButton.cpp
+  N3UIButton.h
+  N3UIDef.h
+  N3UIList.cpp
+  N3UIList.h
+  N3UIProgress.cpp
+  N3UIProgress.h
+  N3UIScrollBar.cpp
+  N3UIScrollBar.h
+  N3UIStatic.cpp
+  N3UIStatic.h
+  N3UIString.cpp
+  N3UIString.h
+  N3UITooltip.cpp
+  N3UITooltip.h
+  N3UITrackBar.cpp
+  N3UITrackBar.h
+)
+
 set(N3BASE_COMMON_UI_SOURCES
   N3UIArea.cpp
   N3UIArea.h
@@ -275,6 +299,7 @@ set(N3BASE_POSIX_PORTABLE_SOURCES
   ${N3BASE_COMMON_RHI_SOURCES}
   ${N3BASE_COMMON_SKY_SOURCES}
   ${N3BASE_COMMON_WEATHER_SOURCES}
+  ${N3BASE_POSIX_UI_SOURCES}
 )
 
 if(WIN32)

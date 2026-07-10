@@ -3,6 +3,10 @@
 //////////////////////////////////////////////////////////////////////
 
 #include "StdAfxBase.h"
+
+#ifndef _WIN32
+#include <Platform/PlatformString.h>
+#endif
 #include "N3UITooltip.h"
 #include "N3UIString.h"
 #include "N3UIStatic.h"

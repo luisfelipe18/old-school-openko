@@ -13,6 +13,23 @@ inline int lstrcmpi(const char* lhs, const char* rhs)
 {
 	return strcasecmp(lhs, rhs);
 }
+
+// Win32 CRT case-insensitive bounded compare.
+inline int _strnicmp(const char* lhs, const char* rhs, size_t count)
+{
+	return strncasecmp(lhs, rhs, count);
+}
+
+// Win32 string helpers used by legacy call sites.
+inline int lstrlen(const char* str)
+{
+	return str ? static_cast<int>(strlen(str)) : 0;
+}
+
+inline int lstrcmpA(const char* lhs, const char* rhs)
+{
+	return strcmp(lhs, rhs);
+}
 #endif
 
 /// \brief In-place ASCII-only lowercasing.

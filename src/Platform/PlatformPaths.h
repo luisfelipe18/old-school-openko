@@ -33,4 +33,17 @@ inline std::filesystem::path GetUserConfigDir()
 #endif
 }
 
+#ifndef _WIN32
+/// Win32 SetCurrentDirectory shim: changes the process working directory.
+/// Returns nonzero on success like the Win32 API.
+inline int SetCurrentDirectory(const char* szPath)
+{
+	if (szPath == nullptr)
+		return 0;
+	std::error_code ec;
+	std::filesystem::current_path(szPath, ec);
+	return ec ? 0 : 1;
+}
+#endif
+
 #endif // PLATFORM_PLATFORMPATHS_H

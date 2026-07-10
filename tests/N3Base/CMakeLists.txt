@@ -1,4 +1,5 @@
 add_executable(N3Base.Tests
+  DFontStub_test.cpp
   RHIBuffers_test.cpp
   RHIDeviceNull_test.cpp
   RHITexture_test.cpp
