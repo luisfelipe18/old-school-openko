@@ -22,6 +22,144 @@ static inline LPDIRECT3DTEXTURE9 D3DTex(IRHITexture* pTexture)
 
 #include <FileIO/FileReader.h>
 
+#ifndef _WIN32
+#include <cstring>
+#include <vector>
+
+namespace
+{
+// Minimal Truevision TGA decoder (docs/PORT_POSIX_PLAN.md, F9): D3DX has no
+// POSIX equivalent, but the non-DXT assets the client actually ships (sky /
+// moon phases, some UI art) are plain 24/32bpp TGA - uncompressed or
+// RLE-compressed color images, image type 2 or 10. Palettised and grayscale
+// TGAs aren't handled since nothing in the asset set uses them; they log and
+// fail like any other unsupported format did before this.
+struct TgaHeader
+{
+	uint8_t idLength;
+	uint8_t colorMapType;
+	uint8_t imageType;
+	uint8_t colorMapSpec[5];
+	uint16_t xOrigin;
+	uint16_t yOrigin;
+	uint16_t width;
+	uint16_t height;
+	uint8_t bitsPerPixel;
+	uint8_t imageDescriptor;
+};
+
+// Decodes into top-down BGRA (matches D3DFMT_A8R8G8B8 memory order, which is
+// what the TGA pixel bytes already are for 24/32bpp true-color images - so a
+// per-row copy is all that's needed once the vertical origin is normalized).
+bool DecodeTga(const uint8_t* data, size_t size, std::vector<uint8_t>& outBgra, int& outWidth, int& outHeight)
+{
+	if (data == nullptr || size < sizeof(TgaHeader))
+		return false;
+
+	TgaHeader hdr {};
+	std::memcpy(&hdr, data, sizeof(hdr));
+
+	const bool bRle = (hdr.imageType == 10);
+	if ((hdr.imageType != 2 && !bRle) || hdr.colorMapType != 0
+		|| (hdr.bitsPerPixel != 24 && hdr.bitsPerPixel != 32))
+		return false;
+
+	const int width  = hdr.width;
+	const int height = hdr.height;
+	if (width <= 0 || height <= 0)
+		return false;
+
+	const size_t srcBpp   = hdr.bitsPerPixel / 8;
+	const bool bTopOrigin = (hdr.imageDescriptor & 0x20) != 0; // bit 5
+
+	size_t offset = sizeof(TgaHeader) + hdr.idLength;
+	if (offset > size)
+		return false;
+
+	outBgra.resize(static_cast<size_t>(width) * static_cast<size_t>(height) * 4);
+
+	// Row storage order in the file is bottom-up unless the top-origin bit is
+	// set; outBgra is always top-down, so pick the destination row accordingly.
+	auto writePixel = [&](int col, int row, const uint8_t* px) {
+		const int dstRow      = bTopOrigin ? row : (height - 1 - row);
+		uint8_t* dst          = &outBgra[(static_cast<size_t>(dstRow) * width + col) * 4];
+		dst[0]                = px[0]; // B
+		dst[1]                = px[1]; // G
+		dst[2]                = px[2]; // R
+		dst[3]                = (srcBpp == 4) ? px[3] : 0xff;
+	};
+
+	if (!bRle)
+	{
+		const size_t needed = static_cast<size_t>(width) * height * srcBpp;
+		if (offset + needed > size)
+			return false;
+
+		for (int row = 0; row < height; ++row)
+		{
+			for (int col = 0; col < width; ++col)
+			{
+				writePixel(col, row, data + offset);
+				offset += srcBpp;
+			}
+		}
+	}
+	else
+	{
+		int col = 0, row = 0;
+		while (row < height)
+		{
+			if (offset >= size)
+				return false;
+
+			const uint8_t packet = data[offset++];
+			const int count      = (packet & 0x7f) + 1;
+
+			if (packet & 0x80) // RLE packet: one pixel repeated `count` times
+			{
+				if (offset + srcBpp > size)
+					return false;
+				const uint8_t* px = data + offset;
+				offset            += srcBpp;
+				for (int i = 0; i < count; ++i)
+				{
+					writePixel(col, row, px);
+					if (++col >= width)
+					{
+						col = 0;
+						++row;
+						if (row >= height)
+							break;
+					}
+				}
+			}
+			else // Raw packet: `count` distinct pixels
+			{
+				if (offset + static_cast<size_t>(count) * srcBpp > size)
+					return false;
+				for (int i = 0; i < count; ++i)
+				{
+					writePixel(col, row, data + offset);
+					offset += srcBpp;
+					if (++col >= width)
+					{
+						col = 0;
+						++row;
+						if (row >= height)
+							break;
+					}
+				}
+			}
+		}
+	}
+
+	outWidth  = width;
+	outHeight = height;
+	return true;
+}
+} // namespace
+#endif // !_WIN32
+
 static inline uint32_t GetTextureSize(const D3DSURFACE_DESC& sd)
 {
 	uint32_t nTexSize = sd.Width * sd.Height;
@@ -272,10 +410,52 @@ bool CN3Texture::LoadFromFile(const std::string& szFileName)
 #endif
 		}
 #else  // _WIN32
-		// Non-DXT image formats go through D3DX, which has no POSIX equivalent
-		// yet; the engine loads .dxt for essentially everything (T6.2 scope).
-		CLogWriter::Write(
-			"N3Texture - non-DXT texture formats are Windows-only for now ({})", szFullPath);
+		// Non-DXT image formats go through D3DX on Windows, which has no POSIX
+		// equivalent; TGA - the only non-DXT format the shipped assets
+		// actually use (sky/moon phases, some UI art) - is decoded directly
+		// instead of pulling in a general-purpose image library (T6.2 scope,
+		// narrowed to what's really needed).
+		FileReader tgaFile;
+		if (!tgaFile.OpenExisting(szFullPath))
+		{
+			CLogWriter::Write("N3Texture - Can't open texture file({})", szFullPath);
+		}
+		else
+		{
+			std::vector<uint8_t> pixelsBgra;
+			int nTgaWidth = 0, nTgaHeight = 0;
+			if (!DecodeTga(static_cast<const uint8_t*>(tgaFile.Memory()),
+					static_cast<size_t>(tgaFile.Size()), pixelsBgra, nTgaWidth, nTgaHeight))
+			{
+				CLogWriter::Write("N3Texture - unsupported or corrupt TGA ({})", szFullPath);
+			}
+			else
+			{
+				HRESULT rval = RHIDevice()->CreateTexture(static_cast<UINT>(nTgaWidth),
+					static_cast<UINT>(nTgaHeight), 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_MANAGED,
+					&m_lpTexture);
+				if (rval == D3D_OK && m_lpTexture != nullptr)
+				{
+					D3DLOCKED_RECT LR;
+					m_lpTexture->LockRect(0, &LR, nullptr, 0);
+					for (int row = 0; row < nTgaHeight; ++row)
+					{
+						std::memcpy(static_cast<uint8_t*>(LR.pBits) + static_cast<size_t>(row) * LR.Pitch,
+							&pixelsBgra[static_cast<size_t>(row) * nTgaWidth * 4],
+							static_cast<size_t>(nTgaWidth) * 4);
+					}
+					m_lpTexture->UnlockRect(0);
+
+					m_Header.nWidth  = nTgaWidth;
+					m_Header.nHeight = nTgaHeight;
+					m_Header.Format  = D3DFMT_A8R8G8B8;
+				}
+				else
+				{
+					CLogWriter::Write("N3Texture - CreateTexture failed for TGA ({})", szFullPath);
+				}
+			}
+		}
 #endif // _WIN32
 
 		if (32 == m_Header.nWidth && 32 == m_Header.nHeight)
