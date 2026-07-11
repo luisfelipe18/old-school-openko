@@ -503,7 +503,7 @@ if(NOT WIN32)
   )
 
   if(APPLE)
-    # macOS: the resources live in the .app bundle (Contents/Resources).
+    # macOS: bundle metadata; resources go into Contents/Resources/ below.
     set_target_properties(WarFare PROPERTIES
       MACOSX_BUNDLE                    TRUE
       MACOSX_BUNDLE_INFO_PLIST         "${CMAKE_CURRENT_SOURCE_DIR}/Info.plist.in"
@@ -513,31 +513,43 @@ if(NOT WIN32)
       MACOSX_BUNDLE_SHORT_VERSION_STRING "0.1"
       MACOSX_BUNDLE_COPYRIGHT          "OpenKO contributors"
     )
-    foreach(res IN LISTS WARFARE_CLIENT_RESOURCES)
-      target_sources(WarFare PRIVATE "${res}")
-      set_source_files_properties("${res}" PROPERTIES
-        MACOSX_PACKAGE_LOCATION Resources)
-    endforeach()
+  endif()
 
-    # If someone has generated a KnightOnLine.icns from WarFare.ico (see
-    # docs/PORT_POSIX_PLAN.md F8), include it in the bundle. The Info.plist
-    # references it by name; if it isn't there macOS just falls back to a
-    # generic app icon, which is fine for a dev build.
-    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/KnightOnLine.icns")
-      target_sources(WarFare PRIVATE KnightOnLine.icns)
-      set_source_files_properties(KnightOnLine.icns PROPERTIES
-        MACOSX_PACKAGE_LOCATION Resources)
-    endif()
+  # Copy client-owned resources into the built binary's runtime location so
+  # they're findable without an install step:
+  #   Linux -> next to the binary
+  #   macOS -> inside the .app bundle at Contents/Resources/
+  # We use POST_BUILD instead of the MACOSX_PACKAGE_LOCATION source property
+  # because the latter needs the file to look like a "source", which .cur
+  # files don't, and it silently drops them on some CMake generators.
+  if(APPLE)
+    set(_warfare_resource_dest "$<TARGET_BUNDLE_CONTENT_DIR:WarFare>/Resources")
+    # Ensure the Resources subdirectory exists before we copy into it.
+    add_custom_command(TARGET WarFare POST_BUILD
+      COMMAND "${CMAKE_COMMAND}" -E make_directory "${_warfare_resource_dest}")
   else()
-    # Linux: copy resources next to the built binary so a dev-build run works
-    # from the build directory as well as from an installed location.
-    foreach(res IN LISTS WARFARE_CLIENT_RESOURCES)
+    set(_warfare_resource_dest "$<TARGET_FILE_DIR:WarFare>")
+  endif()
+
+  foreach(res IN LISTS WARFARE_CLIENT_RESOURCES)
+    add_custom_command(TARGET WarFare POST_BUILD
+      COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/${res}"
+        "${_warfare_resource_dest}/${res}"
+      COMMENT "Staging ${res} into ${_warfare_resource_dest}")
+  endforeach()
+
+  if(APPLE)
+    # If someone has generated a KnightOnLine.icns from WarFare.ico (see
+    # docs/PORT_POSIX_PLAN.md F8), include it in the bundle. Info.plist
+    # references it by name; without it macOS shows a generic app icon.
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/KnightOnLine.icns")
       add_custom_command(TARGET WarFare POST_BUILD
         COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-          "${CMAKE_CURRENT_SOURCE_DIR}/${res}"
-          "$<TARGET_FILE_DIR:WarFare>/${res}")
-    endforeach()
-
+          "${CMAKE_CURRENT_SOURCE_DIR}/KnightOnLine.icns"
+          "${_warfare_resource_dest}/KnightOnLine.icns")
+    endif()
+  else()
     # Vendored dependencies (SDL3, mpg123, ...) that link against WarFare
     # ship next to the binary in an installed layout. Setting the install
     # rpath to $ORIGIN keeps them findable without LD_LIBRARY_PATH.
@@ -546,9 +558,7 @@ if(NOT WIN32)
     # still find libjpeg/mpg123 straight from the build directory.
     set_target_properties(WarFare PROPERTIES INSTALL_RPATH "$ORIGIN")
 
-    # A ready-to-drop-in .desktop entry for freedesktop-conformant desktops
-    # (GNOME/KDE/XFCE). Install rules stay optional; the file is written into
-    # the build tree for packagers to pick up.
+    # A ready-to-drop-in .desktop entry for freedesktop-conformant desktops.
     configure_file(
       "${CMAKE_CURRENT_SOURCE_DIR}/openko-client.desktop.in"
       "${CMAKE_CURRENT_BINARY_DIR}/openko-client.desktop"

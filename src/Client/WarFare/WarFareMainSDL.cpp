@@ -36,6 +36,7 @@
 
 #include <cstdlib>
 #include <cstring>
+#include <vector>
 #include <ctime>
 #include <memory>
 #include <string>
@@ -55,27 +56,45 @@ bool g_bQuitRequested      = false;
 std::filesystem::path FindClientResource(const char* szName)
 {
 	std::error_code ec;
+	std::vector<std::filesystem::path> tried;
+
 	const std::filesystem::path exeDir = GetExecutableDir();
 	if (!exeDir.empty())
 	{
 		// Next to the binary on Linux, and Contents/MacOS on a macOS bundle.
-		const std::filesystem::path direct = exeDir / szName;
+		std::filesystem::path direct = exeDir / szName;
 		if (std::filesystem::exists(direct, ec))
 			return direct;
+		tried.push_back(std::move(direct));
 
 #if defined(__APPLE__)
 		// On macOS the binary lives in Contents/MacOS/ and resources sit in
-		// the sibling Contents/Resources/ directory.
-		const std::filesystem::path bundleRes = exeDir / ".." / "Resources" / szName;
-		if (std::filesystem::exists(bundleRes, ec))
+		// the sibling Contents/Resources/ directory. weakly_canonical resolves
+		// the '..' so the log prints the actual path we checked.
+		std::filesystem::path bundleRes = std::filesystem::weakly_canonical(
+			exeDir / ".." / "Resources" / szName, ec);
+		if (!ec && std::filesystem::exists(bundleRes, ec))
 			return bundleRes;
+		tried.push_back(std::move(bundleRes));
 #endif
 	}
 
 	// Legacy: the game-data directory (CWD by default).
-	const std::filesystem::path legacy = std::filesystem::path(CN3Base::PathGet()) / szName;
+	std::filesystem::path legacy = std::filesystem::path(CN3Base::PathGet()) / szName;
 	if (std::filesystem::exists(legacy, ec))
 		return legacy;
+	tried.push_back(std::move(legacy));
+
+	// Nothing worked - log every path we tried so the user can see which one
+	// their build/install layout needs to satisfy.
+	std::string szTried;
+	for (const auto& p : tried)
+	{
+		if (!szTried.empty())
+			szTried += ", ";
+		szTried += p.string();
+	}
+	spdlog::warn("client resource '{}' not found (tried: {})", szName, szTried);
 
 	return {};
 }
@@ -91,14 +110,16 @@ void SetupWindowCursor()
 	const std::filesystem::path path = FindClientResource("Cursor_Normal.cur");
 	if (path.empty())
 	{
-		spdlog::info("Cursor_Normal.cur not found; keeping the system cursor");
+		// FindClientResource already logged every path it tried.
 		return;
 	}
+
+	spdlog::info("loading window cursor from '{}'", path.string());
 
 	const DecodedCursor decoded = LoadCursorFromFile(path);
 	if (!decoded.IsValid())
 	{
-		spdlog::info("Cursor_Normal.cur at '{}' not decodable; keeping the system cursor",
+		spdlog::warn("Cursor_Normal.cur at '{}' not decodable; keeping the system cursor",
 			path.string());
 		return;
 	}
