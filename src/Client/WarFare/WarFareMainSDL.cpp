@@ -339,6 +339,18 @@ int main(int argc, char* argv[])
 
 	if (!dataDir.empty())
 	{
+		// The engine loads assets with paths relative to the process working
+		// directory (FileReader/ResolveCaseInsensitivePath anchor a relative
+		// "Data\\..." at "."), so change into the data directory - the same
+		// invariant Windows relies on (its CWD is the game folder). Without
+		// this, PathSet only fixes the logical base string while the actual
+		// file opens still hit the launch CWD (e.g. the .app's bin/Debug).
+		std::error_code chdirEc;
+		std::filesystem::current_path(dataDir, chdirEc);
+		if (chdirEc)
+			spdlog::warn("could not chdir into game data directory '{}': {}",
+				dataDir.string(), chdirEc.message());
+
 		CN3Base::PathSet(dataDir.string());
 		spdlog::info("game data directory: {}", dataDir.string());
 	}
