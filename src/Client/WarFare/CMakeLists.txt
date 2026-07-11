@@ -561,14 +561,31 @@ if(NOT WIN32)
     COMMENT "Staging assets/Client -> ${_warfare_game_data_dst}")
 
   if(APPLE)
-    # If someone has generated a KnightOnLine.icns from WarFare.ico (see
-    # docs/PORT_POSIX_PLAN.md F8), include it in the bundle. Info.plist
-    # references it by name; without it macOS shows a generic app icon.
+    # App icon: Info.plist references CFBundleIconFile "KnightOnLine", so the
+    # bundle needs Contents/Resources/KnightOnLine.icns. Prefer a committed
+    # KnightOnLine.icns; otherwise generate one from WarFare_1298.ico at build
+    # time with sips (ships with macOS) - .ico -> .png -> .icns is the path
+    # sips handles reliably.
     if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/KnightOnLine.icns")
       add_custom_command(TARGET WarFare POST_BUILD
         COMMAND "${CMAKE_COMMAND}" -E copy_if_different
           "${CMAKE_CURRENT_SOURCE_DIR}/KnightOnLine.icns"
           "${_warfare_resource_dest}/KnightOnLine.icns")
+    else()
+      find_program(SIPS_EXECUTABLE sips)
+      if(SIPS_EXECUTABLE)
+        set(_warfare_icon_png "${CMAKE_CURRENT_BINARY_DIR}/KnightOnLine_icon.png")
+        add_custom_command(TARGET WarFare POST_BUILD
+          COMMAND "${SIPS_EXECUTABLE}" -s format png
+            "${CMAKE_CURRENT_SOURCE_DIR}/WarFare_1298.ico"
+            --out "${_warfare_icon_png}"
+          COMMAND "${SIPS_EXECUTABLE}" -s format icns
+            "${_warfare_icon_png}"
+            --out "${_warfare_resource_dest}/KnightOnLine.icns"
+          COMMENT "Generating app icon KnightOnLine.icns from WarFare_1298.ico")
+      else()
+        message(STATUS "OpenKO: sips not found; the .app will use a generic icon")
+      endif()
     endif()
   else()
     # Vendored dependencies (SDL3, mpg123, ...) that link against WarFare
