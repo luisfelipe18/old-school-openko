@@ -3,6 +3,8 @@
 #ifndef _WIN32
 #include <Platform/PlatformIni.h>    // GetPrivateProfileString/Int (Server.Ini)
 #include <Platform/PlatformString.h> // lstrcpy / lstrcat
+
+#include <spdlog/spdlog.h>
 #endif
 
 #if !defined(LOGIN_SCENE_VERSION) || LOGIN_SCENE_VERSION == 1298
@@ -381,6 +383,12 @@ void CGameProcLogIn_1298::MsgRecv_AccountLogIn(int iCmd, Packet& pkt)
 int CGameProcLogIn_1298::MsgRecv_VersionCheck(Packet& pkt) // virtual
 {
 	int iVersion = CGameProcedure::MsgRecv_VersionCheck(pkt);
+
+#ifndef _WIN32
+	spdlog::info("game server version check answered: version={} (client expects {})",
+		iVersion, CURRENT_VERSION);
+#endif
+
 	if (iVersion == CURRENT_VERSION)
 	{
 		CGameProcedure::MsgSend_GameServerLogIn(); // 게임 서버에 로그인..
@@ -393,6 +401,10 @@ int CGameProcLogIn_1298::MsgRecv_VersionCheck(Packet& pkt) // virtual
 int CGameProcLogIn_1298::MsgRecv_GameServerLogIn(Packet& pkt)   // virtual - 국가번호를 리턴한다.
 {
 	int iNation = CGameProcedure::MsgRecv_GameServerLogIn(pkt); // 국가 - 0 없음 0xff - 실패..
+
+#ifndef _WIN32
+	spdlog::info("game server login answered: nation={}", iNation);
+#endif
 
 	if (0xff == iNation)
 	{
@@ -461,17 +473,37 @@ bool CGameProcLogIn_1298::ProcessPacket(Packet& pkt)
 void CGameProcLogIn_1298::ConnectToGameServer() // 고른 게임 서버에 접속
 {
 	if (m_fTimeUntilNextGameConnectionAttempt > 0.0f)
+	{
+#ifndef _WIN32
+		spdlog::debug("ConnectToGameServer throttled for another {:.1f}s",
+			m_fTimeUntilNextGameConnectionAttempt);
+#endif
 		return;
+	}
 
 	__GameServerInfo GSI;
 	if (!m_pUILogIn->ServerInfoGetCur(GSI))
+	{
+#ifndef _WIN32
+		spdlog::warn("ConnectToGameServer: no server selected in the list");
+#endif
 		return; // 서버를 고른다음..
+	}
 
 	int port                      = SOCKET_PORT_GAME;
+
+#ifndef _WIN32
+	spdlog::info("connecting to game server '{}' at {}:{}", GSI.szName, GSI.szIP, port);
+#endif
 
 	s_bNeedReportConnectionClosed = false;                                          // 서버접속이 끊어진걸 보고해야 하는지..
 	int iErr                      = s_pSocket->Connect(s_hWndBase, GSI.szIP, port); // 게임서버 소켓 연결
 	s_bNeedReportConnectionClosed = true;                                           // 서버접속이 끊어진걸 보고해야 하는지..
+
+#ifndef _WIN32
+	if (iErr != 0)
+		spdlog::error("game server connect failed: {}:{} (errorCode: {})", GSI.szIP, port, iErr);
+#endif
 
 	if (iErr != 0)
 	{

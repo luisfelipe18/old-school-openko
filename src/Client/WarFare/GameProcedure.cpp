@@ -230,11 +230,9 @@ void CGameProcedure::StaticMemberInit(HINSTANCE hInstance, HWND hWndMain)
 	s_pProcMain            = new CGameProcMain();            // 메인 게임 프로시져
 }
 #else  // !_WIN32
-// POSIX login-milestone bring-up (docs/PORT_POSIX_PLAN.md, T6.8). The SDL entry
-// point already owns the window + GL/Null context and has installed the RHI
-// backend, so there is no D3D device or display-mode work here. Only the login
-// procedure is created; the nation-select / character / main procedures rejoin
-// as those scenes are ported.
+// POSIX bring-up (docs/PORT_POSIX_PLAN.md, T6.8/F9). The SDL entry point
+// already owns the window + GL/Null context and has installed the RHI
+// backend, so there is no D3D device or display-mode work here.
 void CGameProcedure::StaticMemberInit(HINSTANCE /*hInstance*/, HWND /*hWndMain*/)
 {
 	s_bWindowed = true;
@@ -283,7 +281,15 @@ void CGameProcedure::StaticMemberInit(HINSTANCE /*hInstance*/, HWND /*hWndMain*/
 	s_pMsgBoxMgr = new CUIMessageBoxManager();
 	CN3UIBase::EnableTooltip(pTblUI->szToolTip);
 
-	s_pProcLogIn = new CGameProcLogIn(); // 로그인 프로시져 (only the login scene on POSIX)
+	// 각 프로시저들 생성 - all of them, same as Windows: a successful game-server
+	// login hands off to nation/character select via ProcActiveSet(), which
+	// silently no-ops on a null procedure and would leave the player stuck on
+	// the login scene after picking a server.
+	s_pProcLogIn           = new CGameProcLogIn();           // 로그인 프로시져
+	s_pProcNationSelect    = new CGameProcNationSelect();    // 나라 선택
+	s_pProcCharacterSelect = new CGameProcCharacterSelect(); // 캐릭터 선택
+	s_pProcCharacterCreate = new CGameProcCharacterCreate(); // 캐릭터 만들기
+	s_pProcMain            = new CGameProcMain();            // 메인 게임 프로시져
 }
 #endif // _WIN32
 
@@ -417,6 +423,14 @@ void CGameProcedure::StaticMemberRelease()
 
 	delete s_pProcLogIn;
 	s_pProcLogIn = nullptr;
+	delete s_pProcNationSelect;
+	s_pProcNationSelect = nullptr;
+	delete s_pProcCharacterSelect;
+	s_pProcCharacterSelect = nullptr;
+	delete s_pProcCharacterCreate;
+	s_pProcCharacterCreate = nullptr;
+	delete s_pProcMain;
+	s_pProcMain = nullptr;
 
 	CGameBase::StaticMemberRelease();
 
@@ -605,6 +619,29 @@ bool CGameProcedure::CaptureScreenAndSaveToFile(const std::string& szFN)
 
 void CGameProcedure::ProcActiveSet(CGameProcedure* pProc)
 {
+#ifndef _WIN32
+	const auto szProcName = [](CGameProcedure* p) -> const char* {
+		if (p == nullptr)
+			return "none";
+		if (p == s_pProcLogIn)
+			return "login";
+		if (p == s_pProcNationSelect)
+			return "nation-select";
+		if (p == s_pProcCharacterSelect)
+			return "character-select";
+		if (p == s_pProcCharacterCreate)
+			return "character-create";
+		if (p == s_pProcMain)
+			return "main";
+		return "unknown";
+	};
+
+	if (pProc == nullptr)
+		spdlog::warn("ProcActiveSet(nullptr) ignored - target scene procedure was never created");
+	else if (s_pProcActive != pProc)
+		spdlog::info("scene change: {} -> {}", szProcName(s_pProcActive), szProcName(pProc));
+#endif
+
 	if (pProc == nullptr || s_pProcActive == pProc)
 		return;
 
