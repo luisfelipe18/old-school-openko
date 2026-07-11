@@ -4,6 +4,7 @@
 #include <spdlog/spdlog.h>
 
 #include <algorithm> // std::clamp()
+#include <cstring>   // memcpy
 #include <limits>    // INT_MAX
 
 int myrand_generic_impl(int min, int max);
@@ -47,34 +48,51 @@ uint8_t GetByte(const char* sBuf, int& index)
 	return (uint8_t) (*(sBuf + t_index));
 }
 
+// Packet buffers aren't guaranteed to leave sBuf+index aligned to the field
+// width (a preceding variable-length string can land the next field on an
+// odd offset), so a raw pointer-cast dereference is a misaligned-load UB
+// (undefined behaviour) - harmless in practice on x86 but a real fault risk
+// on strict-alignment ARM configurations. memcpy reads/writes are alignment-safe
+// and the compiler still lowers them to a plain load/store, so the wire
+// bytes are unchanged.
 int GetShort(const char* sBuf, int& index)
 {
 	index += 2;
-	return *(int16_t*) (sBuf + index - 2);
+	int16_t value;
+	memcpy(&value, sBuf + index - 2, sizeof(value));
+	return value;
 }
 
 int GetInt(const char* sBuf, int& index)
 {
 	index += 4;
-	return *(int*) (sBuf + index - 4);
+	int value;
+	memcpy(&value, sBuf + index - 4, sizeof(value));
+	return value;
 }
 
 uint32_t GetDWORD(const char* sBuf, int& index)
 {
 	index += 4;
-	return *(uint32_t*) (sBuf + index - 4);
+	uint32_t value;
+	memcpy(&value, sBuf + index - 4, sizeof(value));
+	return value;
 }
 
 float GetFloat(const char* sBuf, int& index)
 {
 	index += 4;
-	return *(float*) (sBuf + index - 4);
+	float value;
+	memcpy(&value, sBuf + index - 4, sizeof(value));
+	return value;
 }
 
 int64_t GetInt64(const char* sBuf, int& index)
 {
 	index += 8;
-	return *(int64_t*) (sBuf + index - 8);
+	int64_t value;
+	memcpy(&value, sBuf + index - 8, sizeof(value));
+	return value;
 }
 
 void SetString(char* tBuf, const char* sBuf, int len, int& index)

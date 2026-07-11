@@ -741,11 +741,35 @@ la validación end-to-end en un Mac real queda como paso del usuario.)*
       *(miembro `FileReaderHandle FileReaderHandle;` — mismo nombre que el*
       *tipo, mal formado por [basic.scope.class]; clang lo acepta como*
       *extensión, gcc lo rechaza. Renombrado a `ReaderState`).*
-* [ ] Auditoría de supuestos de 32 bits / orden de bytes en (de)serialización
+* [x] Auditoría de supuestos de 32 bits / orden de bytes en (de)serialización
       de paquetes y formatos (`#pragma pack`, casts de punteros a `DWORD`).
-      Ambas plataformas objetivo son little-endian de 64 bits, igual que el
-      build x64 de Windows, así que el riesgo real es bajo pero hay que
-      verificarlo con los tests de formato de la Fase 1.
+      *(Hecho. Confirmado que el orden de bytes NO es un riesgo real: las tres
+      plataformas objetivo (Windows x64, macOS, Linux) son little-endian, y
+      `ByteBuffer`/`Packet` (usado por cliente y servidor) serializa siempre
+      con `memcpy` byte a byte — no hay `htons`/`ntohl` en ningún punto, así
+      que el layout en el wire es idéntico en las tres. El hallazgo real fue
+      otro: la MISMA clase de bug de lectura desalineada que motivó esta
+      fase (ver arriba, `APISocket`) también vivía en la capa compartida de
+      (de)serialización: 1) `ByteBuffer::read<type>(pos)` — el primitivo del
+      que depende TODA lectura de campo de paquete (`pkt.read<uint16_t>()`,
+      etc., cliente y servidor) — desreferenciaba un `reinterpret_cast<const
+      type*>` sobre un offset de byte arbitrario en vez de copiar; 2) las
+      funciones legacy `GetShort/GetInt/GetDWORD/GetFloat/GetInt64` en
+      `Server/shared-server/utilities.cpp` (usadas por Ebenezer, AIServer,
+      VersionManager, ItemManager, Aujard) tenían el mismo patrón; 3)
+      `JvCryption::JvDecryptionWithCRC32` leía el CRC final del paquete con
+      `*(uint32_t*)(dataout + len - 4)`, con `len` derivado del wire y por
+      tanto no garantizado alineado a 4 bytes. Las tres se corrigieron con
+      `memcpy` (mismo patrón que `APISocket`, coste cero, el compilador lo
+      baja a un load/store plano) — el valor y los bytes en el wire no
+      cambian, solo se elimina la UB. Como esta capa la comparten cliente y
+      servidor, y los servidores YA corren en macOS/Linux según el README,
+      este hallazgo beneficia directamente al entorno del usuario (servidor
+      Ebenezer local + cliente macOS). Verificado: build limpio con
+      `-Werror` del cliente (Linux) y de los 5 servidores + `Ebenezer.Tests`
+      (con ODBC instalado temporalmente para configurar `nanodbc`), suite
+      completa 6/6 (cliente) + 4/4 (servidor) en verde, y re-verificado bajo
+      el preset `linux-asan` (ASan+UBSan) sin regresiones.)*
 * [ ] `-Wall -Wextra -Werror` limpio en clang (el proyecto ya lo activa por
       `OPENKO_COMPILE_WARNINGS_AS_ERROR`).
 * [ ] Rendimiento: objetivo ≥ paridad con Windows/D3D9 en la misma máquina;

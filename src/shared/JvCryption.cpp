@@ -2,6 +2,8 @@
 #include "JvCryption.h"
 #include "version.h"
 
+#include <cstring> // memcpy
+
 // Cryption
 constexpr uint64_t g_private_key = 0x1234567890123456;
 
@@ -61,7 +63,13 @@ int CJvCryption::JvDecryptionWithCRC32(int len, uint8_t* datain, uint8_t* dataou
 	int result = -1;
 	JvDecryptionFast(len, datain, dataout);
 
-	if (crc32(dataout, len - 4, -1) == *(uint32_t*) (len - 4 + dataout))
+	// dataout + len - 4 isn't guaranteed to be 4-byte aligned (len comes from
+	// the wire), so read the trailing CRC via memcpy rather than a raw
+	// pointer-cast dereference (misaligned-load UB).
+	uint32_t storedCrc = 0;
+	memcpy(&storedCrc, dataout + len - 4, sizeof(storedCrc));
+
+	if (crc32(dataout, len - 4, -1) == storedCrc)
 		result = len - 4;
 
 	return result;
