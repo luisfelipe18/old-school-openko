@@ -179,7 +179,11 @@ int main(int argc, char* argv[])
 	}
 
 	// 메인 윈도우를 만들고..
-	SDL_WindowFlags windowFlags = SDL_WINDOW_HIGH_PIXEL_DENSITY;
+	// The game engine works in logical pixel coordinates throughout (UI layout,
+	// XYZRHW vertices, viewport). HIGH_PIXEL_DENSITY would give us a 2x
+	// framebuffer on Retina displays, mismatching all those coordinates.
+	// Omitting it keeps framebuffer == logical size, matching D3D9 behaviour.
+	SDL_WindowFlags windowFlags = 0;
 	if (!CN3Base::s_Options.bWindowMode)
 		windowFlags |= SDL_WINDOW_FULLSCREEN;
 
@@ -306,7 +310,7 @@ int main(int argc, char* argv[])
 			spdlog::info("toggled to {}", CN3Base::s_Options.bWindowMode ? "windowed" : "fullscreen");
 		}
 
-		if (localInput.IsKeyPressed(DIK_ESCAPE))
+		if (!bLoginScene && localInput.IsKeyPressed(DIK_ESCAPE))
 			g_bQuitRequested = true;
 
 		if (bLoginScene)
