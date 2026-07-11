@@ -115,8 +115,8 @@ void LoadGameOptions()
 	CN3Base::s_Options.bVSyncEnabled = ini.GetBool("Screen", "VSyncEnabled", true);
 
 	// POSIX-only: pick the RHI render backend. "GL" uses the OpenGL backend
-	// (docs/PORT_POSIX_PLAN.md, T6.5); anything else keeps the headless Null
-	// backend, which is what CI smoke runs. Windows ignores this and uses D3D9.
-	const std::string szRenderer         = ini.GetString("Screen", "Renderer", "Null");
+	// (docs/PORT_POSIX_PLAN.md, T6.5); "Null" is the headless backend for CI
+	// smoke runs. Default to GL so the game is visible out of the box.
+	const std::string szRenderer         = ini.GetString("Screen", "Renderer", "GL");
 	CN3Base::s_Options.bPreferGLRenderer = (szRenderer == "GL" || szRenderer == "gl");
 }
