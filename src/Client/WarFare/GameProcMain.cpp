@@ -79,6 +79,8 @@
 #include <Platform/PlatformFileFind.h> // _findfirst/_findnext/_findclose
 #include <Platform/PlatformPaths.h>    // GetCurrentDirectory / SetCurrentDirectory
 #include <Platform/PlatformString.h>   // lstrcpy / lstrcat
+
+#include <spdlog/spdlog.h>
 #endif
 
 #include "NetworkEncoding.h" // CP949 <-> UTF-8 at the network boundary
@@ -261,6 +263,9 @@ void CGameProcMain::ReleaseUIs()
 
 void CGameProcMain::Init()
 {
+#ifndef _WIN32
+	spdlog::info("entering main scene: CGameProcMain::Init starting");
+#endif
 	CGameProcedure::Init();
 	m_pLightMgr->Release();
 	s_pEng->SetDefaultLight(m_pLightMgr->Light(0), m_pLightMgr->Light(1), m_pLightMgr->Light(2));
@@ -300,8 +305,17 @@ void CGameProcMain::Init()
 	if (m_pWarMessage != nullptr)
 		m_pWarMessage->InitFont();
 
+#ifndef _WIN32
+	spdlog::info("main scene: InitUI starting");
+#endif
 	InitUI();                                                       // 국가에 따라 다른 UI 로딩...
+#ifndef _WIN32
+	spdlog::info("main scene: InitUI done, InitZone starting (zone {})", s_pPlayer->m_InfoExt.iZoneCur);
+#endif
 	InitZone(s_pPlayer->m_InfoExt.iZoneCur, s_pPlayer->Position()); // 존 로딩..
+#ifndef _WIN32
+	spdlog::info("main scene: InitZone done");
+#endif
 
 	//sound obj...
 	if (m_pSnd_Battle == nullptr)
@@ -327,6 +341,10 @@ void CGameProcMain::Init()
 
 	if (s_pUILoading != nullptr)
 		s_pUILoading->Render("Loading Character Data...", 0);
+
+#ifndef _WIN32
+	spdlog::info("main scene: resource preload starting (Chr/Item anim, tex, joint, skins, pmesh)");
+#endif
 
 	// 경로 기억..
 	char szPathOld[_MAX_PATH], szPathFind[_MAX_PATH];
@@ -355,6 +373,9 @@ void CGameProcMain::Init()
 	}
 	_findclose(hFind);
 
+#ifndef _WIN32
+	spdlog::info("main scene: resource preload 10% (animations)");
+#endif
 	if (s_pUILoading != nullptr)
 		s_pUILoading->Render("Loading Character Data... 10 %", 10);
 
@@ -378,6 +399,9 @@ void CGameProcMain::Init()
 	}
 	_findclose(hFind);
 
+#ifndef _WIN32
+	spdlog::info("main scene: resource preload 25% (item textures)");
+#endif
 	if (s_pUILoading != nullptr)
 		s_pUILoading->Render("Loading Character Data... 25 %", 25);
 
@@ -401,6 +425,9 @@ void CGameProcMain::Init()
 	}
 	_findclose(hFind);
 
+#ifndef _WIN32
+	spdlog::info("main scene: resource preload 50% (joints)");
+#endif
 	if (s_pUILoading != nullptr)
 		s_pUILoading->Render("Loading Character Data... 50 %", 50);
 
@@ -424,6 +451,9 @@ void CGameProcMain::Init()
 	}
 	_findclose(hFind);
 
+#ifndef _WIN32
+	spdlog::info("main scene: resource preload 75% (skins)");
+#endif
 	if (s_pUILoading != nullptr)
 		s_pUILoading->Render("Loading Character Data... 75 %", 75);
 
@@ -447,6 +477,9 @@ void CGameProcMain::Init()
 	}
 	_findclose(hFind);
 
+#ifndef _WIN32
+	spdlog::info("main scene: resource preload 100% (pmesh) - sending WIZ_GAMESTART");
+#endif
 	if (s_pUILoading != nullptr)
 		s_pUILoading->Render("Loading Character Data... 100 %", 100);
 
@@ -454,6 +487,10 @@ void CGameProcMain::Init()
 
 	// 경로 돌리기..
 	::SetCurrentDirectory(szPathOld);
+
+#ifndef _WIN32
+	spdlog::info("entering main scene: CGameProcMain::Init finished");
+#endif
 }
 
 void CGameProcMain::InitPlayerPosition(const __Vector3& vPos)              // 플레이어 위치 초기화.. 일으켜 세우고, 기본동작을 취하게 한다.
@@ -1858,6 +1895,9 @@ void CGameProcMain::MsgSend_KnightsAppointViceChief(const std::string& szName)
 
 bool CGameProcMain::MsgRecv_MyInfo_All(Packet& pkt)
 {
+#ifndef _WIN32
+	spdlog::info("MsgRecv_MyInfo_All: received - initializing player character");
+#endif
 	int iZone = s_pPlayer->m_InfoExt.iZoneCur;
 	s_pPlayer->Release(); // 일단 몽창 다 해제 하고....
 	s_pPlayer->m_InfoExt.iZoneCur = iZone;
@@ -1887,7 +1927,13 @@ bool CGameProcMain::MsgRecv_MyInfo_All(Packet& pkt)
 			static_cast<int>(s_pPlayer->m_InfoBase.eRace));
 	}
 	__ASSERT(pLooks, "failed find character resource data");
+#ifndef _WIN32
+	spdlog::info("MsgRecv_MyInfo_All: InitChr starting (race {})", static_cast<int>(s_pPlayer->m_InfoBase.eRace));
+#endif
 	s_pPlayer->InitChr(pLooks); // 관절 세팅..
+#ifndef _WIN32
+	spdlog::info("MsgRecv_MyInfo_All: InitChr done");
+#endif
 
 	s_pPlayer->m_InfoExt.iRank              = pkt.read<uint8_t>();
 	s_pPlayer->m_InfoExt.iTitle             = pkt.read<uint8_t>();
@@ -2215,6 +2261,9 @@ bool CGameProcMain::MsgRecv_MyInfo_All(Packet& pkt)
 		m_pUICmdList->CreateCategoryList();
 
 	m_bLoadComplete = TRUE; // 로딩 끝..
+#ifndef _WIN32
+	spdlog::info("MsgRecv_MyInfo_All: player character fully initialized");
+#endif
 
 	return true;
 }
@@ -4498,16 +4547,28 @@ void CGameProcMain::InitZone(int iZone, const __Vector3& vPosPlayer)
 		if (pZoneData == nullptr)
 		{
 			CLogWriter::Write("can't find zone data. (zone : {})", s_pPlayer->m_InfoExt.iZoneCur);
+#ifndef _WIN32
+			spdlog::error("InitZone: zone data not found for zone {} - Data/Zone*.tbl entry missing", iZone);
+#endif
 			__ASSERT(0, "Zone Data Not Found!");
 			return;
 		}
 
 		s_pOPMgr->Release(); // 다른 넘들 다 날린다..
+#ifndef _WIN32
+		spdlog::info("InitZone: loading world/terrain for zone {} (terrain='{}')", iZone, pZoneData->szTerrainFN);
+#endif
 		s_pWorldMgr->InitWorld(iZone);
+#ifndef _WIN32
+		spdlog::info("InitZone: world/terrain loaded, loading minimap '{}'", pZoneData->szMiniMapFN);
+#endif
 
 		// 미니맵 로딩..
 		float fWidth = ACT_WORLD->GetWidthByMeterWithTerrain();
 		m_pUIStateBarAndMiniMap->LoadMap(pZoneData->szMiniMapFN, fWidth, fWidth);
+#ifndef _WIN32
+		spdlog::info("InitZone: minimap loaded");
+#endif
 
 		// 줌 비율 정하기..
 		float fZoom           = 6.0f;

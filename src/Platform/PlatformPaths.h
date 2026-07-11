@@ -160,12 +160,26 @@ inline void _makepath(char* path, const char* /*drive*/, const char* dir, const 
 
 /// Win32 SetCurrentDirectory shim: changes the process working directory.
 /// Returns nonzero on success like the Win32 API.
+///
+/// Callers build paths with the game's historical '\\' separator (e.g.
+/// "<cwd>\\Chr"); on POSIX filesystems that's an ordinary filename
+/// character, so std::filesystem would look for a single component named
+/// literally "Chr" instead of descending into it and silently fail. Rewrite
+/// backslashes to '/' first, mirroring FileIO/PathResolver's
+/// NormalizePathSeparators (duplicated here rather than linked - Platform
+/// has no dependency on FileIO).
 inline int SetCurrentDirectory(const char* szPath)
 {
 	if (szPath == nullptr)
 		return 0;
+	std::string szNormalized = szPath;
+	for (char& c : szNormalized)
+	{
+		if (c == '\\')
+			c = '/';
+	}
 	std::error_code ec;
-	std::filesystem::current_path(szPath, ec);
+	std::filesystem::current_path(szNormalized, ec);
 	return ec ? 0 : 1;
 }
 

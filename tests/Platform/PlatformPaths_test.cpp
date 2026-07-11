@@ -63,4 +63,28 @@ TEST(PlatformPathsTest, UserConfigDirHonoursXdgOnLinux)
 #endif
 }
 
+TEST(PlatformPathsTest, SetCurrentDirectoryNormalizesBackslashes)
+{
+	// The client builds subdirectory paths with the game's historical '\\'
+	// separator (e.g. CGameProcMain::Init's "<cwd>\\Chr" resource preload) -
+	// on a POSIX filesystem that backslash is an ordinary filename character,
+	// so without normalization std::filesystem looks for a single component
+	// literally named "sub\\dir" and silently fails to change directory.
+	const std::filesystem::path base = std::filesystem::temp_directory_path()
+		/ "openko-setcwd-test";
+	std::error_code ec;
+	std::filesystem::remove_all(base, ec);
+	std::filesystem::create_directories(base / "sub" / "dir", ec);
+	ASSERT_FALSE(ec);
+
+	const std::filesystem::path original = std::filesystem::current_path();
+
+	const std::string szPath = base.string() + "\\sub\\dir";
+	EXPECT_NE(SetCurrentDirectory(szPath.c_str()), 0);
+	EXPECT_EQ(std::filesystem::current_path(), base / "sub" / "dir");
+
+	std::filesystem::current_path(original, ec);
+	std::filesystem::remove_all(base, ec);
+}
+
 #endif // _WIN32
