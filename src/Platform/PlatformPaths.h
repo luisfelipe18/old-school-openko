@@ -8,6 +8,10 @@
 #include <filesystem>
 #include <string>
 
+#if defined(__APPLE__)
+#include <mach-o/dyld.h> // _NSGetExecutablePath
+#endif
+
 // Header-only so the Windows MSBuild projects can consume it without linking
 // anything new (same rule as PlatformTime.h).
 
@@ -25,10 +29,10 @@ inline std::filesystem::path GetExecutableDir()
 	// via Resource.rc, and paths anchor to the working directory.
 	return {};
 #elif defined(__APPLE__)
-	// macOS: _NSGetExecutablePath fills a caller-provided buffer.
-	extern int _NSGetExecutablePath(char* buf, unsigned* bufsize);
+	// macOS: _NSGetExecutablePath fills a caller-provided buffer. Declared in
+	// <mach-o/dyld.h>, which is the safest way to pick up the correct C linkage.
 	char buf[1024]                    = {};
-	unsigned int size                 = static_cast<unsigned int>(sizeof(buf));
+	uint32_t size                     = static_cast<uint32_t>(sizeof(buf));
 	if (_NSGetExecutablePath(buf, &size) != 0)
 		return {};
 	std::error_code ec;
