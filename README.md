@@ -77,12 +77,29 @@ produces a distribution layout:
 * **macOS**: a `Knight OnLine.app` bundle. Info.plist ships with
   `NSHighResolutionCapable`, category role-playing, and a minimum system
   version of macOS 11. The `.cur` cursors live in
-  `Contents/Resources/`. To provide a real bundle icon, generate a
-  `KnightOnLine.icns` from `WarFare.ico` (any online converter, or
-  `sips`+`iconutil`) and drop it into `src/Client/WarFare/`; CMake picks
-  it up automatically. To run an unsigned bundle locally,
-  `codesign --force --deep -s - Knight\ OnLine.app` gives it an ad-hoc
-  signature and Gatekeeper won't quarantine it.
+  `Contents/Resources/`. For the app icon, drop a square PNG (ideally
+  1024x1024) at `src/Client/WarFare/AppIcon.png` - the build crops it and
+  generates a proper multi-resolution `KnightOnLine.icns` automatically
+  (`generate_macos_icon.sh`, via `sips`+`iconutil`). A committed
+  `KnightOnLine.icns` takes precedence if you'd rather hand-author one; a
+  low-res fallback from `WarFare_1298.ico` is used if neither exists. To
+  run an unsigned bundle locally, `codesign --force --deep -s - Knight\
+  OnLine.app` gives it an ad-hoc signature and Gatekeeper won't
+  quarantine it.
+
+  If the Dock/Get Info preview shows the new icon but Finder's list/icon
+  view still shows a generic one after rebuilding, that's Finder's icon
+  cache being stale (common after overwriting a `.app` in place) - not a
+  build problem. Force a refresh with:
+  ```
+  touch "Knight OnLine.app"
+  killall Finder Dock
+  ```
+  or, if that doesn't clear it, reset the whole icon cache:
+  ```
+  sudo rm -rf /Library/Caches/com.apple.iconservices.store
+  killall Finder Dock
+  ```
 
 Runtime data written by the game (`Log.txt`) lands under
 `~/Library/Application Support/OpenKO/` on macOS and

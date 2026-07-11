@@ -579,23 +579,15 @@ if(NOT WIN32)
       find_program(SIPS_EXECUTABLE sips)
       find_program(ICONUTIL_EXECUTABLE iconutil)
       if(SIPS_EXECUTABLE AND ICONUTIL_EXECUTABLE)
-        set(_iconset "${CMAKE_CURRENT_BINARY_DIR}/KnightOnLine.iconset")
-        set(_iconsrc "${CMAKE_CURRENT_SOURCE_DIR}/AppIcon.png")
-        # Each Retina .icns needs the standard 10-entry size ladder.
+        # generate_macos_icon.sh center-crops the source (many portrait PNGs
+        # ship with a decorative frame baked into the pixels, which otherwise
+        # leaves the subject looking small and boxed-in once composed into a
+        # Dock icon) before building the standard 10-entry iconset.
         add_custom_command(TARGET WarFare POST_BUILD
-          COMMAND "${CMAKE_COMMAND}" -E make_directory "${_iconset}"
-          COMMAND "${SIPS_EXECUTABLE}" -z 16 16     "${_iconsrc}" --out "${_iconset}/icon_16x16.png"
-          COMMAND "${SIPS_EXECUTABLE}" -z 32 32     "${_iconsrc}" --out "${_iconset}/icon_16x16@2x.png"
-          COMMAND "${SIPS_EXECUTABLE}" -z 32 32     "${_iconsrc}" --out "${_iconset}/icon_32x32.png"
-          COMMAND "${SIPS_EXECUTABLE}" -z 64 64     "${_iconsrc}" --out "${_iconset}/icon_32x32@2x.png"
-          COMMAND "${SIPS_EXECUTABLE}" -z 128 128   "${_iconsrc}" --out "${_iconset}/icon_128x128.png"
-          COMMAND "${SIPS_EXECUTABLE}" -z 256 256   "${_iconsrc}" --out "${_iconset}/icon_128x128@2x.png"
-          COMMAND "${SIPS_EXECUTABLE}" -z 256 256   "${_iconsrc}" --out "${_iconset}/icon_256x256.png"
-          COMMAND "${SIPS_EXECUTABLE}" -z 512 512   "${_iconsrc}" --out "${_iconset}/icon_256x256@2x.png"
-          COMMAND "${SIPS_EXECUTABLE}" -z 512 512   "${_iconsrc}" --out "${_iconset}/icon_512x512.png"
-          COMMAND "${SIPS_EXECUTABLE}" -z 1024 1024 "${_iconsrc}" --out "${_iconset}/icon_512x512@2x.png"
-          COMMAND "${ICONUTIL_EXECUTABLE}" -c icns "${_iconset}"
-            -o "${_warfare_resource_dest}/KnightOnLine.icns"
+          COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/generate_macos_icon.sh"
+            "${CMAKE_CURRENT_SOURCE_DIR}/AppIcon.png"
+            "${CMAKE_CURRENT_BINARY_DIR}/KnightOnLine.iconset"
+            "${_warfare_resource_dest}/KnightOnLine.icns"
           COMMENT "Generating multi-resolution app icon from AppIcon.png")
       else()
         message(STATUS "OpenKO: sips/iconutil not found; the .app will use a generic icon")
