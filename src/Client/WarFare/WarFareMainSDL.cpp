@@ -24,6 +24,7 @@
 
 #include <N3Base/LogWriter.h>
 #include <N3Base/N3Base.h>
+#include <N3Base/N3UIEdit.h>
 #include <N3Base/RHI/RHIDeviceNull.h>
 
 #include <SDL3/SDL.h>
@@ -106,6 +107,24 @@ void HandleEvent(const SDL_Event& event)
 			// TODO(F6+): route to focused msgbox/UI, else CameraZoom(delta * 0.05f)
 			break;
 		}
+
+		// Text input (docs/PORT_POSIX_PLAN.md, T7.2): the OS/IME feeds the
+		// focused CN3UIEdit; SDL only sends these while text input is started
+		// (the edit's focus hooks below control that).
+		case SDL_EVENT_TEXT_INPUT:
+			CN3UIEdit::OnTextInput(event.text.text);
+			break;
+
+		case SDL_EVENT_TEXT_EDITING:
+			CN3UIEdit::OnTextEditing(event.edit.text);
+			break;
+
+		// Editing keys (WM_KEYDOWN of the Win32 EDIT control): backspace,
+		// delete, arrows, home/end and enter route to the focused edit.
+		case SDL_EVENT_KEY_DOWN:
+			if (CN3UIEdit::TextInputActive())
+				CN3UIEdit::OnKeyDown(SdlScancodeToDik(event.key.scancode));
+			break;
 
 		default:
 			break;
@@ -245,6 +264,22 @@ int main(int argc, char* argv[])
 
 	CLocalInput localInput;
 	localInput.Init(nullptr, nullptr);
+
+	// Text input plumbing (docs/PORT_POSIX_PLAN.md, T7.2): when an edit gains
+	// focus, start the OS text input with the IME area over the control; stop
+	// it on blur. This replaces the hidden Win32 EDIT window + IMM32 calls.
+	CN3UIEdit::TextInputHooks textInputHooks;
+	textInputHooks.pOnFocusGained = [](const RECT& rcEdit) {
+		const SDL_Rect area = { static_cast<int>(rcEdit.left), static_cast<int>(rcEdit.top),
+			static_cast<int>(rcEdit.right - rcEdit.left),
+			static_cast<int>(rcEdit.bottom - rcEdit.top) };
+		SDL_SetTextInputArea(g_pWindow, &area, 0);
+		SDL_StartTextInput(g_pWindow);
+	};
+	textInputHooks.pOnFocusLost = []() {
+		SDL_StopTextInput(g_pWindow);
+	};
+	CN3UIEdit::SetTextInputHooks(textInputHooks);
 
 	spdlog::info("window created: {}x{} ({})", CN3Base::s_Options.iViewWidth,
 		CN3Base::s_Options.iViewHeight,

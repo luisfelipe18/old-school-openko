@@ -4,6 +4,7 @@ add_executable(N3Base.Tests
   RHIDeviceNull_test.cpp
   RHITexture_test.cpp
   RHIStateKey_test.cpp
+  UIEditTextInput_test.cpp
   VMeshHeadless_test.cpp)
 
 set_target_properties(N3Base.Tests PROPERTIES

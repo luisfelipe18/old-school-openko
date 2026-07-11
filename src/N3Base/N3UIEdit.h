@@ -45,11 +45,12 @@ protected:
 public:
 	static char s_szBuffTmp[512];
 
-	// The native Win32 EDIT control + IME plumbing is Windows-only. The POSIX
-	// text-input path (SDL_StartTextInput / IME) lands with N3UIEdit in T7.2;
-	// until then N3UIEdit itself is out of the POSIX subset, but the header is
-	// still pulled in (N3UIBase/N3UIArea reference the type), so the portable
-	// pieces stay visible and only these members are gated.
+	// The native Win32 EDIT control + IME plumbing is Windows-only. On POSIX
+	// the edit owns its text buffer directly and is fed by the SDL entry
+	// point (docs/PORT_POSIX_PLAN.md, T7.2): committed/composed UTF-8 comes
+	// in through OnTextInput/OnTextEditing, editing keys through OnKeyDown,
+	// and focus changes notify the entry point through the registered hooks
+	// so it can start/stop the OS text input (IME) over the control's area.
 #ifdef _WIN32
 	static HWND s_hWndEdit, s_hWndParent;
 	static WNDPROC s_lpfnEditProc;
@@ -59,6 +60,25 @@ public:
 	static LRESULT APIENTRY EditWndProc(HWND hWnd, uint16_t Message, WPARAM wParam, LPARAM lParam);
 	static void UpdateTextFromEditCtrl();
 	static void UpdateCaretPosFromEditCtrl();
+#else
+	struct TextInputHooks
+	{
+		void (*pOnFocusGained)(const RECT& rcEdit) = nullptr; // start text input over the edit
+		void (*pOnFocusLost)()                     = nullptr; // stop text input
+	};
+	static void SetTextInputHooks(const TextInputHooks& hooks);
+
+	/// True while an edit control has keyboard focus (text input is active).
+	static bool TextInputActive();
+
+	/// Committed text from the OS (SDL_EVENT_TEXT_INPUT), UTF-8.
+	static void OnTextInput(const char* szUtf8);
+
+	/// IME composition preview (SDL_EVENT_TEXT_EDITING), UTF-8; empty cancels.
+	static void OnTextEditing(const char* szUtf8);
+
+	/// Editing keys (DIK_* codes); returns true when the key was consumed.
+	static bool OnKeyDown(int iDik);
 #endif
 
 protected:
@@ -96,6 +116,13 @@ public:
 
 protected:
 	BOOL IsHangulMiddleByte(const char* lpszStr, int iPos); // 한글의 2번째 바이트 글자인가?
+
+#ifndef _WIN32
+	// POSIX text editing over the logical (unmasked) buffer, DBCS-aware.
+	void InsertBytesAtCaret(const std::string& szCp949);
+	void ReplaceComposition(const std::string& szCp949);
+	void ClearComposition();
+#endif
 
 #ifdef _N3TOOL
 public:

@@ -190,6 +190,205 @@ LRESULT APIENTRY CN3UIEdit::EditWndProc(HWND hWnd, uint16_t Message, WPARAM wPar
 
 	return CallWindowProc(s_lpfnEditProc, hWnd, Message, wParam, lParam);
 }
+#else // _WIN32 --------------------------------------------------------------
+
+// POSIX text input (docs/PORT_POSIX_PLAN.md, T7.2): the SDL entry point feeds
+// UTF-8 text (committed and IME preedit) and editing keys into the focused
+// edit; the edit mutates its own logical buffer (CP949, DBCS-aware) through
+// SetString, which keeps password masking and caret placement working. Focus
+// changes call back into the entry point so the OS text input follows the
+// control (the SDL analogue of the EDIT window + IMM32 status calls above).
+
+#include <Platform/DInputKeyCodes.h>
+#include <Platform/PlatformEncoding.h>
+
+namespace
+{
+CN3UIEdit::TextInputHooks s_TextInputHooks;
+
+// Size in bytes of the character that ends at nPos (2 when szBuff[nPos-1] is
+// the trail byte of a CP949 pair, else 1). Lead/trail parity walk from the
+// start of the string - same logic as CN3UIEdit::IsHangulMiddleByte.
+size_t CharSizeBefore(const std::string& szBuff, size_t nPos)
+{
+	if (nPos == 0 || nPos > szBuff.size() || !(szBuff[nPos - 1] & 0x80))
+		return 1;
+
+	bool bMiddle = false;
+	for (size_t i = 0; i + 1 < nPos; ++i)
+	{
+		if (szBuff[i] & 0x80)
+			bMiddle = !bMiddle;
+	}
+	return bMiddle ? 2u : 1u;
+}
+
+// Size in bytes of the character starting at nPos (a character boundary).
+size_t CharSizeAt(const std::string& szBuff, size_t nPos)
+{
+	return (nPos < szBuff.size() && (szBuff[nPos] & 0x80)) ? 2u : 1u;
+}
+
+// Longest prefix of szText that fits in nAvail bytes without splitting a
+// CP949 pair (text is a sequence of 1-byte ASCII and 2-byte DBCS chars).
+size_t ClipToCharBoundary(const std::string& szText, size_t nAvail)
+{
+	size_t nTake = 0;
+	while (nTake < szText.size())
+	{
+		const size_t nCharSize = (szText[nTake] & 0x80) ? 2u : 1u;
+		if (nTake + nCharSize > nAvail || nTake + nCharSize > szText.size())
+			break;
+		nTake += nCharSize;
+	}
+	return nTake;
+}
+} // namespace
+
+void CN3UIEdit::SetTextInputHooks(const TextInputHooks& hooks)
+{
+	s_TextInputHooks = hooks;
+}
+
+bool CN3UIEdit::TextInputActive()
+{
+	return s_pFocusedEdit != nullptr;
+}
+
+void CN3UIEdit::OnTextInput(const char* szUtf8)
+{
+	if (s_pFocusedEdit == nullptr || szUtf8 == nullptr || szUtf8[0] == '\0')
+		return;
+
+	s_pFocusedEdit->ClearComposition();
+	s_pFocusedEdit->InsertBytesAtCaret(Utf8ToCp949(szUtf8));
+}
+
+void CN3UIEdit::OnTextEditing(const char* szUtf8)
+{
+	if (s_pFocusedEdit == nullptr || szUtf8 == nullptr)
+		return;
+
+	s_pFocusedEdit->ReplaceComposition(Utf8ToCp949(szUtf8));
+}
+
+bool CN3UIEdit::OnKeyDown(int iDik)
+{
+	CN3UIEdit* pEdit = s_pFocusedEdit;
+	if (pEdit == nullptr)
+		return false;
+
+	// While the IME is composing it owns the editing keys.
+	if (pEdit->m_iCompLength > 0)
+		return false;
+
+	std::string szBuff = pEdit->GetString();
+	size_t nCaret      = std::min(pEdit->m_nCaretPos, szBuff.size());
+
+	switch (iDik)
+	{
+		case DIK_RETURN:
+		case DIK_NUMPADENTER:
+			// Same contract as the Win32 EditWndProc's VK_RETURN handling.
+			if (pEdit->GetParent() != nullptr)
+				pEdit->GetParent()->ReceiveMessage(pEdit, UIMSG_EDIT_RETURN);
+			return true;
+
+		case DIK_BACK:
+		{
+			if (nCaret == 0 || szBuff.empty())
+				return true;
+			const size_t nCharSize = CharSizeBefore(szBuff, nCaret);
+			szBuff.erase(nCaret - nCharSize, nCharSize);
+			pEdit->SetString(szBuff);
+			pEdit->SetCaretPos(nCaret - nCharSize);
+			return true;
+		}
+
+		case DIK_DELETE:
+		{
+			if (nCaret >= szBuff.size())
+				return true;
+			szBuff.erase(nCaret, CharSizeAt(szBuff, nCaret));
+			pEdit->SetString(szBuff);
+			pEdit->SetCaretPos(nCaret);
+			return true;
+		}
+
+		case DIK_LEFT:
+			if (nCaret > 0)
+				pEdit->SetCaretPos(nCaret - CharSizeBefore(szBuff, nCaret));
+			return true;
+
+		case DIK_RIGHT:
+			if (nCaret < szBuff.size())
+				pEdit->SetCaretPos(nCaret + CharSizeAt(szBuff, nCaret));
+			return true;
+
+		case DIK_HOME:
+			pEdit->SetCaretPos(0);
+			return true;
+
+		case DIK_END:
+			pEdit->SetCaretPos(szBuff.size());
+			return true;
+
+		default:
+			return false;
+	}
+}
+
+void CN3UIEdit::InsertBytesAtCaret(const std::string& szCp949)
+{
+	if (m_pBuffOutRef == nullptr || szCp949.empty())
+		return;
+
+	std::string szBuff = GetString();
+	if (m_nCaretPos > szBuff.size())
+		m_nCaretPos = szBuff.size();
+
+	const size_t nAvail = (m_iMaxStrLen > szBuff.size()) ? m_iMaxStrLen - szBuff.size() : 0;
+	const size_t nTake  = ClipToCharBoundary(szCp949, nAvail);
+	if (nTake == 0)
+		return;
+
+	szBuff.insert(m_nCaretPos, szCp949, 0, nTake);
+	SetString(szBuff);
+	SetCaretPos(m_nCaretPos + nTake);
+}
+
+void CN3UIEdit::ReplaceComposition(const std::string& szCp949)
+{
+	if (m_pBuffOutRef == nullptr)
+		return;
+
+	std::string szBuff = GetString();
+	if (m_nCaretPos > szBuff.size())
+		m_nCaretPos = szBuff.size();
+
+	// The previous preedit sits immediately before the caret; drop it.
+	if (m_iCompLength > 0)
+	{
+		const size_t nComp = std::min(static_cast<size_t>(m_iCompLength), m_nCaretPos);
+		szBuff.erase(m_nCaretPos - nComp, nComp);
+		m_nCaretPos   -= nComp;
+		m_iCompLength  = 0;
+	}
+
+	const size_t nAvail = (m_iMaxStrLen > szBuff.size()) ? m_iMaxStrLen - szBuff.size() : 0;
+	const size_t nTake  = ClipToCharBoundary(szCp949, nAvail);
+	szBuff.insert(m_nCaretPos, szCp949, 0, nTake);
+	m_iCompLength = static_cast<int>(nTake);
+
+	SetString(szBuff);
+	SetCaretPos(m_nCaretPos + nTake);
+}
+
+void CN3UIEdit::ClearComposition()
+{
+	if (m_iCompLength > 0)
+		ReplaceComposition({});
+}
 #endif // _WIN32
 
 CN3UIEdit::CN3Caret CN3UIEdit::s_Caret;
@@ -247,6 +446,9 @@ void CN3UIEdit::KillFocus()
 {
 	if (HaveFocus())
 	{
+#ifndef _WIN32
+		ClearComposition(); // drop any pending IME preedit
+#endif
 		s_pFocusedEdit     = nullptr;
 		s_Caret.m_bVisible = FALSE;
 
@@ -256,6 +458,9 @@ void CN3UIEdit::KillFocus()
 			::SetWindowText(s_hWndEdit, "");
 			::SetFocus(s_hWndParent);
 		}
+#else
+		if (s_TextInputHooks.pOnFocusLost != nullptr)
+			s_TextInputHooks.pOnFocusLost(); // stop the OS text input (IME)
 #endif
 	}
 }
@@ -302,6 +507,12 @@ bool CN3UIEdit::SetFocus()
 				::SetWindowText(s_hWndEdit, "");
 		}
 	}
+#else  // _WIN32
+	// Caret to the end of the current content, and let the entry point start
+	// the OS text input (IME) positioned over this control's screen area.
+	SetCaretPos(GetString().size());
+	if (s_TextInputHooks.pOnFocusGained != nullptr)
+		s_TextInputHooks.pOnFocusGained(GetRegion());
 #endif // _WIN32
 
 	return true;

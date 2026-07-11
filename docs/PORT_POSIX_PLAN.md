@@ -572,12 +572,33 @@ sobre Metal en macOS con paridad visual respecto a GL y D3D9.
       texels con alpha en el atlas, extents crecientes por prefijo (contrato
       del word-wrap), draw call real y liberación al setear "". **Pendiente:**
       validación visual en un Mac con los datos del juego.)*
-* [ ] **T7.2 — `N3UIEdit` sin ventana `EDIT`.** Buffer de texto propio +
+* [x] **T7.2 — `N3UIEdit` sin ventana `EDIT`.** Buffer de texto propio +
       caret existente, alimentado por `SDL_EVENT_TEXT_INPUT`/`TEXT_EDITING`
       (IME nativo), `SDL_StartTextInput`/`SDL_SetTextInputArea` en
       focus/blur; eliminar el paso `WM_COMMAND` del camino POSIX.
       *Aceptación:* login con usuario/contraseña tecleados; composición
       coreana funcional en macOS.
+      *(Hecho: `CN3UIEdit` gana en POSIX entry points estáticos —
+      `OnTextInput` (texto confirmado), `OnTextEditing` (preedit del IME,
+      con reemplazo in-place vía `m_iCompLength`) y `OnKeyDown` (DIK_*:
+      backspace/delete/flechas/home/end/enter, DBCS-aware con el mismo
+      walk de paridad que `IsHangulMiddleByte`; Tab NO se consume para que
+      la circulación de foco siga el camino `OnKeyPress` como en Windows).
+      Enter notifica `UIMSG_EDIT_RETURN` al padre igual que el
+      `EditWndProc` Win32. La edición muta el buffer lógico por
+      `SetString`, así el enmascarado de password y el posicionamiento del
+      caret existentes siguen funcionando; UTF-8→CP949 en la frontera con
+      `PlatformEncoding`. Focus/blur llaman hooks registrables
+      (`SetTextInputHooks`) — el main SDL registra
+      `SDL_SetTextInputArea`+`SDL_StartTextInput` / `SDL_StopTextInput`, y
+      enruta `SDL_EVENT_TEXT_INPUT`/`TEXT_EDITING`/`KEY_DOWN` (via
+      `SdlScancodeToDik`) al edit con foco. No había paso `WM_COMMAND` que
+      eliminar (el WndProc es Windows-only). Test `UIEditTextInput_test`
+      (6 casos): inserción/edición ASCII, edición Hangul por caracteres
+      completos, composición IME (reemplazo/commit/cancelación), password
+      enmascarado solo en display, clamp de longitud sin partir pares
+      DBCS, Enter→padre + hooks de foco. **Pendiente:** validación de
+      composición coreana real en un Mac (requiere IME del SO).)*
 * [ ] **T7.3 — Fronteras de encoding de chat.** `Cp949ToUtf8`/`Utf8ToCp949`
       en los puntos de entrada/salida de texto de red (chat, nombres).
       *Aceptación:* round-trip de chat con tildes y Hangul contra Ebenezer
