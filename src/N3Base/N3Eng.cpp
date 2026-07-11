@@ -556,13 +556,36 @@ BOOL CN3Eng::FindDepthStencilFormat(
 	return FALSE;
 }
 #else  // !_WIN32
-bool CN3Eng::Init(BOOL /*bWindowed*/, HWND /*hWnd*/, uint32_t /*dwWidth*/, uint32_t /*dwHeight*/,
+bool CN3Eng::Init(BOOL /*bWindowed*/, HWND /*hWnd*/, uint32_t dwWidth, uint32_t dwHeight,
 	uint32_t /*dwBPP*/, BOOL /*bUseHW*/)
 {
 	// POSIX (docs/PORT_POSIX_PLAN.md, T6.8): the SDL entry point owns window +
 	// GL/Null context creation and installs the RHI backend before the engine
 	// runs, so there is no D3D adapter enumeration to perform here.
-	return RHIDevice() != nullptr;
+	if (RHIDevice() == nullptr)
+		return false;
+
+	// The Windows path queries the D3D adapter for device caps and texture
+	// format support.  On POSIX the RHI backend (GL or Null) handles these
+	// transparently, so we just advertise sensible defaults.
+	s_DevCaps.MaxTextureWidth  = 4096;
+	s_DevCaps.MaxTextureHeight = 4096;
+	s_DevCaps.TextureCaps      = 0;
+
+	// GL (via S3TC) and the Null backend both accept DXT-compressed surfaces.
+	s_dwTextureCaps = TEX_CAPS_DXT1 | TEX_CAPS_DXT2 | TEX_CAPS_DXT3
+					| TEX_CAPS_DXT4 | TEX_CAPS_DXT5 | TEX_CAPS_MIPMAP;
+
+	// Viewport + default render states — identical to the tail of the Win32 Init.
+	this->LookAt(__Vector3(5, 5, -10), __Vector3(0, 0, 0), __Vector3(0, 1, 0));
+	this->SetProjection(0.1f, 256.0f, DegreesToRadians(45.0f),
+		static_cast<float>(dwHeight) / static_cast<float>(dwWidth));
+
+	RECT rcView = {0, 0, static_cast<int>(dwWidth), static_cast<int>(dwHeight)};
+	this->SetViewPort(rcView);
+	this->SetDefaultEnvironment();
+
+	return true;
 }
 
 BOOL CN3Eng::FindDepthStencilFormat(UINT /*iAdapter*/, D3DDEVTYPE /*DeviceType*/,
