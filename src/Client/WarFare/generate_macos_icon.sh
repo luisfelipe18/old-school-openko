@@ -7,9 +7,12 @@
 # Many AI-generated portrait images ship with a decorative frame/border
 # painted into the pixels themselves (not something macOS adds), which makes
 # the subject look small and "boxed in" once composed into a Dock icon. This
-# script center-crops ~12% off each edge (a ~24% zoom) before building the
+# script center-crops a small margin off each edge before building the
 # iconset, trimming that baked-in border so the subject fills the icon.
-# Adjust CROP_PERCENT below if a particular source image needs more/less.
+# Adjust CROP_PERCENT below if a particular source image needs more/less -
+# measure the frame width as a percentage of the image dimensions and add a
+# small margin (the current knight-portrait AppIcon.png has a ~4% marble/
+# black frame on each edge, so 6% clears it without cutting into the sword).
 
 set -e
 
@@ -17,7 +20,7 @@ SRC="$1"
 ICONSET="$2"
 OUT_ICNS="$3"
 
-CROP_PERCENT=12
+CROP_PERCENT=6
 
 WIDTH=$(sips -g pixelWidth "$SRC" | awk '/pixelWidth/{print $2}')
 HEIGHT=$(sips -g pixelHeight "$SRC" | awk '/pixelHeight/{print $2}')
