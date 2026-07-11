@@ -15,6 +15,7 @@
 #include "APISocket.h"
 #include "PacketDef.h"
 #include "text_resources.h"
+#include "NetworkEncoding.h"
 
 #include <N3Base/N3SndObj.h>
 #include <N3Base/N3SndMgr.h>
@@ -212,13 +213,16 @@ bool CGameProcLogIn_1298::MsgSend_AccountLogIn(e_LogInClassification eLIC)
 	if (eLIC == LIC_MGAME)
 		byCmd = LS_MGAME_LOGIN;
 
-	CAPISocket::MP_AddByte(byBuff, iOffset, byCmd);                          // 커멘드.
-	CAPISocket::MP_AddShort(byBuff, iOffset, (int16_t) s_szAccount.size());  // 아이디 길이..
-	CAPISocket::MP_AddString(byBuff, iOffset, s_szAccount);                  // 실제 아이디..
-	CAPISocket::MP_AddShort(byBuff, iOffset, (int16_t) s_szPassWord.size()); // 패스워드 길이
-	CAPISocket::MP_AddString(byBuff, iOffset, s_szPassWord);                 // 실제 패스워드
+	const std::string szAccountWire = LocalToNet(s_szAccount);
+	const std::string szPassWire    = LocalToNet(s_szPassWord);
 
-	s_pSocket->Send(byBuff, iOffset);                                        // 보낸다
+	CAPISocket::MP_AddByte(byBuff, iOffset, byCmd);                             // 커멘드.
+	CAPISocket::MP_AddShort(byBuff, iOffset, (int16_t) szAccountWire.size());   // 아이디 길이..
+	CAPISocket::MP_AddString(byBuff, iOffset, szAccountWire);                   // 실제 아이디..
+	CAPISocket::MP_AddShort(byBuff, iOffset, (int16_t) szPassWire.size());      // 패스워드 길이
+	CAPISocket::MP_AddString(byBuff, iOffset, szPassWire);                      // 실제 패스워드
+
+	s_pSocket->Send(byBuff, iOffset);                                           // 보낸다
 
 	return true;
 }
@@ -251,6 +255,7 @@ void CGameProcLogIn_1298::MsgRecv_News(Packet& pkt)
 	// read content
 	std::string strContent;
 	pkt.readString(strContent, wSize);
+	strContent = NetToLocal(strContent);
 
 	m_pUILogIn->AddNews(strContent);
 }
@@ -266,6 +271,7 @@ void CGameProcLogIn_1298::MsgRecv_GameServerGroupList(Packet& pkt)
 		pkt.readString(GSI.szIP, iLen);
 		iLen = pkt.read<int16_t>();
 		pkt.readString(GSI.szName, iLen);
+		GSI.szName               = NetToLocal(GSI.szName);
 		GSI.iConcurrentUserCount = pkt.read<int16_t>(); // 현재 동시 접속자수..
 
 		m_pUILogIn->ServerInfoAdd(GSI);                 // ServerList
@@ -340,9 +346,10 @@ void CGameProcLogIn_1298::MsgRecv_AccountLogIn(int iCmd, Packet& pkt)
 					// 로그인 서버에서 받은 겜서버 주소로 접속해서 짤르라고 꼰지른다.
 					int iOffset2 = 0;
 					uint8_t Buff[32];
-					CAPISocket::MP_AddByte(Buff, iOffset2, WIZ_KICKOUT);   // Recv s1, str1(IP) s1(port) | Send s1, str1(ID)
-					CAPISocket::MP_AddShort(Buff, iOffset2, (int16_t) s_szAccount.size());
-					CAPISocket::MP_AddString(Buff, iOffset2, s_szAccount); // Recv s1, str1(IP) s1(port) | Send s1, str1(ID)
+					const std::string szKickAccountWire = LocalToNet(s_szAccount);
+					CAPISocket::MP_AddByte(Buff, iOffset2, WIZ_KICKOUT);        // Recv s1, str1(IP) s1(port) | Send s1, str1(ID)
+					CAPISocket::MP_AddShort(Buff, iOffset2, (int16_t) szKickAccountWire.size());
+					CAPISocket::MP_AddString(Buff, iOffset2, szKickAccountWire); // Recv s1, str1(IP) s1(port) | Send s1, str1(ID)
 
 					socketTmp->Send(Buff, iOffset2);
 					socketTmp->Disconnect();                               // 짜른다..

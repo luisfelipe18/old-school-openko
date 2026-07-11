@@ -10,6 +10,7 @@
 #include "UIManager.h"
 #include "APISocket.h"
 #include "text_resources.h"
+#include "NetworkEncoding.h"
 
 #include <N3Base/N3UIList.h>
 #include <N3Base/N3UIString.h>
@@ -224,6 +225,7 @@ void CUIPartyBBS::MsgRecv_RefreshData(Packet& pkt)
 		__InfoPartyBBS Info;
 		int iNameLen = pkt.read<int16_t>();
 		pkt.readString(Info.szID, iNameLen);
+		Info.szID   = NetToLocal(Info.szID);
 		Info.iLevel = pkt.read<uint8_t>();
 		Info.eClass = (e_Class) pkt.read<int16_t>();
 

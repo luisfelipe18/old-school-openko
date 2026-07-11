@@ -11,6 +11,7 @@
 #include "LocalInput.h"
 #include "APISocket.h"
 #include "text_resources.h"
+#include "NetworkEncoding.h"
 
 #include <N3Base/N3UIList.h>
 #include <N3Base/N3UIButton.h>
@@ -314,13 +315,22 @@ void CUITradeSellBBS::MsgRecv_RefreshData(Packet& pkt)
 		Info.sID = pkt.read<int16_t>();
 		iLen     = pkt.read<int16_t>();
 		if (iLen > 0)
+		{
 			pkt.readString(Info.szID, iLen);
+			Info.szID = NetToLocal(Info.szID);
+		}
 		iLen = pkt.read<int16_t>();
 		if (iLen > 0)
+		{
 			pkt.readString(Info.szTitle, iLen);
+			Info.szTitle = NetToLocal(Info.szTitle);
+		}
 		iLen = pkt.read<int16_t>();
 		if (iLen > 0)
+		{
 			pkt.readString(Info.szExplanation, iLen);
+			Info.szExplanation = NetToLocal(Info.szExplanation);
+		}
 		Info.iPrice = pkt.read<uint32_t>(); //아이템에 제시한 가격
 		Info.sIndex = pkt.read<int16_t>();  //등록된 인덱스
 
@@ -387,8 +397,8 @@ void CUITradeSellBBS::MsgSend_Register()
 	std::string szExplanation;
 	int iPrice       = 0;
 
-	szTitle          = CGameProcedure::s_pProcMain->m_pUITradeBBSEdit->GetTradeTitle();
-	szExplanation    = CGameProcedure::s_pProcMain->m_pUITradeBBSEdit->GetTradeExplanation();
+	szTitle          = LocalToNet(CGameProcedure::s_pProcMain->m_pUITradeBBSEdit->GetTradeTitle());
+	szExplanation    = LocalToNet(CGameProcedure::s_pProcMain->m_pUITradeBBSEdit->GetTradeExplanation());
 	iPrice           = CGameProcedure::s_pProcMain->m_pUITradeBBSEdit->GetPrice();
 
 	sLen             = 15;

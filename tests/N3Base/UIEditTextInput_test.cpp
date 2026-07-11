@@ -129,9 +129,16 @@ TEST_F(UIEditTextInputTest, TypingInsertsAndEditsAscii)
 
 TEST_F(UIEditTextInputTest, HangulEditsWholeCharacters)
 {
-	// 가 (U+AC00) in CP949 is the two-byte pair B0 A1.
-	const std::string szGa = Utf8ToCp949("가");
-	ASSERT_EQ(szGa.size(), 2u);
+	// On POSIX the edit buffer is UTF-8 (T7.3), so 가 (U+AC00) is 3 bytes.
+	// On Windows the internal encoding is CP949, where 가 is 2 bytes (B0 A1).
+#ifdef _WIN32
+	const std::string szGa    = Utf8ToCp949("가");
+	const size_t iCharLen     = 2u;
+#else
+	const std::string szGa    = "가";
+	const size_t iCharLen     = 3u;
+#endif
+	ASSERT_EQ(szGa.size(), iCharLen);
 
 	TestEdit edit;
 	edit.Init(nullptr);
@@ -142,15 +149,15 @@ TEST_F(UIEditTextInputTest, HangulEditsWholeCharacters)
 	CN3UIEdit::OnTextInput("가");
 	CN3UIEdit::OnTextInput("b");
 	EXPECT_EQ(edit.GetString(), "a" + szGa + "b");
-	EXPECT_EQ(edit.CaretPos(), 4u);
+	EXPECT_EQ(edit.CaretPos(), 2u + iCharLen);
 
-	// Arrows move over the DBCS pair as one character.
+	// Arrows move over the multi-byte character as one codepoint.
 	CN3UIEdit::OnKeyDown(DIK_LEFT);
-	EXPECT_EQ(edit.CaretPos(), 3u);
+	EXPECT_EQ(edit.CaretPos(), 1u + iCharLen);
 	CN3UIEdit::OnKeyDown(DIK_LEFT);
 	EXPECT_EQ(edit.CaretPos(), 1u);
 	CN3UIEdit::OnKeyDown(DIK_RIGHT);
-	EXPECT_EQ(edit.CaretPos(), 3u);
+	EXPECT_EQ(edit.CaretPos(), 1u + iCharLen);
 
 	// Backspace removes the whole Hangul syllable.
 	CN3UIEdit::OnKeyDown(DIK_BACK);
@@ -162,8 +169,15 @@ TEST_F(UIEditTextInputTest, HangulEditsWholeCharacters)
 
 TEST_F(UIEditTextInputTest, ImeCompositionReplacesAndCommits)
 {
-	const std::string szGa  = Utf8ToCp949("가");
-	const std::string szGan = Utf8ToCp949("간");
+#ifdef _WIN32
+	const std::string szGa    = Utf8ToCp949("가");
+	const std::string szGan   = Utf8ToCp949("간");
+	const size_t iGanLen      = 2u;
+#else
+	const std::string szGa    = "가";
+	const std::string szGan   = "간";
+	const size_t iGanLen      = 3u;
+#endif
 
 	TestEdit edit;
 	edit.Init(nullptr);
@@ -184,7 +198,7 @@ TEST_F(UIEditTextInputTest, ImeCompositionReplacesAndCommits)
 	// Commit replaces the preview with the final text.
 	CN3UIEdit::OnTextInput("간");
 	EXPECT_EQ(edit.GetString(), szGan);
-	EXPECT_EQ(edit.CaretPos(), 2u);
+	EXPECT_EQ(edit.CaretPos(), iGanLen);
 
 	// After the commit the keys work again: backspace eats the syllable.
 	EXPECT_TRUE(CN3UIEdit::OnKeyDown(DIK_BACK));
@@ -221,7 +235,11 @@ TEST_F(UIEditTextInputTest, PasswordStyleMasksDisplayOnly)
 
 TEST_F(UIEditTextInputTest, MaxLengthClampsAtCharacterBoundary)
 {
-	const std::string szGa = Utf8ToCp949("가");
+#ifdef _WIN32
+	const std::string szGa = Utf8ToCp949("가"); // 2 bytes
+#else
+	const std::string szGa = "가";              // 3 bytes in UTF-8
+#endif
 
 	TestEdit edit;
 	edit.Init(nullptr);
@@ -233,14 +251,22 @@ TEST_F(UIEditTextInputTest, MaxLengthClampsAtCharacterBoundary)
 	CN3UIEdit::OnTextInput("cd"); // only 'c' fits
 	EXPECT_EQ(edit.GetString(), "abc");
 
-	// A DBCS pair never gets split to squeeze into the last byte.
+	// A multi-byte character never gets split to squeeze into the last bytes.
 	CN3UIEdit::OnKeyDown(DIK_BACK); // "ab", 1 byte free
 	CN3UIEdit::OnTextInput("가");
 	EXPECT_EQ(edit.GetString(), "ab");
 
+#ifdef _WIN32
+	// On CP949 the syllable is 2 bytes, so with 2 bytes free it fits.
 	CN3UIEdit::OnKeyDown(DIK_BACK); // "a", 2 bytes free
 	CN3UIEdit::OnTextInput("가");
 	EXPECT_EQ(edit.GetString(), "a" + szGa);
+#else
+	// On UTF-8 the syllable is 3 bytes; with 2 bytes free it does not fit.
+	CN3UIEdit::OnKeyDown(DIK_BACK); // "a", 2 bytes free
+	CN3UIEdit::OnTextInput("가");
+	EXPECT_EQ(edit.GetString(), "a");
+#endif
 
 	edit.KillFocus();
 }

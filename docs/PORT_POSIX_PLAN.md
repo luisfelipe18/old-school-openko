@@ -599,10 +599,37 @@ sobre Metal en macOS con paridad visual respecto a GL y D3D9.
       enmascarado solo en display, clamp de longitud sin partir pares
       DBCS, Enter→padre + hooks de foco. **Pendiente:** validación de
       composición coreana real en un Mac (requiere IME del SO).)*
-* [ ] **T7.3 — Fronteras de encoding de chat.** `Cp949ToUtf8`/`Utf8ToCp949`
+* [x] **T7.3 — Fronteras de encoding de chat.** `Cp949ToUtf8`/`Utf8ToCp949`
       en los puntos de entrada/salida de texto de red (chat, nombres).
       *Aceptación:* round-trip de chat con tildes y Hangul contra Ebenezer
       local.
+      *(Hecho. Nuevo header `NetworkEncoding.h` con dos wrappers
+      centralizados — `NetToLocal(s)` y `LocalToNet(s)` — que en Windows son
+      pass-through (`const std::string&`, sin copia) y en POSIX son
+      `Cp949ToUtf8`/`Utf8ToCp949` sobre `PlatformEncoding`. El buffer del
+      edit (T7.2) cambia a **UTF-8 puro** en POSIX — `N3UIEdit` ahora usa
+      un walker de bytes UTF-8 (`Utf8SeqLen`, salto sobre bytes de
+      continuación `10xxxxxx`) para caret/backspace/delete/flechas, sin
+      pasar por CP949 en cada tecla. `DFont::DecodeGameText` valida
+      estructuralmente UTF-8 primero (cheap check) y solo cae a
+      `Cp949ToUtf8` cuando el input no es UTF-8 válido, así el mismo font
+      backend rinde texto de UI (UTF-8) y strings de assets (CP949 legacy)
+      sin ambigüedad. Aplicado `NetToLocal` en TODAS las lecturas de
+      strings del servidor (chat/whispers/notice/user-in/party/knights/warp-list/
+      dropped-item/character-list/friends/trade-BBS/party-BBS/notice, ~30
+      sitios en `GameProcMain`, `GameProcCharacterSelect`, `UIVarious`,
+      `UIPartyBBS`, `UITradeSellBBS`, `UIKnightsOperation`,
+      `GameProcLogIn_{1098,1298}`), y `LocalToNet` en TODOS los envíos con
+      texto de usuario (chat, whispers, admin, knights create/leave/appoint,
+      party target, account/password de login, character select/create/delete,
+      friends list, trade BBS, kickout re-request en el multi-conexión).
+      Tests: `NetworkEncoding_test` valida round-trip ASCII, Hangul (가/간
+      via CP949 de 2 bytes), tildes latinas y strings mixtos; en Windows
+      además verifica que los wrappers no copian el buffer (comparación de
+      dirección). `UIEditTextInput_test` actualizado para las longitudes
+      UTF-8 en POSIX (3 bytes/sílaba Hangul). Suite 6/6 verde. **Pendiente:**
+      validación side-by-side contra Ebenezer local (queda como
+      verificación manual del usuario).)*
 **Aceptación:** login con usuario/contraseña escritos por teclado, chat
 in-game con texto coreano y español (tildes) en macOS y Linux.
 

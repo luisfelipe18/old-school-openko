@@ -200,43 +200,66 @@ LRESULT APIENTRY CN3UIEdit::EditWndProc(HWND hWnd, uint16_t Message, WPARAM wPar
 // control (the SDL analogue of the EDIT window + IMM32 status calls above).
 
 #include <Platform/DInputKeyCodes.h>
-#include <Platform/PlatformEncoding.h>
 
 namespace
 {
 CN3UIEdit::TextInputHooks s_TextInputHooks;
 
-// Size in bytes of the character that ends at nPos (2 when szBuff[nPos-1] is
-// the trail byte of a CP949 pair, else 1). Lead/trail parity walk from the
-// start of the string - same logic as CN3UIEdit::IsHangulMiddleByte.
-size_t CharSizeBefore(const std::string& szBuff, size_t nPos)
-{
-	if (nPos == 0 || nPos > szBuff.size() || !(szBuff[nPos - 1] & 0x80))
-		return 1;
+// The edit buffer holds UTF-8 on POSIX (docs/PORT_POSIX_PLAN.md, T7.3): SDL
+// feeds UTF-8 directly, and the network boundary (NetworkEncoding.h) converts
+// to CP949 on send and back on receive, so the caret can measure one UTF-8
+// codepoint at a time without a CP949 round-trip.
 
-	bool bMiddle = false;
-	for (size_t i = 0; i + 1 < nPos; ++i)
-	{
-		if (szBuff[i] & 0x80)
-			bMiddle = !bMiddle;
-	}
-	return bMiddle ? 2u : 1u;
+// UTF-8 lead byte -> sequence length. 1 for ASCII, 2..4 for multi-byte lead
+// bytes, 1 for a stray continuation byte (defensive so a bad byte cannot
+// wedge the caret).
+size_t Utf8SeqLen(unsigned char b)
+{
+	if (b < 0x80)
+		return 1;
+	if ((b & 0xE0) == 0xC0)
+		return 2;
+	if ((b & 0xF0) == 0xE0)
+		return 3;
+	if ((b & 0xF8) == 0xF0)
+		return 4;
+	return 1;
 }
 
-// Size in bytes of the character starting at nPos (a character boundary).
+// Size in bytes of the UTF-8 character ending at byte position nPos. Walks
+// backwards over continuation bytes (10xxxxxx) to the lead byte.
+size_t CharSizeBefore(const std::string& szBuff, size_t nPos)
+{
+	if (nPos == 0 || nPos > szBuff.size())
+		return 1;
+
+	size_t n = 1;
+	while (n < nPos && n < 4
+		&& (static_cast<unsigned char>(szBuff[nPos - n]) & 0xC0) == 0x80)
+		++n;
+	return n;
+}
+
+// Size in bytes of the UTF-8 character starting at nPos (a character
+// boundary). Clamps to what actually fits so a truncated string cannot
+// step past its end.
 size_t CharSizeAt(const std::string& szBuff, size_t nPos)
 {
-	return (nPos < szBuff.size() && (szBuff[nPos] & 0x80)) ? 2u : 1u;
+	if (nPos >= szBuff.size())
+		return 1;
+	const size_t len = Utf8SeqLen(static_cast<unsigned char>(szBuff[nPos]));
+	return (nPos + len <= szBuff.size()) ? len : 1u;
 }
 
 // Longest prefix of szText that fits in nAvail bytes without splitting a
-// CP949 pair (text is a sequence of 1-byte ASCII and 2-byte DBCS chars).
+// UTF-8 sequence. Used by the max-length clamp and the buffer inserters.
 size_t ClipToCharBoundary(const std::string& szText, size_t nAvail)
 {
 	size_t nTake = 0;
 	while (nTake < szText.size())
 	{
-		const size_t nCharSize = (szText[nTake] & 0x80) ? 2u : 1u;
+		const size_t nCharSize =
+			Utf8SeqLen(static_cast<unsigned char>(szText[nTake]));
 		if (nTake + nCharSize > nAvail || nTake + nCharSize > szText.size())
 			break;
 		nTake += nCharSize;
@@ -261,7 +284,7 @@ void CN3UIEdit::OnTextInput(const char* szUtf8)
 		return;
 
 	s_pFocusedEdit->ClearComposition();
-	s_pFocusedEdit->InsertBytesAtCaret(Utf8ToCp949(szUtf8));
+	s_pFocusedEdit->InsertBytesAtCaret(szUtf8);
 }
 
 void CN3UIEdit::OnTextEditing(const char* szUtf8)
@@ -269,7 +292,7 @@ void CN3UIEdit::OnTextEditing(const char* szUtf8)
 	if (s_pFocusedEdit == nullptr || szUtf8 == nullptr)
 		return;
 
-	s_pFocusedEdit->ReplaceComposition(Utf8ToCp949(szUtf8));
+	s_pFocusedEdit->ReplaceComposition(szUtf8);
 }
 
 bool CN3UIEdit::OnKeyDown(int iDik)
@@ -338,9 +361,9 @@ bool CN3UIEdit::OnKeyDown(int iDik)
 	}
 }
 
-void CN3UIEdit::InsertBytesAtCaret(const std::string& szCp949)
+void CN3UIEdit::InsertBytesAtCaret(const std::string& szText)
 {
-	if (m_pBuffOutRef == nullptr || szCp949.empty())
+	if (m_pBuffOutRef == nullptr || szText.empty())
 		return;
 
 	std::string szBuff = GetString();
@@ -348,16 +371,16 @@ void CN3UIEdit::InsertBytesAtCaret(const std::string& szCp949)
 		m_nCaretPos = szBuff.size();
 
 	const size_t nAvail = (m_iMaxStrLen > szBuff.size()) ? m_iMaxStrLen - szBuff.size() : 0;
-	const size_t nTake  = ClipToCharBoundary(szCp949, nAvail);
+	const size_t nTake  = ClipToCharBoundary(szText, nAvail);
 	if (nTake == 0)
 		return;
 
-	szBuff.insert(m_nCaretPos, szCp949, 0, nTake);
+	szBuff.insert(m_nCaretPos, szText, 0, nTake);
 	SetString(szBuff);
 	SetCaretPos(m_nCaretPos + nTake);
 }
 
-void CN3UIEdit::ReplaceComposition(const std::string& szCp949)
+void CN3UIEdit::ReplaceComposition(const std::string& szText)
 {
 	if (m_pBuffOutRef == nullptr)
 		return;
@@ -376,8 +399,8 @@ void CN3UIEdit::ReplaceComposition(const std::string& szCp949)
 	}
 
 	const size_t nAvail = (m_iMaxStrLen > szBuff.size()) ? m_iMaxStrLen - szBuff.size() : 0;
-	const size_t nTake  = ClipToCharBoundary(szCp949, nAvail);
-	szBuff.insert(m_nCaretPos, szCp949, 0, nTake);
+	const size_t nTake  = ClipToCharBoundary(szText, nAvail);
+	szBuff.insert(m_nCaretPos, szText, 0, nTake);
 	m_iCompLength = static_cast<int>(nTake);
 
 	SetString(szBuff);

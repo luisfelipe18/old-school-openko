@@ -8,6 +8,7 @@
 #include "PacketDef.h"
 #include "APISocket.h"
 #include "text_resources.h"
+#include "NetworkEncoding.h"
 
 #include <N3Base/N3UIButton.h>
 #include <N3Base/N3UIEdit.h>
@@ -230,10 +231,12 @@ bool CUIKnightsOperation::MsgRecv_KnightsList(Packet& pkt)
 		iID         = pkt.read<int16_t>();
 		iNameLength = pkt.read<int16_t>();
 		pkt.readString(szName, iNameLength);
+		szName       = NetToLocal(szName);
 		iMemberCount = pkt.read<int16_t>();
 		iNameLength  = pkt.read<int16_t>();
 		pkt.readString(szChiefName, iNameLength);
-		iPoint = pkt.read<uint32_t>();
+		szChiefName  = NetToLocal(szChiefName);
+		iPoint       = pkt.read<uint32_t>();
 
 		KnightsListAdd(iID, szName, szChiefName, iMemberCount, iPoint); // UI 에 추가..
 	}
@@ -257,13 +260,15 @@ void CUIKnightsOperation::MsgSend_KnightsCreate()
 		return;
 	}
 
+	const std::string szWire = LocalToNet(szKnightsName);
+
 	int iOffset = 0;
 	uint8_t byBuff[128];
 
 	CAPISocket::MP_AddByte(byBuff, iOffset, WIZ_KNIGHTS_PROCESS);
 	CAPISocket::MP_AddByte(byBuff, iOffset, N3_SP_KNIGHTS_CREATE); // 생성 Send - s1(Name Length) str1 | Recv - b1(1:성공 0:실패)
-	CAPISocket::MP_AddShort(byBuff, iOffset, (int16_t) szKnightsName.size());
-	CAPISocket::MP_AddString(byBuff, iOffset, szKnightsName);
+	CAPISocket::MP_AddShort(byBuff, iOffset, (int16_t) szWire.size());
+	CAPISocket::MP_AddString(byBuff, iOffset, szWire);
 
 	CGameProcedure::s_pSocket->Send(byBuff, iOffset);
 }

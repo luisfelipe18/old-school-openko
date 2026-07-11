@@ -1,5 +1,6 @@
 add_executable(WarFareNet.Tests
-  APISocket_test.cpp)
+  APISocket_test.cpp
+  NetworkEncoding_test.cpp)
 
 set_target_properties(WarFareNet.Tests PROPERTIES
   CXX_SCAN_FOR_MODULES OFF

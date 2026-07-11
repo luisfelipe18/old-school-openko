@@ -945,9 +945,12 @@ int LineHeight(FT_Face pFace)
 							>> 6);
 }
 
-// CP949 (game strings) -> Unicode codepoints, preserving '\n'. Falls back to
-// Latin-1 if the conversion produces nothing for a non-empty input, so a
-// mis-encoded legacy asset still shows approximate text.
+// Decode game text to Unicode codepoints, preserving '\n'. On POSIX text
+// reaches DFont from two sources - UTF-8 (the edit buffer and network-facing
+// UI strings after NetToLocal, docs/PORT_POSIX_PLAN.md T7.3) and CP949
+// (asset strings loaded straight off disk). We validate as UTF-8 first and
+// only fall back to CP949->UTF-8, so a CP949 byte that happens to look like
+// a UTF-8 lead byte doesn't get misdecoded when the payload is really UTF-8.
 std::u32string DecodeGameText(std::string_view szText)
 {
 	if (szText.empty())
@@ -970,37 +973,87 @@ std::u32string DecodeGameText(std::string_view szText)
 		return codepoints;
 	}
 
-	const std::string utf8 = Cp949ToUtf8(szText);
-	if (utf8.empty())
+	// Structural UTF-8 validation: every multi-byte lead is followed by the
+	// right number of 10xxxxxx continuation bytes, and no overlong 2-byte
+	// sequence. Cheap enough to run every SetText - a hit means we can skip
+	// the iconv round-trip entirely.
+	auto IsValidUtf8 = [](std::string_view sv) -> bool {
+		for (size_t i = 0; i < sv.size();)
+		{
+			const auto b0 = static_cast<unsigned char>(sv[i]);
+			size_t len    = 1;
+			if (b0 < 0x80)
+			{
+				++i;
+				continue;
+			}
+			else if ((b0 & 0xE0) == 0xC0)
+				len = 2;
+			else if ((b0 & 0xF0) == 0xE0)
+				len = 3;
+			else if ((b0 & 0xF8) == 0xF0)
+				len = 4;
+			else
+				return false;
+
+			if (i + len > sv.size())
+				return false;
+			for (size_t k = 1; k < len; ++k)
+			{
+				if ((static_cast<unsigned char>(sv[i + k]) & 0xC0) != 0x80)
+					return false;
+			}
+			if (len == 2 && b0 < 0xC2)
+				return false; // overlong
+			i += len;
+		}
+		return true;
+	};
+
+	std::string_view utf8View;
+	std::string utf8Storage;
+	if (IsValidUtf8(szText))
 	{
-		codepoints.reserve(szText.size());
-		for (const char c : szText)
-			codepoints.push_back(static_cast<unsigned char>(c));
-		return codepoints;
+		utf8View = szText; // already UTF-8 (UI/chat/edit buffer)
+	}
+	else
+	{
+		// Likely CP949 (asset). Convert; Latin-1 byte-cast is the final
+		// fallback so a mis-encoded legacy asset still shows something.
+		utf8Storage = Cp949ToUtf8(szText);
+		if (utf8Storage.empty())
+		{
+			codepoints.reserve(szText.size());
+			for (const char c : szText)
+				codepoints.push_back(static_cast<unsigned char>(c));
+			return codepoints;
+		}
+		utf8View = utf8Storage;
 	}
 
-	// Minimal UTF-8 decode; PlatformEncoding already dropped invalid input.
-	codepoints.reserve(utf8.size());
-	for (size_t i = 0; i < utf8.size();)
+	// Minimal UTF-8 decode; the input is guaranteed well-formed by the
+	// checks above (or by Cp949ToUtf8, which drops invalid sequences).
+	codepoints.reserve(utf8View.size());
+	for (size_t i = 0; i < utf8View.size();)
 	{
-		const auto b0 = static_cast<unsigned char>(utf8[i]);
+		const auto b0 = static_cast<unsigned char>(utf8View[i]);
 		char32_t cp   = 0;
 		size_t len    = 1;
 		if (b0 < 0x80)
 		{
 			cp = b0;
 		}
-		else if ((b0 & 0xE0) == 0xC0 && i + 1 < utf8.size())
+		else if ((b0 & 0xE0) == 0xC0 && i + 1 < utf8View.size())
 		{
 			cp  = static_cast<char32_t>(b0 & 0x1F);
 			len = 2;
 		}
-		else if ((b0 & 0xF0) == 0xE0 && i + 2 < utf8.size())
+		else if ((b0 & 0xF0) == 0xE0 && i + 2 < utf8View.size())
 		{
 			cp  = static_cast<char32_t>(b0 & 0x0F);
 			len = 3;
 		}
-		else if ((b0 & 0xF8) == 0xF0 && i + 3 < utf8.size())
+		else if ((b0 & 0xF8) == 0xF0 && i + 3 < utf8View.size())
 		{
 			cp  = static_cast<char32_t>(b0 & 0x07);
 			len = 4;
@@ -1008,11 +1061,11 @@ std::u32string DecodeGameText(std::string_view szText)
 		else
 		{
 			++i;
-			continue; // stray continuation byte
+			continue;
 		}
 
 		for (size_t k = 1; k < len; ++k)
-			cp = (cp << 6) | (static_cast<unsigned char>(utf8[i + k]) & 0x3F);
+			cp = (cp << 6) | (static_cast<unsigned char>(utf8View[i + k]) & 0x3F);
 
 		codepoints.push_back(cp);
 		i += len;

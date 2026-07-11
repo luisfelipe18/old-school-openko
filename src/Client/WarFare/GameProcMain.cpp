@@ -81,6 +81,8 @@
 #include <Platform/PlatformString.h>   // lstrcpy / lstrcat
 #endif
 
+#include "NetworkEncoding.h" // CP949 <-> UTF-8 at the network boundary
+
 std::string g_szCmdMsg[CMD_COUNT]; // 게임상 명령어
 
 CGameProcMain::CGameProcMain()     // r기본 생성자.. 각 변수의 역활은 헤더 참조..
@@ -1003,6 +1005,7 @@ bool CGameProcMain::ProcessPacket(Packet& pkt)
 			std::string szID, szMsg;
 			int iLen = pkt.read<int16_t>();
 			pkt.readString(szID, iLen);
+			szID = NetToLocal(szID);
 
 			e_ChatMode eCM = N3_CHAT_UNKNOWN;
 			if (szID.empty())
@@ -1562,13 +1565,15 @@ void CGameProcMain::MsgSend_Chat(e_ChatMode eMode, const std::string& szChat)
 	if (eMode == N3_CHAT_CLAN && s_pPlayer->m_InfoBase.iKnightsID <= 0)
 		return;
 
+	const std::string szWire = LocalToNet(szChat);
+
 	uint8_t byBuff[512];
 	int iOffset = 0;
 
 	CAPISocket::MP_AddByte(byBuff, iOffset, WIZ_CHAT);
 	CAPISocket::MP_AddByte(byBuff, iOffset, eMode);
-	CAPISocket::MP_AddShort(byBuff, iOffset, (int16_t) szChat.size());
-	CAPISocket::MP_AddString(byBuff, iOffset, szChat);
+	CAPISocket::MP_AddShort(byBuff, iOffset, (int16_t) szWire.size());
+	CAPISocket::MP_AddString(byBuff, iOffset, szWire);
 
 	__ASSERT(iOffset < 512, "Send Buffer OverFlow");
 	s_pSocket->Send(byBuff, iOffset); // 보낸다..
@@ -1579,6 +1584,8 @@ void CGameProcMain::MsgSend_ChatSelectTarget(const std::string& szTargetID)
 	if (szTargetID.empty() || szTargetID.size() > 20)
 		return;
 
+	const std::string szWire = LocalToNet(szTargetID);
+
 	int iOffset = 0;
 	uint8_t byBuff[32];
 
@@ -1587,8 +1594,8 @@ void CGameProcMain::MsgSend_ChatSelectTarget(const std::string& szTargetID)
 	// TEMP(srmeier): testing private messages
 	CAPISocket::MP_AddByte(byBuff, iOffset, 0x01);
 
-	CAPISocket::MP_AddShort(byBuff, iOffset, (int16_t) szTargetID.size());
-	CAPISocket::MP_AddString(byBuff, iOffset, szTargetID);
+	CAPISocket::MP_AddShort(byBuff, iOffset, (int16_t) szWire.size());
+	CAPISocket::MP_AddString(byBuff, iOffset, szWire);
 
 	s_pSocket->Send(byBuff, iOffset);
 }
@@ -1667,10 +1674,12 @@ bool CGameProcMain::MsgSend_PartyOrForceCreate(const std::string& szID)
 	if (m_pUIPartyOrForce->MemberCount() >= 2)
 		eCmdParty = N3_SP_PARTY_OR_FORCE_INSERT;
 
+	const std::string szWire = LocalToNet(szID);
+
 	CAPISocket::MP_AddByte(byBuff, iOffset, WIZ_PARTY);
 	CAPISocket::MP_AddByte(byBuff, iOffset, eCmdParty);
-	CAPISocket::MP_AddShort(byBuff, iOffset, (int16_t) szID.size());
-	CAPISocket::MP_AddString(byBuff, iOffset, szID);
+	CAPISocket::MP_AddShort(byBuff, iOffset, (int16_t) szWire.size());
+	CAPISocket::MP_AddString(byBuff, iOffset, szWire);
 
 	s_pSocket->Send(byBuff, iOffset);          // 보낸다..
 
@@ -1773,10 +1782,12 @@ void CGameProcMain::MsgSend_Administrator(e_SubPacket_Administrator eSP, const s
 	uint8_t byBuff[64];
 	int iOffset = 0;
 
+	const std::string szWire = LocalToNet(szID);
+
 	CAPISocket::MP_AddByte(byBuff, iOffset, WIZ_OPERATOR); // 관리자 전용패킷..
 	CAPISocket::MP_AddByte(byBuff, iOffset, eSP);
-	CAPISocket::MP_AddShort(byBuff, iOffset, (int16_t) szID.size());
-	CAPISocket::MP_AddString(byBuff, iOffset, szID);
+	CAPISocket::MP_AddShort(byBuff, iOffset, (int16_t) szWire.size());
+	CAPISocket::MP_AddString(byBuff, iOffset, szWire);
 
 	s_pSocket->Send(byBuff, iOffset);
 }
@@ -1809,13 +1820,15 @@ void CGameProcMain::MsgSend_KnightsJoin(int iTargetID)
 
 void CGameProcMain::MsgSend_KnightsLeave(const std::string& szName)
 {
+	const std::string szWire = LocalToNet(szName);
+
 	uint8_t byBuff[64];
 	int iOffset = 0;
 
 	CAPISocket::MP_AddByte(byBuff, iOffset, WIZ_KNIGHTS_PROCESS); // 관리자 전용패킷..
 	CAPISocket::MP_AddByte(byBuff, iOffset, N3_SP_KNIGHTS_MEMBER_REMOVE);
-	CAPISocket::MP_AddShort(byBuff, iOffset, static_cast<int16_t>(szName.length()));
-	CAPISocket::MP_AddString(byBuff, iOffset, szName);            // 아이디 문자열 패킷에 넣기..
+	CAPISocket::MP_AddShort(byBuff, iOffset, static_cast<int16_t>(szWire.length()));
+	CAPISocket::MP_AddString(byBuff, iOffset, szWire);            // 아이디 문자열 패킷에 넣기..
 	s_pSocket->Send(byBuff, iOffset);
 }
 
@@ -1831,13 +1844,15 @@ void CGameProcMain::MsgSend_KnightsWithdraw()
 
 void CGameProcMain::MsgSend_KnightsAppointViceChief(const std::string& szName)
 {
+	const std::string szWire = LocalToNet(szName);
+
 	uint8_t byBuff[64];
 	int iOffset = 0;
 
 	CAPISocket::MP_AddByte(byBuff, iOffset, WIZ_KNIGHTS_PROCESS); // 관리자 전용패킷..
 	CAPISocket::MP_AddByte(byBuff, iOffset, N3_SP_KNIGHTS_APPOINT_VICECHIEF);
-	CAPISocket::MP_AddShort(byBuff, iOffset, static_cast<int16_t>(szName.length()));
-	CAPISocket::MP_AddString(byBuff, iOffset, szName);            // 아이디 문자열 패킷에 넣기..
+	CAPISocket::MP_AddShort(byBuff, iOffset, static_cast<int16_t>(szWire.length()));
+	CAPISocket::MP_AddString(byBuff, iOffset, szWire);            // 아이디 문자열 패킷에 넣기..
 	s_pSocket->Send(byBuff, iOffset);
 }
 
@@ -1852,6 +1867,7 @@ bool CGameProcMain::MsgRecv_MyInfo_All(Packet& pkt)
 
 	std::string szID;
 	pkt.readString(szID, iLen);
+	szID = NetToLocal(szID);
 	s_pPlayer->IDSet(iID, szID, D3DCOLOR_XRGB(100, 210, 255)); // 밝은 파란색과 하늘색 중간..
 
 	float fX                      = (pkt.read<uint16_t>()) / 10.0f;
@@ -1898,6 +1914,7 @@ bool CGameProcMain::MsgRecv_MyInfo_All(Packet& pkt)
 
 	int iKnightNameLen = pkt.read<uint8_t>(); // 소속 기사단 이름 길이.
 	pkt.readString(szKnightsName, iKnightNameLen);
+	szKnightsName     = NetToLocal(szKnightsName);
 	int iKnightsGrade = pkt.read<uint8_t>();  // 소속 기사단 등급
 	int iKnightsRank  = pkt.read<uint8_t>();  // 소속 기사단 순위
 
@@ -2212,10 +2229,12 @@ bool CGameProcMain::MsgRecv_Chat(Packet& pkt)
 	std::string szName;
 	int iNameLen = pkt.read<uint8_t>();
 	pkt.readString(szName, iNameLen);
+	szName = NetToLocal(szName);
 
 	std::string szMsg;
 	int iMsgLen = pkt.read<int16_t>();
 	pkt.readString(szMsg, iMsgLen);
+	szMsg = NetToLocal(szMsg);
 
 	if (szName.empty())
 		szChat = szMsg;
@@ -2539,6 +2558,7 @@ bool CGameProcMain::MsgRecv_UserIn(Packet& pkt, bool bWithFX)
 	std::string szName;
 	int iNameLen = pkt.read<uint8_t>();
 	pkt.readString(szName, iNameLen);
+	szName = NetToLocal(szName);
 
 	e_Nation eNation = (e_Nation) pkt.read<uint8_t>(); // 소속 국가. 0 이면 없다. 1
 
@@ -2551,6 +2571,7 @@ bool CGameProcMain::MsgRecv_UserIn(Packet& pkt, bool bWithFX)
 	int iKnightNameLen = pkt.read<uint8_t>(); // 소속 기사단 이름 길이.
 	std::string szKnightsName;
 	pkt.readString(szKnightsName, iKnightNameLen);
+	szKnightsName     = NetToLocal(szKnightsName);
 	int iKnightsGrade = pkt.read<uint8_t>();  // 등급
 	int iKnightsRank  = pkt.read<uint8_t>();  // 순위
 
@@ -2868,7 +2889,10 @@ bool CGameProcMain::MsgRecv_NPCIn(Packet& pkt)
 	int iNameLen = pkt.read<uint8_t>();
 	std::string szName;                        // NPC 아이디..
 	if (iNameLen > 0)
+	{
 		pkt.readString(szName, iNameLen);
+		szName = NetToLocal(szName);
+	}
 	else
 		szName = "";
 
@@ -4964,6 +4988,7 @@ bool CGameProcMain::MsgRecv_ItemDroppedGetResult(Packet& pkt) // 땅에 떨어�
 		iItemID = pkt.read<uint32_t>();
 		iStrLen = (int) pkt.read<int16_t>();
 		pkt.readString(szString, iStrLen);
+		szString = NetToLocal(szString);
 	}
 
 	if (m_pUIDroppedItemDlg != nullptr)
@@ -5138,7 +5163,7 @@ void CGameProcMain::MsgRecv_Notice(Packet& pkt)
 		std::string szNotice;
 		pkt.readString(szNotice, iStrLen);
 		if (m_pUINotice)
-			m_pUINotice->m_Texts.push_back(szNotice);
+			m_pUINotice->m_Texts.push_back(NetToLocal(szNotice));
 	}
 
 	if (m_pUINotice && iNoticeCount > 0)
@@ -5167,6 +5192,7 @@ void CGameProcMain::MsgRecv_PartyOrForce(Packet& pkt)
 			int iStrLen = pkt.read<int16_t>();
 			std::string szID;
 			pkt.readString(szID, iStrLen);
+			szID = NetToLocal(szID);
 
 			if (iID >= 0)
 			{
@@ -5186,6 +5212,7 @@ void CGameProcMain::MsgRecv_PartyOrForce(Packet& pkt)
 				int iIDLength = pkt.read<int16_t>();
 				std::string szID;
 				pkt.readString(szID, iIDLength);
+				szID           = NetToLocal(szID);
 				int iHPMax     = pkt.read<int16_t>();
 				int iHP        = pkt.read<int16_t>();
 				int iLevel     = pkt.read<uint8_t>();
@@ -6407,6 +6434,7 @@ void CGameProcMain::MsgRecv_KnightsListBasic(Packet& pkt)
 				int iID  = pkt.read<int16_t>();               // 기사단 ID
 				int iLen = pkt.read<int16_t>();               // ID 문자열 길이..
 				pkt.readString(szID, iLen);                   // ID 문자열..
+				szID = NetToLocal(szID);
 
 				m_pUIKnightsOp->KnightsInfoInsert(iID, szID); // 기사단 정보 모든 걸 받는다..
 			}
@@ -6794,8 +6822,10 @@ void CGameProcMain::MsgRecv_WarpList(Packet& pkt) // 워프 리스트 - 존 체�
 		WI.iID  = pkt.read<int16_t>();               // 워프 ID
 		iStrLen = pkt.read<int16_t>();               // 이름 길이
 		pkt.readString(WI.szName, iStrLen);          // 이름
-		iStrLen = pkt.read<int16_t>();               // 동의문 길이
+		WI.szName = NetToLocal(WI.szName);
+		iStrLen   = pkt.read<int16_t>();             // 동의문 길이
 		pkt.readString(WI.szAgreement, iStrLen);     // 동의문
+		WI.szAgreement = NetToLocal(WI.szAgreement);
 		WI.iZone    = pkt.read<int16_t>();           // 존번호
 		WI.iMaxUser = pkt.read<int16_t>();           // 최대 유저 카운트.
 		WI.iGold    = pkt.read<uint32_t>();          // 돈
@@ -6874,6 +6904,7 @@ void CGameProcMain::MsgRecv_Knights_Create(Packet& pkt)
 			int iID  = pkt.read<int16_t>();        // 기사단 ID
 			int iLen = pkt.read<int16_t>();        // ID 문자열 길이..
 			pkt.readString(szID, iLen);            // ID 문자열..
+			szID            = NetToLocal(szID);
 			int iGrade      = pkt.read<uint8_t>(); // 등급
 			int iRank       = pkt.read<uint8_t>(); // 순위
 			uint32_t dwGold = pkt.read<uint32_t>();
@@ -7022,6 +7053,7 @@ void CGameProcMain::MsgRecv_Knights_Join(Packet& pkt)
 			int iL              = pkt.read<int16_t>(); // 소속 기사단 이름 길이.
 			std::string szKnightsName;
 			pkt.readString(szKnightsName, iL);
+			szKnightsName = NetToLocal(szKnightsName);
 			int iGrade = pkt.read<uint8_t>();          // 등급
 			int iRank  = pkt.read<uint8_t>();          // 순위
 
@@ -7121,6 +7153,7 @@ void CGameProcMain::MsgRecv_Knights_Leave(Packet& pkt)
 			int iL              = pkt.read<int16_t>(); // 소속 기사단 이름 길이.
 			std::string szKnightsName;
 			pkt.readString(szKnightsName, iL);
+			szKnightsName = NetToLocal(szKnightsName);
 			int iGrade = pkt.read<uint8_t>();          // 등급
 			int iRank  = pkt.read<uint8_t>();          // 순위
 
@@ -7391,6 +7424,7 @@ void CGameProcMain::MsgRecv_Knigts_Join_Req(Packet& pkt)
 			int iL                  = pkt.read<int16_t>(); // 소속 기사단 이름 길이.
 			std::string szKnightsName;
 			pkt.readString(szKnightsName, iL);
+			szKnightsName = NetToLocal(szKnightsName);
 
 			//			std::string szName;
 			//			__KnightsInfoBase* pKIB = m_pUIKnightsOp->KnightsInfoFind(m_iJoinReqClan);

@@ -118,9 +118,10 @@ protected:
 	BOOL IsHangulMiddleByte(const char* lpszStr, int iPos); // 한글의 2번째 바이트 글자인가?
 
 #ifndef _WIN32
-	// POSIX text editing over the logical (unmasked) buffer, DBCS-aware.
-	void InsertBytesAtCaret(const std::string& szCp949);
-	void ReplaceComposition(const std::string& szCp949);
+	// POSIX text editing over the logical (unmasked) buffer. Input is UTF-8;
+	// the caret and clamps step one UTF-8 codepoint at a time.
+	void InsertBytesAtCaret(const std::string& szText);
+	void ReplaceComposition(const std::string& szText);
 	void ClearComposition();
 #endif
 

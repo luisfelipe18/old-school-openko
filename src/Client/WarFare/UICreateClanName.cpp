@@ -8,6 +8,7 @@
 #include "GameProcMain.h"
 #include "PacketDef.h"
 #include "text_resources.h"
+#include "NetworkEncoding.h"
 
 #include <N3Base/N3UIEdit.h>
 #include <N3Base/N3UIString.h>
@@ -79,13 +80,14 @@ bool CUICreateClanName::MakeClan()
 
 void CUICreateClanName::MsgSend_MakeClan() const
 {
-	int iLn = static_cast<int>(m_szClanName.size());
+	const std::string szWire = LocalToNet(m_szClanName);
+	int iLn                  = static_cast<int>(szWire.size());
 	uint8_t byBuff[40]; // 패킷 버퍼..
 	int iOffset = 0;    // 패킷 오프셋..
 	CAPISocket::MP_AddByte(byBuff, iOffset, WIZ_KNIGHTS_PROCESS);
 	CAPISocket::MP_AddByte(byBuff, iOffset, N3_SP_KNIGHTS_CREATE);
 	CAPISocket::MP_AddShort(byBuff, iOffset, static_cast<int16_t>(iLn));
-	CAPISocket::MP_AddString(byBuff, iOffset, m_szClanName);
+	CAPISocket::MP_AddString(byBuff, iOffset, szWire);
 
 	CGameProcedure::s_pSocket->Send(byBuff, iOffset);
 }

@@ -18,6 +18,7 @@
 #include "UICharacterSelect.h"
 #include "UIMessageBox.h"
 #include "UILoading.h"
+#include "NetworkEncoding.h"
 
 #include <N3Base/N3SndObj.h>
 #include <N3Base/N3Shape.h>
@@ -1001,12 +1002,14 @@ void CGameProcCharacterSelect::MsgSend_DeleteChr(const std::string& szKey)
 			return;
 	}
 
+	const std::string szIDWire = LocalToNet(m_InfoChrs[iIndex].szID);
+
 	uint8_t byBuff[64];
 	int iOffset = 0;
 	CAPISocket::MP_AddByte(byBuff, iOffset, WIZ_DEL_CHAR);                              // 커멘드.
 	CAPISocket::MP_AddByte(byBuff, iOffset, (uint8_t) iIndex);                          // 인덱스 - b
-	CAPISocket::MP_AddShort(byBuff, iOffset, (int16_t) m_InfoChrs[iIndex].szID.size()); // 아이디 길이
-	CAPISocket::MP_AddString(byBuff, iOffset, m_InfoChrs[iIndex].szID);                 // 아이디 문자열
+	CAPISocket::MP_AddShort(byBuff, iOffset, (int16_t) szIDWire.size());                // 아이디 길이
+	CAPISocket::MP_AddString(byBuff, iOffset, szIDWire);                                // 아이디 문자열
 	CAPISocket::MP_AddShort(byBuff, iOffset, (int16_t) szKey.size());                   // 주민등록번호 길이
 	CAPISocket::MP_AddString(byBuff, iOffset, szKey);                                   // 주민등록번호 문자열
 
@@ -1422,6 +1425,7 @@ void CGameProcCharacterSelect::MsgRecv_AllCharacterInfo(Packet& pkt)
 			int iIDLength = pkt.read<int16_t>();                            // 캐릭터 아이디 길이 s,
 
 			pkt.readString(chr.szID, iIDLength);                            // 캐릭터 아이디 문자열 str
+			chr.szID                     = NetToLocal(chr.szID);
 
 			chr.eRace                    = (e_Race) (pkt.read<uint8_t>());  // 종족 b
 			chr.eClass                   = (e_Class) (pkt.read<int16_t>()); // 직업 b
