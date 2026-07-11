@@ -13,9 +13,45 @@
 
 #include <asio.hpp>
 
+#include <cstring>
+
 #ifdef _N3GAME
 #include <N3Base/LogWriter.h>
 #endif
+
+namespace
+{
+// Read a 16-bit value from a byte buffer without assuming alignment.
+// The framing code indexes into the receive buffer at arbitrary (possibly
+// odd) offsets, so a raw `*(uint16_t*)&buf[n]` is undefined behaviour that
+// UBSan flags and that can fault on strict-alignment CPUs (e.g. Apple
+// Silicon). memcpy is the portable, zero-cost equivalent the compiler
+// lowers to a plain load on x86/ARM.
+inline uint16_t ReadU16(const uint8_t* p)
+{
+	uint16_t v;
+	std::memcpy(&v, p, sizeof(v));
+	return v;
+}
+
+inline int16_t ReadI16(const uint8_t* p)
+{
+	int16_t v;
+	std::memcpy(&v, p, sizeof(v));
+	return v;
+}
+
+// Write 16/32-bit values without assuming alignment (see ReadU16).
+inline void WriteU16(void* p, uint16_t v)
+{
+	std::memcpy(p, &v, sizeof(v));
+}
+
+inline void WriteU32(void* p, uint32_t v)
+{
+	std::memcpy(p, &v, sizeof(v));
+}
+} // namespace
 
 //////////////////////////////////////////////////////////////////////
 // Construction/Destruction
@@ -225,13 +261,13 @@ BOOL CAPISocket::ReceiveProcess()
 		std::vector<uint8_t> data(iCount);
 		m_CB.GetData(reinterpret_cast<char*>(data.data()), iCount);
 
-		if (PACKET_HEADER == SwapBytes16(*reinterpret_cast<uint16_t*>(&data[0])))
+		if (PACKET_HEADER == SwapBytes16(ReadU16(&data[0])))
 		{
-			int16_t siCore = *reinterpret_cast<int16_t*>(&data[2]);
+			int16_t siCore = ReadI16(&data[2]);
 			if (siCore <= iCount)
 			{
 				// 패킷 꼬리 부분 검사..
-				if (PACKET_TAIL == SwapBytes16(*reinterpret_cast<uint16_t*>(&data[iCount - 2])))
+				if (PACKET_TAIL == SwapBytes16(ReadU16(&data[iCount - 2])))
 				{
 					Packet* pkt = new Packet();
 					if (s_bCryptionFlag)
@@ -239,7 +275,7 @@ BOOL CAPISocket::ReceiveProcess()
 						// NOTE: Decrypts in-place
 						s_JvCrypt.JvDecryptionFast(siCore, &data[4], &data[4]);
 
-						uint16_t sig = *reinterpret_cast<uint16_t*>(&data[4]);
+						uint16_t sig = ReadU16(&data[4]);
 
 						if (sig != 0x1EFC)
 						{
@@ -293,7 +329,7 @@ void CAPISocket::Send(uint8_t* pData, int nSize)
 		memcpy(pTBuf, &s_wSendVal, sizeof(uint32_t));
 		memcpy((pTBuf + 4), pData, nSize);
 
-		*((uint32_t*) (pTBuf + (nSize + 4))) = crc32(pTBuf, (nSize + 4), -1);
+		WriteU32(pTBuf + (nSize + 4), crc32(pTBuf, (nSize + 4), -1));
 
 		s_JvCrypt.JvEncryptionFast((nSize + 4 + 4), pTBuf, pTBuf);
 
@@ -308,13 +344,13 @@ void CAPISocket::Send(uint8_t* pData, int nSize)
 
 	const size_t nTotalSize   = static_cast<size_t>(nSize) + 6;
 	char* pSendData           = m_SendBuf.data();
-	*((uint16_t*) pSendData)  = SwapBytes16(PACKET_HEADER);
+	WriteU16(pSendData, SwapBytes16(PACKET_HEADER));
 	pSendData                += 2;
-	*((uint16_t*) pSendData)  = static_cast<uint16_t>(nSize);
+	WriteU16(pSendData, static_cast<uint16_t>(nSize));
 	pSendData                += 2;
 	memcpy(pSendData, pData, nSize);
 	pSendData                += nSize;
-	*((uint16_t*) pSendData)  = SwapBytes16(PACKET_TAIL);
+	WriteU16(pSendData, SwapBytes16(PACKET_TAIL));
 	// pSendData             += 2;
 
 	size_t nSent              = 0;

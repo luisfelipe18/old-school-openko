@@ -48,6 +48,23 @@ Suggested packages:
   (SDL3 is fetched and built from source automatically when not installed system-wide;
   FreeType uses the system package first, then falls back to the source build)
 
+##### Sanitizer build (docs/PORT_POSIX_PLAN.md, F9)
+
+The `linux-asan` preset builds the client subset with
+`-fsanitize=address,undefined` for the stability pass:
+
+```
+cmake --preset linux-asan
+cmake --build build/linux-asan
+ctest --preset linux-asan
+```
+
+It defaults to gcc (whose sanitizer runtime ships with `g++`); pass
+`-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++` if your clang has
+`libclang_rt.asan` installed. Run the client smoke under the sanitizers
+with `ASAN_OPTIONS=detect_leaks=1 UBSAN_OPTIONS=print_stacktrace=1
+SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy ./KnightOnLine --smoke 30`.
+
 ##### Packaging (docs/PORT_POSIX_PLAN.md, F8)
 
 After a successful build, `cmake --install <build-dir> --prefix <dest>`

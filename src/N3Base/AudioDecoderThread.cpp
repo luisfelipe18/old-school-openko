@@ -190,8 +190,8 @@ void AudioDecoderThread::decode_impl_pcm(StreamedAudioHandle* handle)
 		AudioDecodedChunk decodedChunk {};
 
 		size_t bytesRemaining = 0;
-		if (fileSize > handle->FileReaderHandle.Offset)
-			bytesRemaining = fileSize - handle->FileReaderHandle.Offset;
+		if (fileSize > handle->ReaderState.Offset)
+			bytesRemaining = fileSize - handle->ReaderState.Offset;
 		else
 			bytesRemaining = 0;
 
@@ -225,10 +225,10 @@ void AudioDecoderThread::decode_impl_pcm(StreamedAudioHandle* handle)
 		decodedChunk.Data.resize(bytesToRead);
 
 		std::memcpy(&decodedChunk.Data[0],
-			static_cast<const uint8_t*>(file->Memory()) + handle->FileReaderHandle.Offset,
+			static_cast<const uint8_t*>(file->Memory()) + handle->ReaderState.Offset,
 			bytesToRead);
 
-		handle->FileReaderHandle.Offset += bytesToRead;
+		handle->ReaderState.Offset += bytesToRead;
 
 		decodedChunk.BytesDecoded        = static_cast<int32_t>(bytesToRead);
 

@@ -33,9 +33,14 @@ void CJvCryption::JvEncryptionFast(int len, uint8_t* datain, uint8_t* dataout)
 #ifdef USE_CRYPTION
 	const uint8_t* pkey = reinterpret_cast<const uint8_t*>(&m_tkey);
 	uint8_t lkey = 0, rsk = 0;
-	int rkey = 2157;
+	// The keystream is a multiplicative generator that deliberately relies on
+	// modulo-2^32 wraparound. Signed overflow is UB (UBSan flags it and it can
+	// misbehave under aggressive optimizers), so keep the accumulator unsigned:
+	// the low bytes used below (>>8 & 0xff) are bit-identical to the historical
+	// signed-int behaviour, so the wire encryption is unchanged.
+	uint32_t rkey = 2157;
 
-	lkey     = (len * 157) & 0xff;
+	lkey          = (len * 157) & 0xff;
 
 	for (int i = 0; i < len; i++)
 	{

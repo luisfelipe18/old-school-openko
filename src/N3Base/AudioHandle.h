@@ -177,7 +177,7 @@ class StreamedAudioHandle : public AudioHandle
 
 protected:
 	/// File reader state used for streamed decoding.
-	FileReaderHandle FileReaderHandle;
+	FileReaderHandle ReaderState;
 
 	/// mpg123 decoder handle (used for MP3 streams).
 	mpg123_handle_struct* Mp3Handle;

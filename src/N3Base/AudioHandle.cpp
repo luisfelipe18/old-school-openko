@@ -118,10 +118,10 @@ std::shared_ptr<StreamedAudioHandle> StreamedAudioHandle::Create(std::shared_ptr
 		}
 
 		// Position the reader handle at the start of the file.
-		handle->FileReaderHandle.File   = streamedAudioAsset->File.get();
-		handle->FileReaderHandle.Offset = 0;
+		handle->ReaderState.File   = streamedAudioAsset->File.get();
+		handle->ReaderState.Offset = 0;
 
-		err = mpg123_open_handle(handle->Mp3Handle, &handle->FileReaderHandle);
+		err = mpg123_open_handle(handle->Mp3Handle, &handle->ReaderState);
 		assert(err == MPG123_OK);
 
 		if (err != MPG123_OK)
@@ -142,8 +142,8 @@ std::shared_ptr<StreamedAudioHandle> StreamedAudioHandle::Create(std::shared_ptr
 		}
 
 		// Position the reader handle at the beginning of the data buffer.
-		handle->FileReaderHandle.File   = streamedAudioAsset->File.get();
-		handle->FileReaderHandle.Offset = streamedAudioAsset->PcmDataBuffer
+		handle->ReaderState.File   = streamedAudioAsset->File.get();
+		handle->ReaderState.Offset = streamedAudioAsset->PcmDataBuffer
 										  - static_cast<const uint8_t*>(
 											  streamedAudioAsset->File->Memory());
 	}
@@ -200,11 +200,11 @@ void StreamedAudioHandle::RewindFrame()
 		if (Mp3Handle != nullptr)
 			mpg123_seek_frame(Mp3Handle, 0, SEEK_SET);
 		else
-			FileReaderHandle.Offset = 0;
+			ReaderState.Offset = 0;
 	}
 	else if (asset->DecoderType == AUDIO_DECODER_PCM)
 	{
-		FileReaderHandle.Offset = asset->PcmDataBuffer
+		ReaderState.Offset = asset->PcmDataBuffer
 								  - static_cast<const uint8_t*>(asset->File->Memory());
 	}
 	else

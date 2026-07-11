@@ -713,9 +713,34 @@ la validación end-to-end en un Mac real queda como paso del usuario.)*
 
 ### Fase 9 — Estabilización y paridad (esfuerzo: ~2 sp, continuo)
 
-* [ ] Pasadas de ASan/UBSan en macOS/Linux sobre el flujo login→mundo (el
+* [~] Pasadas de ASan/UBSan en macOS/Linux sobre el flujo login→mundo (el
       código legado tiene aritmética de punteros abundante; se esperan
       hallazgos también valiosos para Windows).
+      *(En progreso. Nuevo preset `linux-asan` (`-fsanitize=address,
+      undefined`, gcc — el runtime de ASan de clang-18 no está en el
+      contenedor de CI; el preset permite override de compilador). Primera
+      pasada sobre la suite de tests (6/6) + smoke + test-scene: **3 bugs
+      de UB reales encontrados y corregidos**, todos con impacto en ARM
+      (Apple Silicon) donde las lecturas desalineadas pueden faltar y los
+      optimizadores agresivos pueden romper el overflow con signo:*
+      *1) `APISocket::ReceiveProcess` leía `uint16_t`/`int16_t` del buffer*
+      *de recepción por `reinterpret_cast` en offsets arbitrarios (posiblemente*
+      *impares) — UB de misaligned load. 2) `APISocket::Send` escribía*
+      *`uint16_t`/`uint32_t` en el buffer de envío igual. Ambos → helpers*
+      *`ReadU16/ReadI16/WriteU16/WriteU32` con `memcpy` (cero coste, el*
+      *compilador los baja a un load/store plano). 3) `JvCryption::*
+      *JvEncryptionFast` acumulaba el keystream en un `int` con*
+      *`rkey *= 2171` que desborda — signed overflow UB; cambiado a*
+      *`uint32_t` (wraparound bien definido, bits idénticos porque solo se*
+      *usan los bytes `>>8 & 0xff`, así que el cifrado del wire NO cambia —*
+      *el test de round-trip cifrado lo confirma). El bug también beneficia*
+      *al servidor (JvCryption vive en `shared/`). **Pendiente:** ejercitar*
+      *el flujo login→mundo completo bajo ASan requiere assets reales +*
+      *servidor local (entorno del usuario en Mac).)*
+      *De paso: arreglado un error de compilación gcc-only en `AudioHandle.h`*
+      *(miembro `FileReaderHandle FileReaderHandle;` — mismo nombre que el*
+      *tipo, mal formado por [basic.scope.class]; clang lo acepta como*
+      *extensión, gcc lo rechaza. Renombrado a `ReaderState`).*
 * [ ] Auditoría de supuestos de 32 bits / orden de bytes en (de)serialización
       de paquetes y formatos (`#pragma pack`, casts de punteros a `DWORD`).
       Ambas plataformas objetivo son little-endian de 64 bits, igual que el
