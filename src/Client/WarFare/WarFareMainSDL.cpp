@@ -222,11 +222,15 @@ int main(int argc, char* argv[])
 	// --renderer <gl|null> overrides the Option.ini backend for a quick test.
 	// --test-scene draws the RHI diagnostic scene (docs/PORT_POSIX_PLAN.md,
 	// T6.6/T6.7): gradient background, spinning triangle, lit textured quad.
+	// --data <path> points the client at a game-data directory (containing
+	//   Server.Ini, Data/, UI/, ...); needed on macOS where a bundle run has
+	//   an unpredictable CWD.
 	long smokeFrames             = -1;
 	bool bTestScene              = false;
 	bool bLoginScene             = false;
 	std::string rendererOverride;
 	std::string dumpFramePath;
+	std::string dataDirOverride;
 	for (int i = 1; i < argc; ++i)
 	{
 		if (std::strcmp(argv[i], "--smoke") == 0 && i + 1 < argc)
@@ -237,6 +241,8 @@ int main(int argc, char* argv[])
 			bTestScene = true;
 		else if (std::strcmp(argv[i], "--dump-frame") == 0 && i + 1 < argc)
 			dumpFramePath = argv[i + 1];
+		else if (std::strcmp(argv[i], "--data") == 0 && i + 1 < argc)
+			dataDirOverride = argv[i + 1];
 		// --scene login brings up the real game procedure (login screen). It
 		// needs the game data files present, so it stays opt-in; the default
 		// diagnostics path is what CI smoke exercises.
@@ -246,6 +252,83 @@ int main(int argc, char* argv[])
 	}
 
 	LoadGameOptions();
+
+	// --data (or auto-discovery) points the client at the game-data directory
+	// (docs/PORT_POSIX_PLAN.md, F8). LoadGameOptions() has already anchored
+	// CN3Base::PathGet() at the CWD; that stays correct when the user cd'd
+	// into the data directory. In a bundle-double-click / IDE-Run scenario
+	// the CWD isn't the data dir, so we override it here.
+	//
+	// Precedence: --data <path> > OPENKO_GAME_DATA env var > CWD if it looks
+	// like a data dir > the executable's own directory > well-known user
+	// locations (~/GameData, ~/Library/Application Support/OpenKO/GameData).
+	auto LooksLikeDataDir = [](const std::filesystem::path& p) {
+		std::error_code ec;
+		return std::filesystem::exists(p / "Data", ec)
+			|| std::filesystem::exists(p / "Server.Ini", ec)
+			|| std::filesystem::exists(p / "Server.ini", ec);
+	};
+
+	std::filesystem::path dataDir;
+	if (!dataDirOverride.empty())
+	{
+		dataDir = dataDirOverride;
+	}
+	else if (const char* envDir = std::getenv("OPENKO_GAME_DATA");
+			 envDir != nullptr && envDir[0] != '\0')
+	{
+		dataDir = envDir;
+	}
+	else
+	{
+		std::vector<std::filesystem::path> candidates;
+		candidates.push_back(std::filesystem::path(CN3Base::PathGet())); // CWD (default)
+		if (auto exeDir = GetExecutableDir(); !exeDir.empty())
+		{
+			candidates.push_back(exeDir);
+#if defined(__APPLE__)
+			// Bundle layout: the data dir usually sits next to the .app, not
+			// inside it. Contents/Resources/ is the bundled-fallback slot.
+			candidates.push_back(exeDir / ".." / ".." / "..");    // .app/..
+			candidates.push_back(exeDir / ".." / "Resources");    // inside .app
+#endif
+		}
+		if (const char* home = std::getenv("HOME"); home != nullptr && home[0] != '\0')
+		{
+			candidates.push_back(std::filesystem::path(home) / "GameData");
+#if defined(__APPLE__)
+			candidates.push_back(
+				std::filesystem::path(home) / "Library" / "Application Support" / "OpenKO"
+				/ "GameData");
+#else
+			candidates.push_back(
+				std::filesystem::path(home) / ".local" / "share" / "openko" / "GameData");
+#endif
+		}
+
+		for (const auto& c : candidates)
+		{
+			std::error_code ec;
+			auto canonical = std::filesystem::weakly_canonical(c, ec);
+			if (!ec && LooksLikeDataDir(canonical))
+			{
+				dataDir = canonical;
+				break;
+			}
+		}
+	}
+
+	if (!dataDir.empty())
+	{
+		CN3Base::PathSet(dataDir.string());
+		spdlog::info("game data directory: {}", dataDir.string());
+	}
+	else if (bLoginScene)
+	{
+		// Only a warning: some diagnostic flows don't need game data at all.
+		spdlog::warn("no game data directory found; pass --data <path> or "
+					 "run from the directory containing Server.Ini and Data/");
+	}
 
 	bool bWantGL = CN3Base::s_Options.bPreferGLRenderer;
 	if (rendererOverride == "gl" || rendererOverride == "GL")
@@ -355,19 +438,22 @@ int main(int argc, char* argv[])
 	// files, hence the opt-in flag.
 	if (bLoginScene)
 	{
-		// StaticMemberInit loads the game's data tables and UI from the working
-		// directory (the base path is set to the CWD in LoadGameOptions). If the
-		// game data isn't there it fails deep inside with exit(-1); surface a
-		// clear reason up front so a missing-data run isn't a silent exit.
-		const std::filesystem::path dataDir =
+		// StaticMemberInit loads the game's data tables and UI from the base
+		// path (resolved above from --data / OPENKO_GAME_DATA / auto-discovery).
+		// If the game data isn't there it fails deep inside with exit(-1);
+		// surface a clear reason up front so a missing-data run isn't a
+		// silent exit.
+		const std::filesystem::path gameDataDir =
 			std::filesystem::path(CN3Base::PathGet()) / "Data";
 		std::error_code ec;
-		if (!std::filesystem::exists(dataDir, ec))
+		if (!std::filesystem::exists(gameDataDir, ec))
 		{
 			spdlog::error(
-				"--scene login: game data not found at '{}'. Run KnightOnLine from a "
-				"directory that contains the Knight Online client data (Data/, UI/, ...).",
-				dataDir.string());
+				"--scene login: game data not found at '{}'. Pass --data <path> "
+				"pointing at a directory that contains the Knight Online client "
+				"data (Server.Ini, Data/, UI/, ...), set OPENKO_GAME_DATA, or "
+				"launch from that directory.",
+				gameDataDir.string());
 			CN3Base::RHIDeviceSet(nullptr);
 			pRHIDevice.reset();
 			if (g_pCursor != nullptr)

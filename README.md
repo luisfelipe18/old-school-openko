@@ -72,6 +72,25 @@ Runtime data written by the game (`Log.txt`) lands under
 `$XDG_CONFIG_HOME/openko` (or `~/.config/openko/`) on Linux, so a
 read-only install location is fine.
 
+##### Pointing the client at a game-data directory
+
+The client reads `Server.Ini`, `Data/`, `UI/` and the rest of the game
+assets from a "game data directory". You can point it there in three
+ways, in this precedence order:
+
+1. `./KnightOnLine --data /path/to/game-data ...` (explicit override).
+2. `OPENKO_GAME_DATA=/path/to/game-data ./KnightOnLine ...` (env var).
+3. Otherwise the client auto-discovers by looking, in order, at: the
+   current working directory, the directory the binary lives in, the
+   `.app`'s parent (macOS bundle case), `Contents/Resources/` inside the
+   bundle, `~/GameData`, and `~/Library/Application Support/OpenKO/GameData`
+   (macOS) or `~/.local/share/openko/GameData` (Linux). The first entry
+   that contains `Data/` or `Server.Ini` wins.
+
+When you run the macOS `.app` by double-click or from an IDE, the CWD is
+usually not the data directory, so `--data` or `OPENKO_GAME_DATA` is the
+reliable way to point it there.
+
 ### Visual Studio solutions
 
 Solutions are available in the root directory:

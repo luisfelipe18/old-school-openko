@@ -680,6 +680,19 @@ in-game con texto coreano y español (tildes) en macOS y Linux.
       directorio se crea si no existe. Windows conserva el comportamiento
       histórico "junto al ejecutable". `Option.ini` ya se resolvía por
       `Platform/PlatformPaths` en F3.)*
+* [x] Rutas de LECTURA del cliente (Server.Ini, Data/, UI/): flag `--data
+      <path>` + env var `OPENKO_GAME_DATA` + auto-discovery.
+      *(Hecho: el CWD dejó de ser confiable cuando el binario vive dentro
+      del `.app` bundle (double-click o run desde IDE no ponen el CWD en
+      los datos del juego). Nueva resolución en el main SDL, tras
+      `LoadGameOptions`: precedencia `--data <path>` → env
+      `OPENKO_GAME_DATA` → auto-discovery contra una lista de candidatos
+      (CWD, dir del ejecutable, `.app/..`, `Contents/Resources/`,
+      `~/GameData`, `~/Library/Application Support/OpenKO/GameData` en
+      macOS o `~/.local/share/openko/GameData` en Linux). El primero que
+      contiene `Data/` o `Server.Ini` gana. Log claro: `game data
+      directory: <path>` si acierta, o error accionable en
+      `--scene login` si no. Verificado en Linux con los 3 caminos.)*
 
 **Aceptación:** `WarFare.app` arranca con doble clic en macOS; el binario
 Linux corre desde un directorio de instalación limpio.
