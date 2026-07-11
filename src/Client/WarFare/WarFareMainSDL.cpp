@@ -218,34 +218,46 @@ void LogInputDiagnostics(CLocalInput& input)
 
 int main(int argc, char* argv[])
 {
-	// CI/diagnostics: --smoke <N> pumps N frames and exits.
-	// --renderer <gl|null> overrides the Option.ini backend for a quick test.
-	// --test-scene draws the RHI diagnostic scene (docs/PORT_POSIX_PLAN.md,
-	// T6.6/T6.7): gradient background, spinning triangle, lit textured quad.
-	// --data <path> points the client at a game-data directory (containing
-	//   Server.Ini, Data/, UI/, ...); needed on macOS where a bundle run has
-	//   an unpredictable CWD.
+	// By default the client boots into the login scene (the game's real
+	// presentation menu). Diagnostic flags below opt out for CI/dev:
+	//   --smoke <N>        pumps N frames and exits (implies diagnostics).
+	//   --test-scene       draws the RHI diagnostic scene, docs/PORT_POSIX_PLAN.md
+	//                      T6.6/T6.7 (implies diagnostics).
+	//   --diagnostics      runs the diagnostic clear-color loop.
+	//   --renderer <gl|null>  overrides the Option.ini backend.
+	//   --dump-frame <path>   saves one GL frame as PPM after the loop.
+	//   --data <path>      points the client at a game-data directory
+	//                      (containing Server.Ini, Data/, UI/, ...); needed on
+	//                      macOS where a bundle run has an unpredictable CWD.
+	//   --scene login      no-op (kept for backwards compat with older scripts).
 	long smokeFrames             = -1;
 	bool bTestScene              = false;
-	bool bLoginScene             = false;
+	bool bLoginScene             = true;
 	std::string rendererOverride;
 	std::string dumpFramePath;
 	std::string dataDirOverride;
 	for (int i = 1; i < argc; ++i)
 	{
 		if (std::strcmp(argv[i], "--smoke") == 0 && i + 1 < argc)
+		{
 			smokeFrames = std::strtol(argv[i + 1], nullptr, 10);
+			bLoginScene = false; // headless smoke has no game data
+		}
 		else if (std::strcmp(argv[i], "--renderer") == 0 && i + 1 < argc)
 			rendererOverride = argv[i + 1];
 		else if (std::strcmp(argv[i], "--test-scene") == 0)
-			bTestScene = true;
+		{
+			bTestScene  = true;
+			bLoginScene = false; // test scene owns the render loop
+		}
+		else if (std::strcmp(argv[i], "--diagnostics") == 0)
+			bLoginScene = false;
 		else if (std::strcmp(argv[i], "--dump-frame") == 0 && i + 1 < argc)
 			dumpFramePath = argv[i + 1];
 		else if (std::strcmp(argv[i], "--data") == 0 && i + 1 < argc)
 			dataDirOverride = argv[i + 1];
-		// --scene login brings up the real game procedure (login screen). It
-		// needs the game data files present, so it stays opt-in; the default
-		// diagnostics path is what CI smoke exercises.
+		// --scene login stays a valid flag for scripts that already pass it,
+		// but it's now the default so passing it is redundant.
 		else if (std::strcmp(argv[i], "--scene") == 0 && i + 1 < argc
 			&& std::strcmp(argv[i + 1], "login") == 0)
 			bLoginScene = true;
@@ -285,12 +297,19 @@ int main(int argc, char* argv[])
 		candidates.push_back(std::filesystem::path(CN3Base::PathGet())); // CWD (default)
 		if (auto exeDir = GetExecutableDir(); !exeDir.empty())
 		{
+			// The build system stages assets/Client/ under GameData/ next
+			// to the binary (Linux) or inside Contents/Resources/ (macOS
+			// bundle), so those slots take priority over the raw exe dir.
+			candidates.push_back(exeDir / "GameData");
 			candidates.push_back(exeDir);
 #if defined(__APPLE__)
-			// Bundle layout: the data dir usually sits next to the .app, not
-			// inside it. Contents/Resources/ is the bundled-fallback slot.
-			candidates.push_back(exeDir / ".." / ".." / "..");    // .app/..
-			candidates.push_back(exeDir / ".." / "Resources");    // inside .app
+			// macOS bundle-relative locations. GameData/ inside Resources/
+			// is the self-contained default the CMake POST_BUILD produces.
+			candidates.push_back(exeDir / ".." / "Resources" / "GameData");
+			candidates.push_back(exeDir / ".." / "Resources");
+			// A data dir next to the .app is another common install layout.
+			candidates.push_back(exeDir / ".." / ".." / ".." / "GameData");
+			candidates.push_back(exeDir / ".." / ".." / "..");
 #endif
 		}
 		if (const char* home = std::getenv("HOME"); home != nullptr && home[0] != '\0')

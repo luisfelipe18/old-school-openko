@@ -681,18 +681,27 @@ in-game con texto coreano y español (tildes) en macOS y Linux.
       histórico "junto al ejecutable". `Option.ini` ya se resolvía por
       `Platform/PlatformPaths` en F3.)*
 * [x] Rutas de LECTURA del cliente (Server.Ini, Data/, UI/): flag `--data
-      <path>` + env var `OPENKO_GAME_DATA` + auto-discovery.
+      <path>` + env var `OPENKO_GAME_DATA` + auto-discovery + staging
+      automático de `assets/Client/` a `GameData/` en cada build.
       *(Hecho: el CWD dejó de ser confiable cuando el binario vive dentro
       del `.app` bundle (double-click o run desde IDE no ponen el CWD en
-      los datos del juego). Nueva resolución en el main SDL, tras
-      `LoadGameOptions`: precedencia `--data <path>` → env
-      `OPENKO_GAME_DATA` → auto-discovery contra una lista de candidatos
-      (CWD, dir del ejecutable, `.app/..`, `Contents/Resources/`,
+      los datos del juego). El build system ahora replica `<repo>/assets/
+      Client/` en `<exe-dir>/GameData/` (Linux) o en `Contents/Resources/
+      GameData/` (bundle macOS) vía `copy_directory_if_different` en
+      POST_BUILD — el runtime queda auto-contenido. Nueva resolución en
+      el main SDL, tras `LoadGameOptions`: precedencia `--data <path>` →
+      env `OPENKO_GAME_DATA` → auto-discovery contra una lista de
+      candidatos (CWD, `<exe-dir>/GameData/`, exe dir, `Contents/
+      Resources/GameData/`, `Contents/Resources/`, padre del bundle,
       `~/GameData`, `~/Library/Application Support/OpenKO/GameData` en
       macOS o `~/.local/share/openko/GameData` en Linux). El primero que
       contiene `Data/` o `Server.Ini` gana. Log claro: `game data
-      directory: <path>` si acierta, o error accionable en
-      `--scene login` si no. Verificado en Linux con los 3 caminos.)*
+      directory: <path>` si acierta, o error accionable si no.
+      Adicionalmente, **login scene ahora es el default** en el main SDL
+      (el usuario esperaba el menú de presentación por defecto): las
+      flags `--smoke <N>` / `--test-scene` / `--diagnostics` optan por
+      el path de diagnóstico. `--scene login` queda como no-op de
+      compat. CI sigue verde (usa `--smoke 30`).)*
 
 **Aceptación:** `WarFare.app` arranca con doble clic en macOS; el binario
 Linux corre desde un directorio de instalación limpio.

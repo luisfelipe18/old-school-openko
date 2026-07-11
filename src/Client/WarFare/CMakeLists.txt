@@ -539,6 +539,27 @@ if(NOT WIN32)
       COMMENT "Staging ${res} into ${_warfare_resource_dest}")
   endforeach()
 
+  # User-populated game-data staging: whatever the developer drops into
+  # <repo>/assets/Client/ (Server.Ini, Data/, UI/, textures, ...) is mirrored
+  # into the runtime location on every build so the app is self-contained.
+  # copy_directory_if_different (CMake 3.26+) skips unchanged files so this
+  # stays cheap once the initial sync has run.
+  set(_warfare_game_data_src "${CMAKE_SOURCE_DIR}/assets/Client")
+  if(APPLE)
+    # macOS: land the whole thing at Contents/Resources/GameData/. The runtime
+    # discovery in WarFareMainSDL picks it up automatically (F8, --data list).
+    set(_warfare_game_data_dst "${_warfare_resource_dest}/GameData")
+  else()
+    # Linux: sit right next to the binary; CWD-launch and auto-discovery
+    # both find it there without an extra --data argument.
+    set(_warfare_game_data_dst "${_warfare_resource_dest}/GameData")
+  endif()
+  add_custom_command(TARGET WarFare POST_BUILD
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "${_warfare_game_data_src}"
+    COMMAND "${CMAKE_COMMAND}" -E copy_directory_if_different
+      "${_warfare_game_data_src}" "${_warfare_game_data_dst}"
+    COMMENT "Staging assets/Client -> ${_warfare_game_data_dst}")
+
   if(APPLE)
     # If someone has generated a KnightOnLine.icns from WarFare.ico (see
     # docs/PORT_POSIX_PLAN.md F8), include it in the bundle. Info.plist

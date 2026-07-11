@@ -75,21 +75,38 @@ read-only install location is fine.
 ##### Pointing the client at a game-data directory
 
 The client reads `Server.Ini`, `Data/`, `UI/` and the rest of the game
-assets from a "game data directory". You can point it there in three
-ways, in this precedence order:
+assets from a "game data directory". The build system stages whatever
+you drop into `<repo>/assets/Client/` (Server.Ini, Data/, UI/, textures,
+...) into `GameData/` next to the built binary on Linux, or into
+`Contents/Resources/GameData/` inside the `.app` bundle on macOS - so a
+build produces a self-contained runtime out of the box. `assets/Client/`
+starts empty; drop your own client files there.
+
+If you'd rather point at a different directory, you can, in this
+precedence order:
 
 1. `./KnightOnLine --data /path/to/game-data ...` (explicit override).
 2. `OPENKO_GAME_DATA=/path/to/game-data ./KnightOnLine ...` (env var).
 3. Otherwise the client auto-discovers by looking, in order, at: the
-   current working directory, the directory the binary lives in, the
-   `.app`'s parent (macOS bundle case), `Contents/Resources/` inside the
-   bundle, `~/GameData`, and `~/Library/Application Support/OpenKO/GameData`
-   (macOS) or `~/.local/share/openko/GameData` (Linux). The first entry
-   that contains `Data/` or `Server.Ini` wins.
+   current working directory, `<exe-dir>/GameData/`, the exe directory
+   itself, `Contents/Resources/GameData/` and `Contents/Resources/`
+   inside a macOS bundle, the bundle's parent, `~/GameData`, and
+   `~/Library/Application Support/OpenKO/GameData` (macOS) or
+   `~/.local/share/openko/GameData` (Linux). The first entry that
+   contains `Data/` or `Server.Ini` wins.
 
-When you run the macOS `.app` by double-click or from an IDE, the CWD is
-usually not the data directory, so `--data` or `OPENKO_GAME_DATA` is the
-reliable way to point it there.
+##### Boot mode
+
+The client boots straight into the login scene by default (the classic
+Knight OnLine presentation menu). CLI flags opt out for CI/dev:
+
+* `--diagnostics` runs a clear-color loop with input diagnostics.
+* `--test-scene` draws the RHI diagnostic scene (rotating triangle +
+  textured quad).
+* `--smoke <N>` pumps N frames headless and exits (implies
+  `--diagnostics`); this is what CI runs.
+* `--scene login` stays valid for backwards compatibility, but it's now
+  the default so passing it is redundant.
 
 ### Visual Studio solutions
 
