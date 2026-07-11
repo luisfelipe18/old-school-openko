@@ -48,6 +48,8 @@
 
 #ifndef _WIN32
 #include <Platform/PlatformTime.h> // Sleep()
+
+#include <spdlog/spdlog.h>
 #endif
 
 #include <cassert>
@@ -241,7 +243,10 @@ void CGameProcedure::StaticMemberInit(HINSTANCE /*hInstance*/, HWND /*hWndMain*/
 	// CN3Eng::Init is a POSIX no-op that just verifies the RHI backend exists.
 	if (!s_pEng->Init(s_bWindowed, nullptr, s_Options.iViewWidth, s_Options.iViewHeight,
 			s_Options.iViewColorDepth, TRUE))
+	{
+		spdlog::error("engine init failed (no RHI device); aborting bring-up");
 		exit(-1);
+	}
 
 	CGameBase::StaticMemberInit(); // tables + world/player managers
 
@@ -267,6 +272,10 @@ void CGameProcedure::StaticMemberInit(HINSTANCE /*hInstance*/, HWND /*hWndMain*/
 	if (pTblUI == nullptr)
 	{
 		CLogWriter::Write("UI resources not found for {}", static_cast<int>(NATION_ELMORAD));
+		spdlog::error("UI resource table is empty - 'Data/UIs_us.tbl' failed to load from "
+					  "'{}'. Check that the game data directory has a complete Data/ folder "
+					  "(pass --data <path> or populate assets/Client before building).",
+			CN3Base::PathGet());
 		exit(-1);
 	}
 

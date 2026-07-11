@@ -11,8 +11,32 @@
 
 #include <N3Base/N3ShapeMgr.h>
 
+#ifndef _WIN32
+#include <spdlog/spdlog.h>
+#endif
+
 #include <ranges>
 #include <algorithm>
+
+namespace
+{
+// Loads a game data table, reporting failures to the console on POSIX so a
+// missing or corrupt .tbl surfaces immediately instead of turning into a
+// silent exit(-1) deeper in bring-up (docs/PORT_POSIX_PLAN.md, F8).
+// Windows keeps the historical fire-and-forget behaviour.
+template <typename TTable>
+void LoadTable(TTable& table, const std::string& szFN)
+{
+	const bool bOk = table.LoadFromFile(szFN);
+#ifndef _WIN32
+	if (!bOk)
+		spdlog::error("game table failed to load: '{}' (looked under '{}')", szFN,
+			CN3Base::PathGet());
+#else
+	(void) bOk;
+#endif
+}
+} // namespace
 
 // CGameBase::s_pTbl_Texts is defined in ClientResourceFormatter.cpp so the
 // text-resource lookup (fmt::format_text_resource / IDS_*) links on POSIX
@@ -51,39 +75,39 @@ void CGameBase::StaticMemberInit()
 
 	std::string szFN;
 	szFN = "Data\\Texts" + szLangTail;
-	s_pTbl_Texts.LoadFromFile(szFN);
+	LoadTable(s_pTbl_Texts, szFN);
 	szFN = "Data\\Zones.tbl";
-	s_pTbl_Zones.LoadFromFile(szFN);
+	LoadTable(s_pTbl_Zones, szFN);
 	szFN = "Data\\UIs" + szLangTail;
-	s_pTbl_UI.LoadFromFile(szFN);
+	LoadTable(s_pTbl_UI, szFN);
 	szFN = "Data\\UPC_DefaultLooks.tbl";
-	s_pTbl_UPC_Looks.LoadFromFile(szFN);
+	LoadTable(s_pTbl_UPC_Looks, szFN);
 	szFN = "Data\\Item_Org" + szLangTail;
-	s_pTbl_Items_Basic.LoadFromFile(szFN);
+	LoadTable(s_pTbl_Items_Basic, szFN);
 
 	szFN = "Data\\Quest_Menu" + szLangTail;
-	s_pTbl_QuestMenu.LoadFromFile(szFN);
+	LoadTable(s_pTbl_QuestMenu, szFN);
 	szFN = "Data\\Quest_Talk" + szLangTail;
-	s_pTbl_QuestTalk.LoadFromFile(szFN);
+	LoadTable(s_pTbl_QuestTalk, szFN);
 	szFN = "Data\\Quest_Content" + szLangTail;
-	s_pTbl_QuestContent.LoadFromFile(szFN);
+	LoadTable(s_pTbl_QuestContent, szFN);
 	szFN = "Data\\Help" + szLangTail;
-	s_pTbl_Help.LoadFromFile(szFN);
+	LoadTable(s_pTbl_Help, szFN);
 
 	std::string szFNTmp;
 	for (int i = 0; i < MAX_ITEM_EXTENSION; i++)
 	{
 		szFNTmp = fmt::format("Data\\Item_Ext_{}", i);
 		szFN    = szFNTmp + szLangTail;
-		s_pTbl_Items_Exts[i].LoadFromFile(szFN);
+		LoadTable(s_pTbl_Items_Exts[i], szFN);
 	}
 
 	szFN = "Data\\NPC_Looks.tbl";
-	s_pTbl_NPC_Looks.LoadFromFile(szFN);
+	LoadTable(s_pTbl_NPC_Looks, szFN);
 	szFN = "Data\\skill_magic_main" + szLangTail;
-	s_pTbl_Skill.LoadFromFile(szFN);
+	LoadTable(s_pTbl_Skill, szFN);
 	szFN = "Data\\fx.tbl";
-	s_pTbl_FXSource.LoadFromFile(szFN);
+	LoadTable(s_pTbl_FXSource, szFN);
 
 	s_pWorldMgr = new CN3WorldManager();
 	s_pOPMgr    = new CPlayerOtherMgr();
