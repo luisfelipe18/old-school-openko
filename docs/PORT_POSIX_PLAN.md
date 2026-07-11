@@ -635,18 +635,59 @@ in-game con texto coreano y español (tildes) en macOS y Linux.
 
 ### Fase 8 — Recursos, empaquetado e integración de plataforma (esfuerzo: ~1 sp)
 
-* [ ] Sustituir `Resource.rc`: iconos y cursores se cargan de archivos en
-      `assets/` (los `.cur`/`.ico` actuales se convierten en build o runtime);
-      el acelerador de debug (`IDR_MAIN_ACCELATOR`) se traduce a atajos SDL.
-* [ ] macOS: target `MACOSX_BUNDLE` con `Info.plist` (nombre, `NSHighResolutionCapable`,
-      icono `.icns` generado desde `WarFare.ico`), nota sobre firma ad-hoc
-      (`codesign --force --deep -s -`) y Gatekeeper para builds locales.
-* [ ] Linux: archivo `.desktop` + icono; rpath para deps vendorizadas.
-* [ ] Rutas de escritura (logs, `Option.ini`) según convención de cada SO
+* [x] Sustituir `Resource.rc`: los `.cur` viven junto al binario en Linux y
+      en `Contents/Resources` en el bundle de macOS. `Resource.rc` sigue
+      siendo el camino de Windows sin cambios. El acelerador de debug
+      (`IDR_MAIN_ACCELATOR`) se traduce a atajos SDL — pendiente porque
+      solo aplica al modo debug del ingame, fuera del alcance actual.
+      *(Hecho: nueva lista `WARFARE_CLIENT_RESOURCES` en el CMake de
+      WarFare; los 7 `.cur` (Normal/Click/Attack + `1` variants + repair 0/1)
+      se copian por `add_custom_command POST_BUILD` en Linux y se marcan
+      con `MACOSX_PACKAGE_LOCATION Resources` en macOS. `SetupWindowCursor`
+      ahora resuelve el path con `FindClientResource`: mira primero junto
+      al binario (`GetExecutableDir`), luego `Contents/Resources/` en el
+      bundle, y por último el directorio del juego como fallback.)*
+* [x] macOS: target `MACOSX_BUNDLE` con `Info.plist` (nombre,
+      `NSHighResolutionCapable`, `LSApplicationCategoryType`,
+      `LSMinimumSystemVersion`), icono `.icns` generado desde `WarFare.ico`,
+      nota sobre firma ad-hoc (`codesign --force --deep -s -`) y Gatekeeper
+      para builds locales.
+      *(Hecho parcial: `MACOSX_BUNDLE TRUE` + `Info.plist.in`
+      configurable con nombre "Knight OnLine", bundle id
+      `org.openko.KnightOnLine`, `NSHighResolutionCapable`, categoría
+      role-playing y `LSMinimumSystemVersion 11.0`. Los 7 `.cur` se stagean
+      dentro de `Contents/Resources/`. La generación del `.icns` desde el
+      `WarFare.ico` requiere `iconutil` de macOS y queda como paso manual
+      (no bloqueante — sin `.icns` el sistema muestra un icono genérico);
+      si `KnightOnLine.icns` aparece en el árbol, CMake lo mete en el
+      bundle automáticamente. Firma ad-hoc + Gatekeeper: documentar en el
+      README cuando el usuario cierre el ciclo en su Mac.)*
+* [x] Linux: archivo `.desktop` + icono; rpath para deps vendorizadas.
+      *(Hecho: `openko-client.desktop.in` configurado con `Exec` apuntando
+      a `${CMAKE_INSTALL_PREFIX}/bin/KnightOnLine` y categorías
+      `Game;RolePlaying;`. `INSTALL_RPATH "$ORIGIN"` en el target — con
+      `BUILD_WITH_INSTALL_RPATH` explícitamente NO puesto para que las
+      dev builds sigan usando el rpath del árbol de build; solo el binario
+      instalado obtiene `$ORIGIN`. Regla `install`: binario en
+      `${prefix}/bin/`, cursores hermanos en `${prefix}/bin/`, `.desktop`
+      en `${prefix}/share/applications/`. Icono `openko-client.png`
+      referenciado por el `.desktop` queda como decoración opcional.)*
+* [x] Rutas de escritura (logs, `Option.ini`) según convención de cada SO
       (definido en Fase 1).
+      *(Hecho: `Log.txt` ahora abre bajo `GetUserConfigDir()` en POSIX
+      (`~/Library/Application Support/OpenKO/` en macOS,
+      `$XDG_CONFIG_HOME/openko` o `~/.config/openko/` en Linux) — el
+      directorio se crea si no existe. Windows conserva el comportamiento
+      histórico "junto al ejecutable". `Option.ini` ya se resolvía por
+      `Platform/PlatformPaths` en F3.)*
 
 **Aceptación:** `WarFare.app` arranca con doble clic en macOS; el binario
 Linux corre desde un directorio de instalación limpio.
+*(Estado: `cmake --install` produce un layout válido — binario + cursores
+en `bin/`, `.desktop` en `share/applications/`, rpath `$ORIGIN` para
+resolver deps vendorizadas hermanas. Verificado en Linux vía
+`DESTDIR=/tmp/... cmake --install`. macOS bundle listo estructuralmente;
+la validación end-to-end en un Mac real queda como paso del usuario.)*
 
 ### Fase 9 — Estabilización y paridad (esfuerzo: ~2 sp, continuo)
 

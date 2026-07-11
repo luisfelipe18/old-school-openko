@@ -485,3 +485,86 @@ endif()
 add_custom_command(TARGET WarFare POST_BUILD
   COMMAND "${CMAKE_COMMAND}" -E echo "$<TARGET_FILE:WarFare> has been built"
 )
+
+if(NOT WIN32)
+  # Package the client-owned resources (docs/PORT_POSIX_PLAN.md, F8): the .cur
+  # files were embedded via Resource.rc on Windows; on POSIX they ride next to
+  # the executable and are picked up at runtime via SDL_GetBasePath (see
+  # WarFareMainSDL / SetupWindowCursor). Same list as the CURSOR entries in
+  # Resource.rc.
+  set(WARFARE_CLIENT_RESOURCES
+    Cursor_Normal.cur
+    Cursor_Click.cur
+    Cursor_Attack.cur
+    cursor_normal1.cur
+    cursor_click1.cur
+    repair0.cur
+    repair1.cur
+  )
+
+  if(APPLE)
+    # macOS: the resources live in the .app bundle (Contents/Resources).
+    set_target_properties(WarFare PROPERTIES
+      MACOSX_BUNDLE                    TRUE
+      MACOSX_BUNDLE_INFO_PLIST         "${CMAKE_CURRENT_SOURCE_DIR}/Info.plist.in"
+      MACOSX_BUNDLE_BUNDLE_NAME        "Knight OnLine"
+      MACOSX_BUNDLE_GUI_IDENTIFIER     "org.openko.KnightOnLine"
+      MACOSX_BUNDLE_BUNDLE_VERSION     "0.1"
+      MACOSX_BUNDLE_SHORT_VERSION_STRING "0.1"
+      MACOSX_BUNDLE_COPYRIGHT          "OpenKO contributors"
+    )
+    foreach(res IN LISTS WARFARE_CLIENT_RESOURCES)
+      target_sources(WarFare PRIVATE "${res}")
+      set_source_files_properties("${res}" PROPERTIES
+        MACOSX_PACKAGE_LOCATION Resources)
+    endforeach()
+
+    # If someone has generated a KnightOnLine.icns from WarFare.ico (see
+    # docs/PORT_POSIX_PLAN.md F8), include it in the bundle. The Info.plist
+    # references it by name; if it isn't there macOS just falls back to a
+    # generic app icon, which is fine for a dev build.
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/KnightOnLine.icns")
+      target_sources(WarFare PRIVATE KnightOnLine.icns)
+      set_source_files_properties(KnightOnLine.icns PROPERTIES
+        MACOSX_PACKAGE_LOCATION Resources)
+    endif()
+  else()
+    # Linux: copy resources next to the built binary so a dev-build run works
+    # from the build directory as well as from an installed location.
+    foreach(res IN LISTS WARFARE_CLIENT_RESOURCES)
+      add_custom_command(TARGET WarFare POST_BUILD
+        COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+          "${CMAKE_CURRENT_SOURCE_DIR}/${res}"
+          "$<TARGET_FILE_DIR:WarFare>/${res}")
+    endforeach()
+
+    # Vendored dependencies (SDL3, mpg123, ...) that link against WarFare
+    # ship next to the binary in an installed layout. Setting the install
+    # rpath to $ORIGIN keeps them findable without LD_LIBRARY_PATH.
+    # NOTE: intentionally NOT setting BUILD_WITH_INSTALL_RPATH: dev builds
+    # keep the CMake-managed build-tree rpath so ninja-built binaries can
+    # still find libjpeg/mpg123 straight from the build directory.
+    set_target_properties(WarFare PROPERTIES INSTALL_RPATH "$ORIGIN")
+
+    # A ready-to-drop-in .desktop entry for freedesktop-conformant desktops
+    # (GNOME/KDE/XFCE). Install rules stay optional; the file is written into
+    # the build tree for packagers to pick up.
+    configure_file(
+      "${CMAKE_CURRENT_SOURCE_DIR}/openko-client.desktop.in"
+      "${CMAKE_CURRENT_BINARY_DIR}/openko-client.desktop"
+      @ONLY)
+  endif()
+
+  # An install rule so packagers get a sensible layout out of the box:
+  #   ${prefix}/bin/KnightOnLine          + cursors next to it on Linux
+  #   ${prefix}/Applications/KnightOnLine.app on macOS (bundle target)
+  #   ${prefix}/share/applications/openko-client.desktop on Linux
+  install(TARGETS WarFare
+    RUNTIME  DESTINATION bin
+    BUNDLE   DESTINATION Applications)
+  if(NOT APPLE)
+    install(FILES ${WARFARE_CLIENT_RESOURCES} DESTINATION bin)
+    install(FILES "${CMAKE_CURRENT_BINARY_DIR}/openko-client.desktop"
+      DESTINATION share/applications OPTIONAL)
+  endif()
+endif()

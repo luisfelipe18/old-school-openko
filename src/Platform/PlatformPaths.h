@@ -11,6 +11,41 @@
 // Header-only so the Windows MSBuild projects can consume it without linking
 // anything new (same rule as PlatformTime.h).
 
+/// \brief Best-effort path to the directory the running executable lives in.
+///        Returns an empty path when the platform doesn't expose it.
+///
+/// On POSIX this reads /proc/self/exe (Linux) or _NSGetExecutablePath
+/// (macOS). It's where the client's own resources ship — cursors, icons,
+/// vendored shared libraries — as opposed to CN3Base::PathGet(), which points
+/// at the CWD from which the game was launched (typically the game-data dir).
+inline std::filesystem::path GetExecutableDir()
+{
+#if defined(_WIN32)
+	// Windows keeps the game's historical behavior: resources are embedded
+	// via Resource.rc, and paths anchor to the working directory.
+	return {};
+#elif defined(__APPLE__)
+	// macOS: _NSGetExecutablePath fills a caller-provided buffer.
+	extern int _NSGetExecutablePath(char* buf, unsigned* bufsize);
+	char buf[1024]                    = {};
+	unsigned int size                 = static_cast<unsigned int>(sizeof(buf));
+	if (_NSGetExecutablePath(buf, &size) != 0)
+		return {};
+	std::error_code ec;
+	auto canonical = std::filesystem::weakly_canonical(std::filesystem::path(buf), ec);
+	if (ec)
+		return std::filesystem::path(buf).parent_path();
+	return canonical.parent_path();
+#else
+	// Linux: /proc/self/exe is a symlink to the running binary.
+	std::error_code ec;
+	auto exe = std::filesystem::read_symlink("/proc/self/exe", ec);
+	if (ec)
+		return {};
+	return exe.parent_path();
+#endif
+}
+
 /// \brief Per-user configuration directory for the game, or empty when the
 ///        platform convention is "next to the executable" (Windows).
 ///

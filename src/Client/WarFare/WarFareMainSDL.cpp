@@ -27,6 +27,8 @@
 #include <N3Base/N3UIEdit.h>
 #include <N3Base/RHI/RHIDeviceNull.h>
 
+#include <Platform/PlatformPaths.h>
+
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
 
@@ -45,18 +47,59 @@ SDL_Cursor* g_pCursor      = nullptr;
 bool g_bWindowInFocus      = true;
 bool g_bQuitRequested      = false;
 
-// Replaces the LoadCursor(IDC_...) resource path: the .cur files ship next
-// to the game data and are decoded into an SDL color cursor.
+// Locates a client-owned resource that ships next to the executable
+// (docs/PORT_POSIX_PLAN.md, F8): CMake copies the .cur/.ico files there for
+// dev builds, and the .app bundle stages them in Contents/Resources. The
+// game-data dir (CN3Base::PathGet()) is a legacy fallback so an old layout
+// with the cursor file next to Data/ still works.
+std::filesystem::path FindClientResource(const char* szName)
+{
+	std::error_code ec;
+	const std::filesystem::path exeDir = GetExecutableDir();
+	if (!exeDir.empty())
+	{
+		// Next to the binary on Linux, and Contents/MacOS on a macOS bundle.
+		const std::filesystem::path direct = exeDir / szName;
+		if (std::filesystem::exists(direct, ec))
+			return direct;
+
+#if defined(__APPLE__)
+		// On macOS the binary lives in Contents/MacOS/ and resources sit in
+		// the sibling Contents/Resources/ directory.
+		const std::filesystem::path bundleRes = exeDir / ".." / "Resources" / szName;
+		if (std::filesystem::exists(bundleRes, ec))
+			return bundleRes;
+#endif
+	}
+
+	// Legacy: the game-data directory (CWD by default).
+	const std::filesystem::path legacy = std::filesystem::path(CN3Base::PathGet()) / szName;
+	if (std::filesystem::exists(legacy, ec))
+		return legacy;
+
+	return {};
+}
+
+// Replaces the LoadCursor(IDC_...) resource path: the .cur files ship with
+// the client (next to the executable on Linux, inside the .app bundle on
+// macOS) and are decoded into an SDL color cursor.
 void SetupWindowCursor()
 {
 	if (!CN3Base::s_Options.bWindowCursor)
 		return; // the game draws its own software cursor (CGameCursor)
 
-	const DecodedCursor decoded =
-		LoadCursorFromFile(std::filesystem::path(CN3Base::PathGet()) / "Cursor_Normal.cur");
+	const std::filesystem::path path = FindClientResource("Cursor_Normal.cur");
+	if (path.empty())
+	{
+		spdlog::info("Cursor_Normal.cur not found; keeping the system cursor");
+		return;
+	}
+
+	const DecodedCursor decoded = LoadCursorFromFile(path);
 	if (!decoded.IsValid())
 	{
-		spdlog::info("Cursor_Normal.cur not found/decodable; keeping the system cursor");
+		spdlog::info("Cursor_Normal.cur at '{}' not decodable; keeping the system cursor",
+			path.string());
 		return;
 	}
 

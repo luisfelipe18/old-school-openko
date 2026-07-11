@@ -1,6 +1,7 @@
 add_executable(Platform.Tests
   PlatformCrypto_test.cpp
   PlatformEncoding_test.cpp
+  PlatformPaths_test.cpp
   PlatformTime_test.cpp)
 
 set_target_properties(Platform.Tests PROPERTIES

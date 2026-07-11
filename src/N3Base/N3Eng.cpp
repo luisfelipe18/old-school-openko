@@ -6,6 +6,12 @@
 #include "N3Light.h"
 #include "LogWriter.h"
 
+#ifndef _WIN32
+#include <Platform/PlatformPaths.h>
+
+#include <filesystem>
+#endif
+
 #include <bit>
 
 CN3Eng::CN3Eng()
@@ -21,7 +27,25 @@ CN3Eng::CN3Eng()
 	memset(&m_DeviceInfo, 0, sizeof(m_DeviceInfo));
 
 #ifdef _N3GAME
+#ifdef _WIN32
 	CLogWriter::Open("Log.txt");
+#else
+	// POSIX (docs/PORT_POSIX_PLAN.md, F8): the game data directory is often
+	// read-only or owned by another user (a shared install, /Applications on
+	// macOS, /usr/games on Linux), so the log lives in the per-user config
+	// directory. Windows keeps the historical "next to the exe" layout.
+	std::error_code ec;
+	const std::filesystem::path configDir = GetUserConfigDir();
+	if (!configDir.empty())
+	{
+		std::filesystem::create_directories(configDir, ec);
+		CLogWriter::Open((configDir / "Log.txt").string());
+	}
+	else
+	{
+		CLogWriter::Open("Log.txt"); // last-resort fallback
+	}
+#endif
 #endif
 
 #ifdef _WIN32

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Knight OnLine (OpenKO)
+GenericName=MMORPG Client
+Comment=Native POSIX port of the Knight OnLine client
+Exec=@CMAKE_INSTALL_PREFIX@/bin/KnightOnLine
+Icon=openko-client
+Terminal=false
+Categories=Game;RolePlaying;

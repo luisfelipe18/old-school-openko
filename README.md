@@ -43,9 +43,34 @@ presets in `CMakePresets.json` (e.g. `cmake --preset macos-arm64-debug` or
 builds on these platforms; the `Client POSIX experimental` CI jobs track that subset.
 
 Suggested packages:
-* macOS: `brew install cmake ninja sdl3`
-* Ubuntu/Debian: `apt install build-essential clang cmake ninja-build`
-  (SDL3 is fetched and built from source automatically when not installed system-wide)
+* macOS: `brew install cmake ninja sdl3 freetype`
+* Ubuntu/Debian: `apt install build-essential clang cmake ninja-build libfreetype-dev`
+  (SDL3 is fetched and built from source automatically when not installed system-wide;
+  FreeType uses the system package first, then falls back to the source build)
+
+##### Packaging (docs/PORT_POSIX_PLAN.md, F8)
+
+After a successful build, `cmake --install <build-dir> --prefix <dest>`
+produces a distribution layout:
+
+* **Linux**: `bin/KnightOnLine` + the `.cur` cursor files as siblings +
+  `share/applications/openko-client.desktop`. The binary's rpath is
+  `$ORIGIN`, so vendored dependency shared libraries can ship in `bin/`
+  as well.
+* **macOS**: a `Knight OnLine.app` bundle. Info.plist ships with
+  `NSHighResolutionCapable`, category role-playing, and a minimum system
+  version of macOS 11. The `.cur` cursors live in
+  `Contents/Resources/`. To provide a real bundle icon, generate a
+  `KnightOnLine.icns` from `WarFare.ico` (any online converter, or
+  `sips`+`iconutil`) and drop it into `src/Client/WarFare/`; CMake picks
+  it up automatically. To run an unsigned bundle locally,
+  `codesign --force --deep -s - Knight\ OnLine.app` gives it an ad-hoc
+  signature and Gatekeeper won't quarantine it.
+
+Runtime data written by the game (`Log.txt`) lands under
+`~/Library/Application Support/OpenKO/` on macOS and
+`$XDG_CONFIG_HOME/openko` (or `~/.config/openko/`) on Linux, so a
+read-only install location is fine.
 
 ### Visual Studio solutions
 
