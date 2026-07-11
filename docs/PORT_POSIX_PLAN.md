@@ -545,12 +545,33 @@ sobre Metal en macOS con paridad visual respecto a GL y D3D9.
 
 **Objetivo:** `DFont` y `N3UIEdit` sin GDI/IMM32.
 
-* [ ] **T7.1 — `DFont` sobre FreeType.** Atlas de glifos a `IRHITexture`
+* [x] **T7.1 — `DFont` sobre FreeType.** Atlas de glifos a `IRHITexture`
       (misma API pública `DrawText`/`SetText`); cachear por (fuente, tamaño,
       estilo); cubrir Hangul + Latin-1; mapear "굴림/Gulim" → Noto Sans KR
       empaquetada. GDI queda `#ifdef _WIN32`. *Aceptación:* texto visible en
       la pantalla de login en macOS; test headless que rasteriza y verifica
       que el atlas tiene píxeles.
+      *(Hecho: la sección POSIX de `DFont.cpp` reemplaza el stub de T6.8 con
+      el mismo diseño que GDI — `SetText` rasteriza el string completo a una
+      textura A4R4G4B4 por instancia (misma heurística de tamaño 32..2048 y
+      empaquetado alpha-nibble) y genera un quad XYZRHW por tramo de fila;
+      `DrawText` traslada/tiñe los quads cacheados y dibuja por
+      `DrawPrimitiveUP` con el mismo footprint de render states que Windows
+      (alpha blend over, sin Z/fog, stage 0 modulate). FT_Library/FT_Face
+      compartidos y refcontados vía `s_iInstanceCount` (como el DC de GDI);
+      la cara se re-dimensiona por operación a 96 DPI (= `MulDiv(h,96,72)`).
+      Encoding: CP949 → Unicode en la frontera con `PlatformEncoding` +
+      fallback Latin-1. Resolución de fuente: `<datos>/Fonts/*.ttf|otf|ttc`
+      primero, luego fuentes de sistema con cobertura Hangul (AppleSDGothic
+      en macOS, Noto CJK/Nanum en Linux) y fallbacks latinos (DejaVu). En vez
+      de empaquetar Noto Sans KR, el directorio `Fonts/` permite usar la
+      fuente exacta que se quiera. Negrita/cursiva sintéticas: TODO (el login
+      no las usa). FreeType vía `FindFreetypeFont.cmake` (sistema primero,
+      fallback FetchContent VER-2-13-3). Test `DFontFT_test` (reemplaza a
+      `DFontStub_test`): rasteriza "Hello" headless por el RHI Null, verifica
+      texels con alpha en el atlas, extents crecientes por prefijo (contrato
+      del word-wrap), draw call real y liberación al setear "". **Pendiente:**
+      validación visual en un Mac con los datos del juego.)*
 * [ ] **T7.2 — `N3UIEdit` sin ventana `EDIT`.** Buffer de texto propio +
       caret existente, alimentado por `SDL_EVENT_TEXT_INPUT`/`TEXT_EDITING`
       (IME nativo), `SDL_StartTextInput`/`SDL_SetTextInputArea` en

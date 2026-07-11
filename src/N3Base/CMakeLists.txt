@@ -347,7 +347,10 @@ if(WIN32)
     dxguid.lib
   )
 else()
-  set(N3BASE_COMMON_LIBS_PRIVATE)
+  # FreeType backs the POSIX DFont glyph atlas (docs/PORT_POSIX_PLAN.md, T7.1).
+  set(N3BASE_COMMON_LIBS_PRIVATE
+    Freetype::Freetype
+  )
 endif()
 
 # Setup warning levels

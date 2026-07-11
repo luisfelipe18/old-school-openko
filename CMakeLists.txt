@@ -154,6 +154,13 @@ if(OPENKO_BUILD_CLIENT OR OPENKO_BUILD_TOOLS)
   set(CMAKE_FOLDER "N3Base/_deps/openal-soft")
   require_package(OpenALSoft)
 
+  if(NOT WIN32)
+    # POSIX port (T7.1): FreeType rasterizes the DFont glyph atlas; Windows
+    # keeps the GDI text path.
+    set(CMAKE_FOLDER "N3Base/_deps/freetype")
+    require_package(FreetypeFont)
+  endif()
+
   set(CMAKE_FOLDER "N3Base")
   add_subdirectory(src/N3Base)
 endif()
