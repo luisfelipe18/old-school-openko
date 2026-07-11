@@ -562,15 +562,44 @@ if(NOT WIN32)
 
   if(APPLE)
     # App icon: Info.plist references CFBundleIconFile "KnightOnLine", so the
-    # bundle needs Contents/Resources/KnightOnLine.icns. Prefer a committed
-    # KnightOnLine.icns; otherwise generate one from WarFare_1298.ico at build
-    # time with sips (ships with macOS) - .ico -> .png -> .icns is the path
-    # sips handles reliably.
+    # bundle needs Contents/Resources/KnightOnLine.icns.
+    #
+    # Source precedence:
+    #   1. a committed KnightOnLine.icns (used as-is)
+    #   2. AppIcon.png (a square PNG, ideally 1024x1024) -> proper multi-res
+    #      .icns via an .iconset + iconutil (the layout macOS needs for the
+    #      Dock/Finder to show it at every size)
+    #   3. WarFare_1298.ico -> single-image .icns (low-res fallback)
     if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/KnightOnLine.icns")
       add_custom_command(TARGET WarFare POST_BUILD
         COMMAND "${CMAKE_COMMAND}" -E copy_if_different
           "${CMAKE_CURRENT_SOURCE_DIR}/KnightOnLine.icns"
           "${_warfare_resource_dest}/KnightOnLine.icns")
+    elseif(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/AppIcon.png")
+      find_program(SIPS_EXECUTABLE sips)
+      find_program(ICONUTIL_EXECUTABLE iconutil)
+      if(SIPS_EXECUTABLE AND ICONUTIL_EXECUTABLE)
+        set(_iconset "${CMAKE_CURRENT_BINARY_DIR}/KnightOnLine.iconset")
+        set(_iconsrc "${CMAKE_CURRENT_SOURCE_DIR}/AppIcon.png")
+        # Each Retina .icns needs the standard 10-entry size ladder.
+        add_custom_command(TARGET WarFare POST_BUILD
+          COMMAND "${CMAKE_COMMAND}" -E make_directory "${_iconset}"
+          COMMAND "${SIPS_EXECUTABLE}" -z 16 16     "${_iconsrc}" --out "${_iconset}/icon_16x16.png"
+          COMMAND "${SIPS_EXECUTABLE}" -z 32 32     "${_iconsrc}" --out "${_iconset}/icon_16x16@2x.png"
+          COMMAND "${SIPS_EXECUTABLE}" -z 32 32     "${_iconsrc}" --out "${_iconset}/icon_32x32.png"
+          COMMAND "${SIPS_EXECUTABLE}" -z 64 64     "${_iconsrc}" --out "${_iconset}/icon_32x32@2x.png"
+          COMMAND "${SIPS_EXECUTABLE}" -z 128 128   "${_iconsrc}" --out "${_iconset}/icon_128x128.png"
+          COMMAND "${SIPS_EXECUTABLE}" -z 256 256   "${_iconsrc}" --out "${_iconset}/icon_128x128@2x.png"
+          COMMAND "${SIPS_EXECUTABLE}" -z 256 256   "${_iconsrc}" --out "${_iconset}/icon_256x256.png"
+          COMMAND "${SIPS_EXECUTABLE}" -z 512 512   "${_iconsrc}" --out "${_iconset}/icon_256x256@2x.png"
+          COMMAND "${SIPS_EXECUTABLE}" -z 512 512   "${_iconsrc}" --out "${_iconset}/icon_512x512.png"
+          COMMAND "${SIPS_EXECUTABLE}" -z 1024 1024 "${_iconsrc}" --out "${_iconset}/icon_512x512@2x.png"
+          COMMAND "${ICONUTIL_EXECUTABLE}" -c icns "${_iconset}"
+            -o "${_warfare_resource_dest}/KnightOnLine.icns"
+          COMMENT "Generating multi-resolution app icon from AppIcon.png")
+      else()
+        message(STATUS "OpenKO: sips/iconutil not found; the .app will use a generic icon")
+      endif()
     else()
       find_program(SIPS_EXECUTABLE sips)
       if(SIPS_EXECUTABLE)
@@ -582,7 +611,7 @@ if(NOT WIN32)
           COMMAND "${SIPS_EXECUTABLE}" -s format icns
             "${_warfare_icon_png}"
             --out "${_warfare_resource_dest}/KnightOnLine.icns"
-          COMMENT "Generating app icon KnightOnLine.icns from WarFare_1298.ico")
+          COMMENT "Generating app icon KnightOnLine.icns from WarFare_1298.ico (low-res fallback)")
       else()
         message(STATUS "OpenKO: sips not found; the .app will use a generic icon")
       endif()
