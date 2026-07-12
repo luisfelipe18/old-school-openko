@@ -697,8 +697,9 @@ int CUIInventory::GetArmDestinationIndex(__IconItemSkill* spItem)
 	return -1;
 }
 
-bool CUIInventory::CheckIconDropIfSuccessSendToServer(__IconItemSkill* spItem)
+bool CUIInventory::CheckIconDropIfSuccessSendToServer([[maybe_unused]] __IconItemSkill* spItem)
 {
+	// assert() compiles out under NDEBUG, leaving the parameter otherwise unused.
 	assert(spItem == s_sSelectedIconInfo.pItemSelect);
 
 	// 먼저 아이템이 들어갈 수 있는지 검사하고..
