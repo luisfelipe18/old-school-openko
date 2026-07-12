@@ -25,7 +25,26 @@ set(INSTALL_PROJECT OFF CACHE BOOL "miniz: install project")
 get_property(_old_no_dev GLOBAL PROPERTY CMAKE_SUPPRESS_DEVELOPER_WARNINGS)
 set_property(GLOBAL PROPERTY CMAKE_SUPPRESS_DEVELOPER_WARNINGS TRUE)
 
+# miniz 3.0.2's CMakeLists declares cmake_minimum_required(VERSION 2.8.x), which
+# CMake >= 4.0 rejects ("Compatibility with CMake < 3.5 has been removed"). Raise
+# the effective minimum just for miniz's configure so it builds on modern CMake,
+# then restore the caller's value. The variable is inherited by the subproject
+# add_subdirectory FetchContent performs; it's a harmless no-op on CMake < 3.31.
+if(DEFINED CMAKE_POLICY_VERSION_MINIMUM)
+  set(_old_policy_min "${CMAKE_POLICY_VERSION_MINIMUM}")
+  set(_had_policy_min TRUE)
+else()
+  set(_had_policy_min FALSE)
+endif()
+set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
+
 fetchcontent_makeavailable(miniz)
+
+if(_had_policy_min)
+  set(CMAKE_POLICY_VERSION_MINIMUM "${_old_policy_min}")
+else()
+  unset(CMAKE_POLICY_VERSION_MINIMUM)
+endif()
 
 set_property(GLOBAL PROPERTY CMAKE_SUPPRESS_DEVELOPER_WARNINGS ${_old_no_dev})
 
