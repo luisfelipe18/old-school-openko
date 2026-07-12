@@ -120,6 +120,11 @@ public:
 	/// reads, and restores the previous binding. (x, y) is bottom-left origin.
 	bool ReadRenderTargetPixel(IRHIRenderTarget* pTarget, int x, int y, uint8_t rgbaOut[4]);
 
+	/// Reads the whole color buffer of a render target back as RGBA8, bottom-up
+	/// (GL origin). `pRGBAOut` must hold width*height*4 bytes. Used for texture
+	/// export and, later, thumbnail capture.
+	bool ReadRenderTargetRGBA(IRHIRenderTarget* pTarget, uint8_t* pRGBAOut);
+
 	/// Dumps the current back buffer to a binary PPM (diagnostics: lets CI and
 	/// the Mac bring-up inspect real frames without window-system capture).
 	bool DumpFramePPM(const char* szPath);

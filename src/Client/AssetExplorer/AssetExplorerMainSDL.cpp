@@ -18,6 +18,10 @@
 
 #include <N3Base/My_3DStruct.h>
 #include <N3Base/N3Base.h>
+#include <N3Base/N3Texture.h>
+
+// KscViewer's platform-neutral decrypt/decode core, reused for .ksc textures.
+#include <KscViewerCore.h>
 
 #include <Platform/GameDataDir.h>
 #include <Platform/IconDecoder.h>
@@ -37,12 +41,17 @@
 #include <GL/gl.h>
 #endif
 
+#include <algorithm>
 #include <array>
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
+#include <memory>
 #include <string>
 #include <system_error>
+#include <vector>
 
 namespace fs = std::filesystem;
 using namespace assetexplorer;
@@ -125,6 +134,191 @@ std::string HumanSize(std::uintmax_t bytes)
 	return buf;
 }
 
+// --- Texture preview (M2) ---------------------------------------------------
+
+const char* D3DFormatName(D3DFORMAT fmt)
+{
+	switch (fmt)
+	{
+		case D3DFMT_DXT1:     return "DXT1";
+		case D3DFMT_DXT2:     return "DXT2";
+		case D3DFMT_DXT3:     return "DXT3";
+		case D3DFMT_DXT4:     return "DXT4";
+		case D3DFMT_DXT5:     return "DXT5";
+		case D3DFMT_A8R8G8B8: return "A8R8G8B8";
+		case D3DFMT_X8R8G8B8: return "X8R8G8B8";
+		case D3DFMT_R5G6B5:   return "R5G6B5";
+		case D3DFMT_A1R5G5B5: return "A1R5G5B5";
+		case D3DFMT_A4R4G4B4: return "A4R4G4B4";
+		default:              return "unknown";
+	}
+}
+
+bool FormatHasAlpha(D3DFORMAT fmt)
+{
+	switch (fmt)
+	{
+		case D3DFMT_DXT2:
+		case D3DFMT_DXT3:
+		case D3DFMT_DXT4:
+		case D3DFMT_DXT5:
+		case D3DFMT_A8R8G8B8:
+		case D3DFMT_A1R5G5B5:
+		case D3DFMT_A4R4G4B4:
+			return true;
+		default:
+			return false;
+	}
+}
+
+// Everything needed to display + inspect + export the selected texture. For
+// engine formats (.dxt/.tga) the pixels live in the CN3Texture and its GL
+// object is shared for display; for .ksc a decoded RGB texture is owned here.
+struct TexturePreview
+{
+	bool loaded = false;
+	std::string error;
+
+	std::unique_ptr<CN3Texture> n3tex; // engine texture (keeps GL object alive)
+	unsigned glTexture = 0;            // display texture id
+	bool ownGLTexture = false;         // true only for the .ksc path
+
+	int width = 0;
+	int height = 0;
+	std::string formatName;
+	int mipCount = 0;
+	bool hasAlpha = false;
+	bool isKsc = false;
+
+	// view controls
+	float zoom = 0.0f; // 0 == fit-to-window; otherwise pixel scale
+	ImVec2 pan{0, 0};
+	int background = 0; // 0 checker, 1 black, 2 white
+};
+
+void ReleaseTexturePreview(TexturePreview& tp)
+{
+	if (tp.ownGLTexture && tp.glTexture != 0)
+	{
+		GLuint t = tp.glTexture;
+		glDeleteTextures(1, &t);
+	}
+	tp.n3tex.reset();
+	tp = TexturePreview{};
+}
+
+unsigned UploadRgbTexture(const std::vector<uint8_t>& rgb, int w, int h)
+{
+	GLuint tex = 0;
+	glGenTextures(1, &tex);
+	glBindTexture(GL_TEXTURE_2D, tex);
+	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, w, h, 0, GL_RGB, GL_UNSIGNED_BYTE, rgb.data());
+	glBindTexture(GL_TEXTURE_2D, 0);
+	return tex;
+}
+
+// Loads the texture at absolute path `abs` of the given asset type into `tp`.
+void LoadTexturePreview(TexturePreview& tp, AssetType type, const fs::path& abs,
+	std::uintmax_t /*fileSize*/)
+{
+	ReleaseTexturePreview(tp);
+
+	if (type == AssetType::EncryptedTexture)
+	{
+		ksc_core::DecodedImage img = ksc_core::LoadImage(abs);
+		if (!img.IsValid())
+		{
+			tp.error = "Failed to decode " + abs.filename().string();
+			return;
+		}
+		tp.glTexture    = UploadRgbTexture(img.rgb, img.width, img.height);
+		tp.ownGLTexture = true;
+		tp.width        = img.width;
+		tp.height       = img.height;
+		tp.formatName   = "JPEG (KSC)";
+		tp.mipCount     = 1;
+		tp.hasAlpha     = false;
+		tp.isKsc        = true;
+		tp.loaded       = true;
+		return;
+	}
+
+	// Engine formats (.dxt / .tga). CN3Texture auto-detects by content and
+	// uploads through the RHI; the GL backend's texture object is what we show.
+	// s_szPath is left empty so the absolute path resolves to itself.
+	auto n3 = std::make_unique<CN3Texture>();
+	if (!n3->LoadFromFile(abs.string()) || n3->Get() == nullptr)
+	{
+		tp.error = "Failed to load " + abs.filename().string();
+		return;
+	}
+	auto* glTex   = static_cast<RHITextureGL*>(n3->Get());
+	tp.glTexture  = glTex->GLTexture();
+	tp.width      = static_cast<int>(n3->Width());
+	tp.height     = static_cast<int>(n3->Height());
+	tp.formatName = D3DFormatName(n3->PixelFormat());
+	tp.mipCount   = n3->MipMapCount();
+	tp.hasAlpha   = FormatHasAlpha(n3->PixelFormat());
+	tp.n3tex      = std::move(n3);
+	tp.loaded     = true;
+}
+
+// Writes a bottom-up 24-bit BMP from RGBA rows that glReadPixels returned
+// (already bottom-up), swapping R/B into BGR. Returns false on I/O failure.
+bool WriteBmp24(const fs::path& dst, const std::vector<uint8_t>& rgba, int w, int h)
+{
+	const int rowBytes  = w * 3;
+	const int padding   = (4 - (rowBytes % 4)) % 4;
+	const int imageSize = (rowBytes + padding) * h;
+	const int fileSize  = 54 + imageSize;
+
+	std::ofstream out(dst, std::ios::binary);
+	if (!out)
+		return false;
+
+	auto u16 = [&](int v) { char b[2] = {char(v & 0xFF), char((v >> 8) & 0xFF)}; out.write(b, 2); };
+	auto u32 = [&](int v) {
+		char b[4] = {char(v & 0xFF), char((v >> 8) & 0xFF), char((v >> 16) & 0xFF),
+			char((v >> 24) & 0xFF)};
+		out.write(b, 4);
+	};
+
+	out.write("BM", 2);
+	u32(fileSize);
+	u32(0);
+	u32(54); // pixel data offset
+	u32(40); // DIB header size
+	u32(w);
+	u32(h);
+	u16(1);  // planes
+	u16(24); // bpp
+	u32(0);  // no compression
+	u32(imageSize);
+	u32(2835);
+	u32(2835);
+	u32(0);
+	u32(0);
+
+	std::vector<char> row(static_cast<std::size_t>(rowBytes + padding), 0);
+	for (int y = 0; y < h; ++y)
+	{
+		for (int x = 0; x < w; ++x)
+		{
+			const std::size_t src = (static_cast<std::size_t>(y) * w + x) * 4;
+			row[x * 3 + 0] = static_cast<char>(rgba[src + 2]); // B
+			row[x * 3 + 1] = static_cast<char>(rgba[src + 1]); // G
+			row[x * 3 + 2] = static_cast<char>(rgba[src + 0]); // R
+		}
+		out.write(row.data(), static_cast<std::streamsize>(row.size()));
+	}
+	return static_cast<bool>(out);
+}
+
 // All UI/session state for the explorer.
 struct ExplorerState
 {
@@ -135,6 +329,7 @@ struct ExplorerState
 	char search[256] = {};
 	unsigned categoryMask = 0; // 0 == all
 	int selected = -1;         // index into index.Entries(), or -1
+	int loadedForSelection = -2; // which selection the preview reflects
 
 	// Preview render target (M1). Sized to the viewport panel; recreated when it
 	// changes. viewportSize is measured during the UI pass and consumed at the
@@ -145,7 +340,67 @@ struct ExplorerState
 	int rtHeight = 0;
 	int viewportW = 0;
 	int viewportH = 0;
+
+	TexturePreview tex; // populated when a texture asset is selected (M2)
+
+	fs::path AbsPathOf(const AssetEntry& e) const
+	{
+		return dataDir / fs::path(e.relativePath);
+	}
 };
+
+// Exports an engine texture (.dxt/.tga) by rendering it into an offscreen RGBA
+// target and reading it back to a 24-bit BMP - self-contained, no encoder
+// dependency, and the same readback path thumbnails will use. Returns false on
+// any failure.
+bool ExportEngineTextureToBmp(ExplorerState& state, const fs::path& dst)
+{
+	TexturePreview& tp = state.tex;
+	auto* rhi = dynamic_cast<RHIDeviceGL*>(state.rhi);
+	if (rhi == nullptr || tp.n3tex == nullptr || tp.width <= 0 || tp.height <= 0)
+		return false;
+
+	RHIRenderTargetDesc desc;
+	desc.width  = static_cast<UINT>(tp.width);
+	desc.height = static_cast<UINT>(tp.height);
+	desc.depth  = false;
+	IRHIRenderTarget* rt = rhi->CreateRenderTarget(desc);
+	if (rt == nullptr)
+		return false;
+
+	struct VtxRHWT
+	{
+		float x, y, z, rhw;
+		float u, v;
+	};
+	const float w = static_cast<float>(tp.width);
+	const float h = static_cast<float>(tp.height);
+	// Two triangles covering the whole target, sampling the full texture.
+	const VtxRHWT quad[6] = {
+		{0, 0, 0, 1, 0, 0}, {w, 0, 0, 1, 1, 0}, {w, h, 0, 1, 1, 1},
+		{0, 0, 0, 1, 0, 0}, {w, h, 0, 1, 1, 1}, {0, h, 0, 1, 0, 1},
+	};
+
+	rhi->BeginRenderTarget(rt);
+	rhi->Clear(D3DCLEAR_TARGET, 0x00000000, 1.0f, 0);
+	rhi->SetRenderState(D3DRS_LIGHTING, FALSE);
+	rhi->SetRenderState(D3DRS_ZENABLE, FALSE);
+	rhi->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+	rhi->SetTexture(0, tp.n3tex->Get());
+	rhi->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
+	rhi->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TEXTURE);
+	rhi->SetFVF(D3DFVF_XYZRHW | D3DFVF_TEX1);
+	rhi->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 2, quad, sizeof(VtxRHWT));
+	rhi->EndRenderTarget();
+
+	std::vector<uint8_t> rgba(static_cast<std::size_t>(tp.width) * tp.height * 4);
+	const bool read = rhi->ReadRenderTargetRGBA(rt, rgba.data());
+	delete rt;
+	if (!read)
+		return false;
+
+	return WriteBmp24(dst, rgba, tp.width, tp.height);
+}
 
 // A single spinning-free RGB triangle in render-target pixel space, proving the
 // engine renders into the offscreen target and the tool samples it back. Real
@@ -288,6 +543,84 @@ void DrawAssetList(ExplorerState& state, const ImVec2& size)
 	ImGui::EndChild();
 }
 
+// Draws the loaded texture with a checkerboard/solid backdrop and fit/zoom/pan.
+void DrawTextureCanvas(TexturePreview& tp)
+{
+	// Toolbar.
+	ImGui::SetNextItemWidth(120);
+	const char* bgs[] = {"Checker", "Black", "White"};
+	ImGui::Combo("##bg", &tp.background, bgs, 3);
+	ImGui::SameLine();
+	if (ImGui::Button("Fit"))
+	{
+		tp.zoom = 0.0f;
+		tp.pan  = ImVec2(0, 0);
+	}
+	ImGui::SameLine();
+	if (ImGui::Button("1:1"))
+	{
+		tp.zoom = 1.0f;
+		tp.pan  = ImVec2(0, 0);
+	}
+
+	const ImVec2 canvas = ImGui::GetContentRegionAvail();
+	const ImVec2 p0     = ImGui::GetCursorScreenPos();
+	const ImVec2 p1(p0.x + canvas.x, p0.y + canvas.y);
+	ImDrawList* dl = ImGui::GetWindowDrawList();
+	dl->PushClipRect(p0, p1, true);
+
+	// Backdrop.
+	if (tp.background == 1)
+		dl->AddRectFilled(p0, p1, IM_COL32(0, 0, 0, 255));
+	else if (tp.background == 2)
+		dl->AddRectFilled(p0, p1, IM_COL32(255, 255, 255, 255));
+	else
+	{
+		const float cell = 12.0f;
+		dl->AddRectFilled(p0, p1, IM_COL32(60, 62, 68, 255));
+		for (float y = p0.y; y < p1.y; y += cell)
+			for (float x = p0.x; x < p1.x; x += cell)
+			{
+				const int cxi = static_cast<int>((x - p0.x) / cell);
+				const int cyi = static_cast<int>((y - p0.y) / cell);
+				if (((cxi + cyi) & 1) == 0)
+					dl->AddRectFilled(ImVec2(x, y),
+						ImVec2(x + cell < p1.x ? x + cell : p1.x, y + cell < p1.y ? y + cell : p1.y),
+						IM_COL32(44, 46, 52, 255));
+			}
+	}
+
+	// Fit-to-canvas scale unless the user pinned a pixel zoom.
+	const float fitScale = std::min(canvas.x / tp.width, canvas.y / tp.height);
+	const float scale    = (tp.zoom <= 0.0f) ? fitScale : tp.zoom;
+	const ImVec2 imgSize(tp.width * scale, tp.height * scale);
+	const ImVec2 center(p0.x + canvas.x * 0.5f + tp.pan.x, p0.y + canvas.y * 0.5f + tp.pan.y);
+	const ImVec2 imin(center.x - imgSize.x * 0.5f, center.y - imgSize.y * 0.5f);
+	const ImVec2 imax(imin.x + imgSize.x, imin.y + imgSize.y);
+	// Both texture paths upload top-down, so ImGui's top-left UVs display upright.
+	dl->AddImage(static_cast<ImTextureID>(tp.glTexture), imin, imax);
+	dl->PopClipRect();
+
+	// Interaction: wheel zooms about center, drag pans.
+	ImGui::SetCursorScreenPos(p0);
+	ImGui::InvisibleButton("##texcanvas", canvas);
+	if (ImGui::IsItemHovered())
+	{
+		const float wheel = ImGui::GetIO().MouseWheel;
+		if (wheel != 0.0f)
+		{
+			const float base = (tp.zoom <= 0.0f) ? fitScale : tp.zoom;
+			tp.zoom          = std::clamp(base * (1.0f + wheel * 0.1f), 0.02f, 64.0f);
+		}
+	}
+	if (ImGui::IsItemActive() && ImGui::IsMouseDragging(ImGuiMouseButton_Left))
+	{
+		const ImVec2 d = ImGui::GetIO().MouseDelta;
+		tp.pan.x += d.x;
+		tp.pan.y += d.y;
+	}
+}
+
 void DrawViewport(ExplorerState& state, const ImVec2& size)
 {
 	if (!ImGui::BeginChild("##viewport", size, ImGuiChildFlags_Borders))
@@ -296,25 +629,37 @@ void DrawViewport(ExplorerState& state, const ImVec2& size)
 		return;
 	}
 	const ImVec2 avail = ImGui::GetContentRegionAvail();
-
-	// Record the panel size for next frame's render (kept a frame behind so the
-	// target isn't resized mid-frame while its texture is referenced here).
 	state.viewportW = static_cast<int>(avail.x > 1.0f ? avail.x : 1.0f);
 	state.viewportH = static_cast<int>(avail.y > 1.0f ? avail.y : 1.0f);
 
-	if (state.previewRT != nullptr && state.previewRT->ColorHandle() != nullptr)
-	{
-		// GL renders bottom-up into the target texture; flip V so it displays
-		// upright under ImGui's top-left UV convention.
-		const ImTextureID tex = reinterpret_cast<ImTextureID>(state.previewRT->ColorHandle());
-		ImGui::Image(tex, avail, ImVec2(0, 1), ImVec2(1, 0));
-	}
-	else
-	{
-		const char* msg = "Preview viewport (no render target)";
+	const bool haveSel = state.selected >= 0
+		&& state.selected < static_cast<int>(state.index.Entries().size());
+
+	auto centeredText = [&](const char* msg) {
 		const ImVec2 sz = ImGui::CalcTextSize(msg);
 		ImGui::SetCursorPos(ImVec2((avail.x - sz.x) * 0.5f, avail.y * 0.5f));
 		ImGui::TextDisabled("%s", msg);
+	};
+
+	if (state.tex.loaded)
+	{
+		DrawTextureCanvas(state.tex);
+	}
+	else if (!state.tex.error.empty())
+	{
+		centeredText(state.tex.error.c_str());
+	}
+	else if (haveSel)
+	{
+		const AssetEntry& e = state.index.Entries()[static_cast<std::size_t>(state.selected)];
+		char msg[128];
+		std::snprintf(msg, sizeof(msg), "Preview for %s arrives in a later milestone (M3+).",
+			AssetTypeName(e.type));
+		centeredText(msg);
+	}
+	else
+	{
+		centeredText("Select an asset to preview.");
 	}
 	ImGui::EndChild();
 }
@@ -349,7 +694,80 @@ void DrawInspector(ExplorerState& state, const ImVec2& size)
 	ImGui::Spacing();
 	ImGui::Text("Size");
 	ImGui::TextDisabled("%s", HumanSize(e.sizeBytes).c_str());
+
+	// Texture-specific metadata + export.
+	const TexturePreview& tp = state.tex;
+	if (tp.loaded)
+	{
+		ImGui::Spacing();
+		ImGui::Separator();
+		ImGui::Spacing();
+		ImGui::Text("Dimensions");
+		ImGui::TextDisabled("%d x %d", tp.width, tp.height);
+		ImGui::Spacing();
+		ImGui::Text("Format");
+		ImGui::TextDisabled("%s", tp.formatName.c_str());
+		ImGui::Spacing();
+		ImGui::Text("Mip levels");
+		ImGui::TextDisabled("%d", tp.mipCount);
+		ImGui::Spacing();
+		ImGui::Text("Alpha");
+		ImGui::TextDisabled("%s", tp.hasAlpha ? "yes" : "no");
+
+		ImGui::Spacing();
+		ImGui::Separator();
+		ImGui::Spacing();
+		const char* label = tp.isKsc ? "Export JPEG" : "Export BMP";
+		if (ImGui::Button(label, ImVec2(-FLT_MIN, 0)))
+		{
+			const fs::path src = state.AbsPathOf(e);
+			if (tp.isKsc)
+			{
+				fs::path dst = src;
+				dst.replace_extension(".jpg");
+				state.status = ksc_core::ExportJpg(src, dst)
+					? "Exported " + dst.string()
+					: "Export failed for " + dst.string();
+			}
+			else
+			{
+				fs::path dst = src;
+				dst.replace_extension(".bmp");
+				state.status = ExportEngineTextureToBmp(state, dst)
+					? "Exported " + dst.string()
+					: "Export failed for " + dst.string();
+			}
+		}
+		ImGui::TextDisabled("writes next to the source file");
+	}
+	else if (!tp.error.empty())
+	{
+		ImGui::Spacing();
+		ImGui::Separator();
+		ImGui::TextColored(ImVec4(0.9f, 0.5f, 0.4f, 1.0f), "%s", tp.error.c_str());
+	}
 	ImGui::EndChild();
+}
+
+// Loads (or clears) the preview to match the current selection. Called once a
+// frame; only re-loads when the selection actually changed.
+void SyncPreview(ExplorerState& state)
+{
+	if (state.selected == state.loadedForSelection)
+		return;
+	state.loadedForSelection = state.selected;
+
+	if (state.selected < 0 || state.selected >= static_cast<int>(state.index.Entries().size()))
+	{
+		ReleaseTexturePreview(state.tex);
+		return;
+	}
+
+	const AssetEntry& e = state.index.Entries()[static_cast<std::size_t>(state.selected)];
+	if (e.category == AssetCategory::Texture)
+		LoadTexturePreview(state.tex, e.type, state.AbsPathOf(e), e.sizeBytes);
+	else
+		ReleaseTexturePreview(state.tex);
 }
 
 // Offscreen render smoke (docs/ASSET_EXPLORER_PLAN.md, M1): brings up the GL
@@ -512,10 +930,9 @@ int main(int argc, char** argv)
 				bRunning = false;
 		}
 
-		// Render this frame's preview into the offscreen target using the panel
-		// size measured last frame, so the target texture is ready before the UI
-		// references it below.
-		RenderPreview(state);
+		// Bring the preview in line with the current selection (loads a texture
+		// or clears the preview) before the UI references it below.
+		SyncPreview(state);
 
 		ImGui_ImplOpenGL3_NewFrame();
 		ImGui_ImplSDL3_NewFrame();
@@ -563,6 +980,7 @@ int main(int argc, char** argv)
 
 	// Delete GL resources while the context is still current, then tear down the
 	// backend (its destructor destroys the GL context).
+	ReleaseTexturePreview(state.tex);
 	delete state.previewRT;
 	CN3Base::RHIDeviceSet(nullptr);
 	delete pRHI;

@@ -832,6 +832,24 @@ bool RHIDeviceGL::ReadRenderTargetPixel(IRHIRenderTarget* pTarget, int x, int y,
 	return ok;
 }
 
+bool RHIDeviceGL::ReadRenderTargetRGBA(IRHIRenderTarget* pTarget, uint8_t* pRGBAOut)
+{
+	auto* pGL = static_cast<RHIRenderTargetGL*>(pTarget);
+	if (!m_bValid || pGL == nullptr || pRGBAOut == nullptr)
+		return false;
+
+	gl::Int prevFBO = 0;
+	gl::GetIntegerv(gl::FRAMEBUFFER_BINDING, &prevFBO);
+
+	gl::BindFramebuffer(gl::FRAMEBUFFER, pGL->FBO());
+	// RGBA8 rows are always 4-byte aligned, so the default pack alignment is fine.
+	gl::ReadPixels(0, 0, static_cast<gl::Sizei>(pGL->Width()), static_cast<gl::Sizei>(pGL->Height()),
+		gl::RGBA, gl::UNSIGNED_BYTE, pRGBAOut);
+	const bool ok = gl::GetError() == 0;
+	gl::BindFramebuffer(gl::FRAMEBUFFER, static_cast<gl::Uint>(prevFBO));
+	return ok;
+}
+
 bool RHIDeviceGL::DumpFramePPM(const char* szPath)
 {
 	if (!m_bValid)

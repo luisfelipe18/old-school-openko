@@ -10,7 +10,10 @@ if(NOT WIN32)
     AssetType.h
     AssetIndex.cpp
     AssetIndex.h
-    AssetExplorerMainSDL.cpp)
+    AssetExplorerMainSDL.cpp
+    # Reuse KscViewer's platform-neutral .ksc decrypt/decode/export core for the
+    # encrypted-texture preview (M2), rather than duplicating the cipher.
+    "${CMAKE_SOURCE_DIR}/src/Client/KscViewer/KscViewerCore.cpp")
 
   # WarFare.Core carries the engine asset loaders and the GL RHI backend
   # (RHIDeviceGL) the preview viewport renders through; N3Base_client comes
@@ -18,10 +21,12 @@ if(NOT WIN32)
   # reach RHIDeviceGL.h.
   target_include_directories(AssetExplorer PRIVATE
     "${CMAKE_SOURCE_DIR}/src"
-    "${CMAKE_SOURCE_DIR}/src/Client/WarFare")
+    "${CMAKE_SOURCE_DIR}/src/Client/WarFare"
+    "${CMAKE_SOURCE_DIR}/src/Client/KscViewer")
 
   target_link_libraries(AssetExplorer PRIVATE
     WarFare.Core
+    JpegFile
     Platform
     SDL3::SDL3
     imgui
