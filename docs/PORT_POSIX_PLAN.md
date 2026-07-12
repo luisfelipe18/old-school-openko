@@ -572,7 +572,20 @@ CI verde en las 3 plataformas; el subset POSIX incluye terreno/UI base.
       buffers GPU persistentes como optimización futura. 8 tests de los
       helpers puros (`SDLGPUTranslate_test.cpp`) + `--renderer sdlgpu` /
       `Renderer=SDLGPU` cableados.)*
-* [x] **T6b.3 — Paridad y default.** *(Hecho: paridad pixel-perfect del
+* [~] **T6b.3 — Paridad y default.** *(Revertido a parcial tras el
+      hallazgo in-world: sobre Metal, la carga de mundo (~2000 draws y ~60
+      ciclos del ring de uniforms de 32KB de SDL por frame) muestra objetos
+      sin textura y geometría corrupta, mientras que el login (25 draws)
+      es correcto y Vulkan es correcto SIEMPRE — incluido un test de estrés
+      de 2000 draws con uniforms/texturas por-draw verificado píxel a píxel
+      (`ManyDrawsKeepPerDrawUniformsAndTexturesStraight`). Los diagnósticos
+      in-world del usuario confirman que las texturas SÍ llegan a la GPU
+      (0 fallbacks, contador de "quería textura y no tenía" ~ruido), así
+      que el fallo está en el backend Metal de SDL a escala, no en nuestra
+      capa. Mientras se investiga (Xcode GPU capture / bump de SDL), el
+      default vuelve a GL en TODAS las plataformas y SDLGPU queda opt-in
+      (`Renderer=SDLGPU` / `--renderer sdlgpu`). Lo ya validado se
+      mantiene: paridad pixel-perfect del
       test-scene GL vs SDL_GPU verificada en Linux/Vulkan-lavapipe — diff
       máximo 1/255 por redondeo, 0 píxeles con diff>16 de 786k, mismo píxel
       central — y validación in-game sobre Metal en Mac real (Apple

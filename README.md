@@ -64,10 +64,11 @@ Suggested packages:
 The client renders through an RHI with three POSIX backends, selected by
 `Renderer=` under `[Screen]` in `Option.ini` or the `--renderer` CLI flag:
 
-* `SDLGPU` - SDL_GPU: **Metal** on macOS, **Vulkan** on Linux. The default on
-  macOS (where OpenGL is deprecated); falls back to GL automatically when no
-  Metal/Vulkan driver exists.
-* `GL` - OpenGL 3.3 core. The default on Linux.
+* `GL` - OpenGL 3.3 core. The default everywhere for now.
+* `SDLGPU` - SDL_GPU: **Metal** on macOS, **Vulkan** on Linux. Fully validated
+  on Vulkan; on Metal the in-world workload currently shows rendering
+  corruption (under investigation), so it stays opt-in. Falls back to GL
+  automatically when no Metal/Vulkan driver exists.
 * `Null` - headless, for CI smoke runs.
 
 ##### Sanitizer build (docs/PORT_POSIX_PLAN.md, F9)

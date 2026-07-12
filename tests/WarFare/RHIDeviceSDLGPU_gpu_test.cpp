@@ -10,6 +10,9 @@
 #include <SDL3/SDL.h>
 
 #include <cstring>
+#include <filesystem>
+#include <fstream>
+#include <vector>
 
 namespace
 {
@@ -195,4 +198,108 @@ TEST_F(SdlGpuDeviceTest, MipmappedTextureSamplesBaseLevel)
 	EXPECT_GT(rgba[2], 240) << "expected blue from mip level 0";
 
 	pTexture->Release();
+}
+
+// Stress case modelled on the in-world workload (~2000 draws and megabytes
+// of streamed vertices/uniforms per frame, vs ~25 draws at the login
+// screen): every draw pushes distinct uniforms (TFACTOR color) and half of
+// them sample a texture, as indexed-fan quads like the game's UI/shapes.
+// Verifies several scattered quads landed with their exact color, which
+// catches per-draw uniform/arena-offset corruption that only shows up at
+// scale.
+TEST_F(SdlGpuDeviceTest, ManyDrawsKeepPerDrawUniformsAndTexturesStraight)
+{
+	// A solid-white 8x8 texture: MODULATE(TEXTURE, TFACTOR-as-diffuse)
+	// leaves the TFACTOR color intact, so textured and untextured quads
+	// must come out identical if everything is wired right.
+	IRHITexture* pWhite = nullptr;
+	ASSERT_EQ(m_pDevice->CreateTexture(8, 8, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, &pWhite),
+		D3D_OK);
+	D3DLOCKED_RECT lr = {};
+	ASSERT_EQ(pWhite->LockRect(0, &lr, nullptr, 0), D3D_OK);
+	std::memset(lr.pBits, 0xFF, static_cast<size_t>(lr.Pitch) * 8);
+	pWhite->UnlockRect(0);
+
+	int w = 0, h = 0;
+	SDL_GetWindowSizeInPixels(m_pWindow, &w, &h);
+
+	constexpr int GRID_COLS = 50, GRID_ROWS = 40; // 2000 draws
+	const float cellW = static_cast<float>(w) / GRID_COLS;
+	const float cellH = static_cast<float>(h) / GRID_ROWS;
+
+	m_pDevice->BeginScene();
+	m_pDevice->Clear(D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, 0xFF000000, 1.0f, 0);
+
+	const auto CellColor = [](int index) -> uint32_t
+	{
+		// Distinct, easily-recomputable per-cell color.
+		const uint8_t r = static_cast<uint8_t>((index * 7) & 0xFF);
+		const uint8_t g = static_cast<uint8_t>((index * 13) & 0xFF);
+		const uint8_t b = static_cast<uint8_t>((index * 29) & 0xFF);
+		return 0xFF000000u | (uint32_t(r) << 16) | (uint32_t(g) << 8) | b;
+	};
+
+	for (int index = 0; index < GRID_COLS * GRID_ROWS; ++index)
+	{
+		const int col  = index % GRID_COLS;
+		const int row  = index / GRID_COLS;
+		const float x0 = col * cellW, y0 = row * cellH;
+		const float x1 = x0 + cellW, y1 = y0 + cellH;
+
+		// Color arrives via TFACTOR so every draw carries distinct FS
+		// uniforms (the per-draw snapshot under test).
+		m_pDevice->SetRenderState(D3DRS_TEXTUREFACTOR, CellColor(index));
+		const bool bTextured = (index % 2) == 0;
+		m_pDevice->SetTexture(0, bTextured ? pWhite : nullptr);
+		m_pDevice->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_MODULATE);
+		m_pDevice->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TEXTURE);
+		m_pDevice->SetTextureStageState(0, D3DTSS_COLORARG2, D3DTA_TFACTOR);
+
+		const QuadVertex vertices[4] = {
+			{ x0, y0, 0.5f, 1.0f, 0xFFFFFFFF, 0.0f, 0.0f },
+			{ x1, y0, 0.5f, 1.0f, 0xFFFFFFFF, 1.0f, 0.0f },
+			{ x1, y1, 0.5f, 1.0f, 0xFFFFFFFF, 1.0f, 1.0f },
+			{ x0, y1, 0.5f, 1.0f, 0xFFFFFFFF, 0.0f, 1.0f },
+		};
+		const uint16_t indices[4] = { 0, 1, 2, 3 }; // fan, like the game's quads
+		m_pDevice->DrawIndexedPrimitiveUP(
+			D3DPT_TRIANGLEFAN, 0, 4, 2, indices, D3DFMT_INDEX16, vertices, sizeof(QuadVertex));
+	}
+
+	m_pDevice->EndScene();
+	m_pDevice->Present();
+
+	// Read the full frame back and verify scattered cells kept their color.
+	const std::string dumpPath =
+		(std::filesystem::temp_directory_path() / "sdlgpu_stress.ppm").string();
+	ASSERT_TRUE(m_pDevice->DumpFramePPM(dumpPath.c_str()));
+
+	std::ifstream ppm(dumpPath, std::ios::binary);
+	std::string magic;
+	int pw = 0, ph = 0, maxval = 0;
+	ppm >> magic >> pw >> ph >> maxval;
+	ppm.get(); // single whitespace after the header
+	ASSERT_EQ(magic, "P6");
+	ASSERT_EQ(pw, w);
+	std::vector<uint8_t> pixels(static_cast<size_t>(pw) * ph * 3);
+	ppm.read(reinterpret_cast<char*>(pixels.data()), static_cast<std::streamsize>(pixels.size()));
+
+	for (int index : { 0, 1, 51, 777, 1000, 1234, 1998, 1999 })
+	{
+		const int col = index % GRID_COLS;
+		const int row = index / GRID_COLS;
+		const int px  = static_cast<int>(col * cellW + cellW / 2);
+		const int py  = static_cast<int>(row * cellH + cellH / 2);
+		const size_t at = (static_cast<size_t>(py) * pw + px) * 3;
+
+		const uint32_t expected = CellColor(index);
+		const int er = (expected >> 16) & 0xFF, eg = (expected >> 8) & 0xFF, eb = expected & 0xFF;
+		EXPECT_NEAR(pixels[at + 0], er, 2) << "cell " << index;
+		EXPECT_NEAR(pixels[at + 1], eg, 2) << "cell " << index;
+		EXPECT_NEAR(pixels[at + 2], eb, 2) << "cell " << index;
+	}
+
+	std::error_code ec;
+	std::filesystem::remove(dumpPath, ec);
+	pWhite->Release();
 }

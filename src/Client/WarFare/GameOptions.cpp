@@ -126,17 +126,14 @@ void LoadGameOptions()
 	// T6.5/F6b). "SDLGPU" is Metal on macOS / Vulkan on Linux, "GL" the
 	// OpenGL backend, "Null" the headless one for CI smoke runs.
 	//
-	// macOS defaults to SDLGPU (T6b.3: validated in-game on Apple Silicon;
-	// OpenGL is deprecated there) with a runtime fallback to GL when no
-	// Metal driver exists. Linux keeps GL as default - it is universally
-	// available while Vulkan drivers still aren't.
-	std::string szRenderer = ini.GetString("Screen", "Renderer",
-#if defined(__APPLE__)
-		"SDLGPU"
-#else
-		"GL"
-#endif
-	);
+	// GL is the default everywhere for now. SDL_GPU is fully validated on
+	// Vulkan (test-scene parity, texture and 2000-draw stress integration
+	// tests) and renders the login flow correctly on Metal, but the
+	// in-world workload (~2000 draws, ~60 uniform-ring cycles per frame)
+	// shows untextured/corrupted geometry on Metal specifically - under
+	// investigation (needs an Xcode GPU capture and/or an SDL bump).
+	// Opt in with Renderer=SDLGPU or --renderer sdlgpu.
+	std::string szRenderer = ini.GetString("Screen", "Renderer", "GL");
 	for (char& c : szRenderer)
 		c = static_cast<char>(toupper(static_cast<unsigned char>(c)));
 	if (szRenderer == "SDLGPU")
