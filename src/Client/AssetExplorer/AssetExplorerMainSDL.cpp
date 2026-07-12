@@ -14,7 +14,9 @@
 #include "FlyCamera.h"
 #include "OrbitCamera.h"
 
-// CN3Terrain lives in the WarFare client, not N3Base.
+// CN3Terrain (and the river/pond water) live in the WarFare client, not N3Base.
+#include <N3Pond.h>
+#include <N3River.h>
 #include <N3Terrain.h>
 
 // Engine + RHI: the tool renders previews through the same GL backend the
@@ -668,6 +670,19 @@ void LoadTerrainPreview(TerrainPreview& tp, const std::string& relPath, const st
 		return;
 	}
 
+	// Water (river/pond) needs reflection/refraction render targets the tool
+	// doesn't set up and renders as opaque white; drop it (water is deferred).
+	if (terrain->m_pRiver != nullptr)
+	{
+		delete terrain->m_pRiver;
+		terrain->m_pRiver = nullptr;
+	}
+	if (terrain->m_pPond != nullptr)
+	{
+		delete terrain->m_pPond;
+		terrain->m_pPond = nullptr;
+	}
+
 	const float w = terrain->GetWidthByMeter();
 	tp.widthMeters = w;
 	tp.moveSpeed   = std::clamp(w * 0.04f, 30.0f, 200.0f);
@@ -926,7 +941,7 @@ void RenderShapeToRT(ExplorerState& state)
 {
 	if (state.rhi == nullptr || !state.shape.loaded)
 		return;
-	if (state.shape.shape == nullptr && !state.shape.demoCube)
+	if (state.shape.shape == nullptr && state.shape.meshInst == nullptr && !state.shape.demoCube)
 		return;
 	if (state.viewportW <= 0 || state.viewportH <= 0)
 		return;

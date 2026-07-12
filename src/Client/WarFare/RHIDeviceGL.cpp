@@ -477,6 +477,13 @@ RHIDeviceGL::RHIDeviceGL(SDL_Window* pWindow, bool bVSync) : m_pWindow(pWindow)
 	CN3Base::s_DevCaps.MaxTextureWidth  = static_cast<DWORD>(maxTexSize);
 	CN3Base::s_DevCaps.MaxTextureHeight = static_cast<DWORD>(maxTexSize);
 
+	// The fixed-function uber-shader runs 3 texture stages and honours the blend
+	// op, which the terrain checks (TestAvailableTile) before enabling its
+	// detailed multi-texture tile blend. Without these caps it falls back to the
+	// low-detail colormap-only path, so report them.
+	CN3Base::s_DevCaps.MaxTextureBlendStages = MAX_GL_STAGES;
+	CN3Base::s_DevCaps.PrimitiveMiscCaps |= D3DPMISCCAPS_BLENDOP;
+
 	// Core profile needs a VAO bound for vertex attribs; one is enough since
 	// attrib pointers are respecified per draw.
 	gl::GenVertexArrays(1, &m_uVAO);
