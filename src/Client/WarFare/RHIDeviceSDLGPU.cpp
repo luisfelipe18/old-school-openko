@@ -1101,8 +1101,11 @@ HRESULT RHIDeviceSDLGPU::Present()
 
 	// Diagnostics: counts that discriminate "textures never uploaded" from
 	// "uniforms wrong" style failures without spamming - logged for the
-	// first frames and then once every ~10 seconds.
-	int nDraws = 0, nTexturedDraws = 0, nFallbackBinds = 0;
+	// first frames and then once every ~10 seconds. nUntexturedTexDraws is
+	// the white-object signature: the stage-0 combiner asks for TEXTURE
+	// (D3DTA_TEXTURE) but no texture was bound at record time, so the
+	// shader substitutes opaque white.
+	int nDraws = 0, nTexturedDraws = 0, nFallbackBinds = 0, nUntexturedTexDraws = 0;
 
 	// First pass of the frame defaults to a full clear so an uninitialized
 	// offscreen target never leaks through (the engine clears every frame
@@ -1206,6 +1209,15 @@ HRESULT RHIDeviceSDLGPU::Present()
 		SDL_BindGPUVertexBuffers(pPass, 0, &vertexBinding, 1);
 
 		++nDraws;
+		{
+			const int32_t op   = draw.fs.stageColor[0][0];
+			const int32_t arg1 = draw.fs.stageColor[0][1];
+			const int32_t arg2 = draw.fs.stageColor[0][2];
+			const bool bWantsTexture =
+				(op != 1) && (arg1 == 2 /*D3DTA_TEXTURE*/ || arg2 == 2);
+			if (bWantsTexture && draw.fs.stageColor[0][3] == 0)
+				++nUntexturedTexDraws;
+		}
 		SDL_GPUTextureSamplerBinding samplerBindings[MAX_STAGES] = {};
 		for (int stage = 0; stage < MAX_STAGES; ++stage)
 		{
@@ -1274,12 +1286,13 @@ HRESULT RHIDeviceSDLGPU::Present()
 	{
 		static int s_nLoggedFrames = 0;
 		++s_nLoggedFrames;
-		if (s_nLoggedFrames <= 3 || (s_nLoggedFrames % 600) == 0)
+		if (s_nLoggedFrames <= 3 || (s_nLoggedFrames % 300) == 0)
 		{
 			spdlog::info("RHIDeviceSDLGPU: frame {}: {} draws, {} texture binds "
-						 "({} without GPU texture), {} arena bytes, {} textures uploaded",
-				s_nLoggedFrames, nDraws, nTexturedDraws, nFallbackBinds, m_FrameArena.size(),
-				m_FrameTextures.size());
+						 "({} without GPU texture, {} wanted a texture but had none), "
+						 "{} arena bytes, {} textures uploaded",
+				s_nLoggedFrames, nDraws, nTexturedDraws, nFallbackBinds, nUntexturedTexDraws,
+				m_FrameArena.size(), m_FrameTextures.size());
 		}
 		if (nFallbackBinds > 0)
 		{
