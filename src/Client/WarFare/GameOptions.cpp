@@ -124,9 +124,19 @@ void LoadGameOptions()
 
 	// POSIX-only: pick the RHI render backend (docs/PORT_POSIX_PLAN.md,
 	// T6.5/F6b). "SDLGPU" is Metal on macOS / Vulkan on Linux, "GL" the
-	// OpenGL backend, "Null" the headless one for CI smoke runs. Default to
-	// GL until F6b's parity pass promotes SDLGPU (T6b.3).
-	std::string szRenderer = ini.GetString("Screen", "Renderer", "GL");
+	// OpenGL backend, "Null" the headless one for CI smoke runs.
+	//
+	// macOS defaults to SDLGPU (T6b.3: validated in-game on Apple Silicon;
+	// OpenGL is deprecated there) with a runtime fallback to GL when no
+	// Metal driver exists. Linux keeps GL as default - it is universally
+	// available while Vulkan drivers still aren't.
+	std::string szRenderer = ini.GetString("Screen", "Renderer",
+#if defined(__APPLE__)
+		"SDLGPU"
+#else
+		"GL"
+#endif
+	);
 	for (char& c : szRenderer)
 		c = static_cast<char>(toupper(static_cast<unsigned char>(c)));
 	if (szRenderer == "SDLGPU")

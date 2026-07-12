@@ -327,6 +327,28 @@ int main(int argc, char* argv[])
 		return -1;
 	}
 
+	// SDL_GPU needs a Metal/Vulkan/D3D12 driver. Probe BEFORE the window
+	// exists: a GL fallback needs the OpenGL flag set at window-creation
+	// time, so the decision can't wait until device creation fails. (This
+	// must run after SDL_Init - device enumeration needs the video
+	// subsystem.)
+	if (bWantSDLGPU)
+	{
+		SDL_GPUDevice* pProbe = SDL_CreateGPUDevice(
+			SDL_GPU_SHADERFORMAT_SPIRV | SDL_GPU_SHADERFORMAT_MSL, false, nullptr);
+		if (pProbe != nullptr)
+		{
+			SDL_DestroyGPUDevice(pProbe);
+		}
+		else
+		{
+			spdlog::warn(
+				"SDL_GPU unavailable ({}); falling back to the OpenGL backend", SDL_GetError());
+			bWantSDLGPU = false;
+			bWantGL     = true;
+		}
+	}
+
 	// 메인 윈도우를 만들고..
 	// The game engine works in logical pixel coordinates throughout (UI layout,
 	// XYZRHW vertices, viewport). HIGH_PIXEL_DENSITY would give us a 2x

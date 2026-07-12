@@ -572,12 +572,24 @@ CI verde en las 3 plataformas; el subset POSIX incluye terreno/UI base.
       buffers GPU persistentes como optimización futura. 8 tests de los
       helpers puros (`SDLGPUTranslate_test.cpp`) + `--renderer sdlgpu` /
       `Renderer=SDLGPU` cableados.)*
-* [~] **T6b.3 — Paridad y default.** *(Parcial: paridad pixel-perfect del
+* [x] **T6b.3 — Paridad y default.** *(Hecho: paridad pixel-perfect del
       test-scene GL vs SDL_GPU verificada en Linux/Vulkan-lavapipe — diff
       máximo 1/255 por redondeo, 0 píxeles con diff>16 de 786k, mismo píxel
-      central. Pendiente: validación in-game (login→mundo) sobre Metal en
-      Mac real, y tras ella pasar el default de macOS a SDL_GPU — GL sigue
-      siendo el default hasta entonces.)*
+      central — y validación in-game sobre Metal en Mac real (Apple
+      Silicon): el usuario confirmó el juego corriendo "con muy buena
+      calidad" vía `--renderer sdlgpu`. Con eso, SDLGPU es el DEFAULT en
+      macOS (GameOptions.cpp), con un probe en el arranque que cae a GL
+      automáticamente si no hay driver Metal/Vulkan (el probe corre antes
+      de crear la ventana porque el flag OpenGL debe fijarse en su
+      creación). Linux mantiene GL de default — Vulkan aún no es universal
+      ahí. 3 tests de integración GPU (`RHIDeviceSDLGPU_gpu_test.cpp`)
+      cubren el camino exacto de la UI del juego — quads XYZRHW en fan con
+      MODULATE sobre DXT1/BGRA8/mipmaps — contra un device real
+      (Vulkan-lavapipe en CI; se saltan limpio sin GPU), y el backend
+      registra diagnósticos dispersos por frame para cazar regresiones de
+      binding/upload en el campo. Un reporte inicial de "todo blanco" en
+      Metal no se reprodujo tras recompilar — build parcial del bundle;
+      los diagnósticos quedan para detectarlo si reaparece.)*
 
 **Nota:** paralelizable con F7 tras T6.7. **Aceptación:** cliente corriendo
 sobre Metal en macOS con paridad visual respecto a GL y D3D9.
@@ -1089,11 +1101,9 @@ es la salida definitiva. Desglose concreto:
       caliente del motor) e indexados; viewport/scissor con la convención
       de Y correcta; readback de un píxel/frame para los tests de humo
       (paridad con `ReadCenterPixel`/`--dump-frame` del backend GL).
-* [ ] **T6b.3 — Paridad y default.** `--renderer sdlgpu` + `Renderer=
-      SDLGPU` en `Option.ini`; comparación de frames del test-scene GL vs
-      SDL_GPU (tolerancia por diferencias de rasterización); validación
-      in-game (login→mundo) en Mac real; una vez estable, default en macOS
-      con GL como fallback.
+* [x] **T6b.3 — Paridad y default.** (Hecho, ver Fase 6b: paridad
+      pixel-perfect + validado in-game sobre Metal; SDLGPU default en macOS
+      con probe y fallback a GL.)
 
 **2. F9 — Cierre de estabilización (paralelo, continuo).**
 
