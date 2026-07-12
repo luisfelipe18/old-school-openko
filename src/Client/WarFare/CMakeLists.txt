@@ -326,6 +326,8 @@ else()
     LocalInput.h
     LocalInputSDL.cpp
     LocalInputSDL.h
+    OSGameCursor.cpp
+    OSGameCursor.h
     RHIDeviceGL.cpp
     RHIDeviceGL.h
     RHIDeviceSDLGPU.cpp

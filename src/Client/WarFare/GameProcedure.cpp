@@ -47,9 +47,19 @@
 #include <shared/lzf.h>
 
 #ifndef _WIN32
-#include <Platform/PlatformTime.h> // Sleep()
+#include "OSGameCursor.h" // POSIX OS-cursor swapping (::SetCursor stand-in)
+
+#include <Platform/PlatformPaths.h> // GetUserConfigDir()
+#include <Platform/PlatformTime.h>  // Sleep()
 
 #include <spdlog/spdlog.h>
+
+#include <algorithm>
+#include <cstring>
+#include <filesystem>
+#include <fstream>
+#include <map>
+#include <vector>
 #endif
 
 #include <cassert>
@@ -697,17 +707,117 @@ void CGameProcedure::MessageBoxClose(int iMsgBoxIndex)
 }
 
 #ifndef _WIN32
-// POSIX: per-user settings persistence (window positions, camera/run mode) is
-// deferred to a later phase; treat every read as "no saved value" so callers
-// fall back to their defaults, and every write as a successful no-op.
-bool CGameProcedure::RegPutSetting(const char* /*ValueName*/, void* /*pValueData*/, long /*length*/)
+// POSIX per-user settings persistence.
+//
+// The Windows client stores per-account/server/character settings (skill
+// hotkey bar, window positions, camera/run mode) under HKCU\Software\
+// KnightOnline\<account>_<server>_<char> as named REG_BINARY values. There is
+// no registry on POSIX, so mirror it with one small binary file per key under
+// the user's config dir; each file holds the named blobs. Same partitioning,
+// same call sites - the hotkey bar now survives a restart.
+namespace
 {
-	return true;
+	// `key` is GetStrRegKeySetting()'s "Software\\KnightOnline\\a_b_c" string;
+	// flatten the separators into a single filename under the config dir.
+	std::filesystem::path RegSettingsFilePath(std::string key)
+	{
+		static const std::filesystem::path baseDir = [] {
+			std::filesystem::path dir = GetUserConfigDir();
+			if (dir.empty())
+				dir = std::filesystem::temp_directory_path();
+			std::error_code ec;
+			std::filesystem::create_directories(dir, ec);
+			return dir;
+		}();
+
+		for (char& c : key)
+		{
+			if (c == '\\' || c == '/' || c == ':')
+				c = '_';
+		}
+		return baseDir / (key + ".bin");
+	}
+
+	// Record layout: [u32 nameLen][name][u32 dataLen][data], repeated.
+	std::map<std::string, std::vector<uint8_t>> RegSettingsLoad(const std::filesystem::path& path)
+	{
+		std::map<std::string, std::vector<uint8_t>> values;
+		std::ifstream in(path, std::ios::binary);
+		if (!in)
+			return values;
+
+		while (true)
+		{
+			uint32_t nameLen = 0;
+			if (!in.read(reinterpret_cast<char*>(&nameLen), sizeof(nameLen)))
+				break;
+			if (nameLen == 0 || nameLen > (1u << 16))
+				break; // corrupt/truncated - stop reading
+			std::string name(nameLen, '\0');
+			if (!in.read(name.data(), nameLen))
+				break;
+
+			uint32_t dataLen = 0;
+			if (!in.read(reinterpret_cast<char*>(&dataLen), sizeof(dataLen)))
+				break;
+			if (dataLen > (1u << 20))
+				break;
+			std::vector<uint8_t> data(dataLen);
+			if (dataLen > 0 && !in.read(reinterpret_cast<char*>(data.data()), dataLen))
+				break;
+
+			values[std::move(name)] = std::move(data);
+		}
+		return values;
+	}
+
+	bool RegSettingsStore(
+		const std::filesystem::path& path, const std::map<std::string, std::vector<uint8_t>>& values)
+	{
+		std::ofstream out(path, std::ios::binary | std::ios::trunc);
+		if (!out)
+			return false;
+
+		for (const auto& [name, data] : values)
+		{
+			const uint32_t nameLen = static_cast<uint32_t>(name.size());
+			const uint32_t dataLen = static_cast<uint32_t>(data.size());
+			out.write(reinterpret_cast<const char*>(&nameLen), sizeof(nameLen));
+			out.write(name.data(), nameLen);
+			out.write(reinterpret_cast<const char*>(&dataLen), sizeof(dataLen));
+			if (dataLen > 0)
+				out.write(reinterpret_cast<const char*>(data.data()), dataLen);
+		}
+		return static_cast<bool>(out);
+	}
 }
 
-bool CGameProcedure::RegGetSetting(const char* /*ValueName*/, void* /*pValueData*/, long /*length*/)
+bool CGameProcedure::RegPutSetting(const char* ValueName, void* pValueData, long length)
 {
-	return false;
+	if (ValueName == nullptr || pValueData == nullptr || length < 0)
+		return false;
+
+	const std::filesystem::path path = RegSettingsFilePath(GetStrRegKeySetting());
+	auto values                      = RegSettingsLoad(path);
+
+	const uint8_t* p  = static_cast<const uint8_t*>(pValueData);
+	values[ValueName] = std::vector<uint8_t>(p, p + length);
+	return RegSettingsStore(path, values);
+}
+
+bool CGameProcedure::RegGetSetting(const char* ValueName, void* pValueData, long length)
+{
+	if (ValueName == nullptr || pValueData == nullptr || length < 0)
+		return false;
+
+	const auto values = RegSettingsLoad(RegSettingsFilePath(GetStrRegKeySetting()));
+	const auto it     = values.find(ValueName);
+	if (it == values.end())
+		return false;
+
+	const std::size_t n = std::min<std::size_t>(static_cast<std::size_t>(length), it->second.size());
+	std::memcpy(pValueData, it->second.data(), n);
+	return true;
 }
 #else
 bool CGameProcedure::RegPutSetting(const char* ValueName, void* pValueData, long length)
@@ -823,27 +933,31 @@ void CGameProcedure::UIPostData_Read(const std::string& szKey, CN3UIBase* pUI, i
 
 void CGameProcedure::SetGameCursor(HCURSOR hCursor, bool bLocked)
 {
+	// Map the OS cursor handle to the engine's logical cursor. On Windows the
+	// handles come from LoadCursor(); on POSIX they are distinct sentinels set
+	// in StaticMemberInit. Both the software cursor (CGameCursor) and the POSIX
+	// OS-cursor backend (OSGameCursor) key off this e_Cursor, so resolve it once
+	// regardless of which cursor mode is active.
+	e_Cursor eCursor = CURSOR_KA_NORMAL;
+	if (hCursor == s_hCursorNormal)
+		eCursor = CURSOR_KA_NORMAL;
+	else if (hCursor == s_hCursorNormal1)
+		eCursor = CURSOR_EL_NORMAL;
+	else if (hCursor == s_hCursorClick)
+		eCursor = CURSOR_KA_CLICK;
+	else if (hCursor == s_hCursorClick1)
+		eCursor = CURSOR_EL_CLICK;
+	else if (hCursor == s_hCursorAttack)
+		eCursor = CURSOR_ATTACK;
+	else if (hCursor == s_hCursorPreRepair)
+		eCursor = CURSOR_PRE_REPAIR;
+	else if (hCursor == s_hCursorNowRepair)
+		eCursor = CURSOR_NOW_REPAIR;
+	else if (hCursor == nullptr)
+		eCursor = CURSOR_UNKNOWN;
+
 	if (s_pGameCursor)
 	{
-		e_Cursor eCursor = CURSOR_KA_NORMAL;
-
-		if (hCursor == s_hCursorNormal)
-			eCursor = CURSOR_KA_NORMAL;
-		else if (hCursor == s_hCursorNormal1)
-			eCursor = CURSOR_EL_NORMAL;
-		else if (hCursor == s_hCursorClick)
-			eCursor = CURSOR_KA_CLICK;
-		else if (hCursor == s_hCursorClick1)
-			eCursor = CURSOR_EL_CLICK;
-		else if (hCursor == s_hCursorAttack)
-			eCursor = CURSOR_ATTACK;
-		else if (hCursor == s_hCursorPreRepair)
-			eCursor = CURSOR_PRE_REPAIR;
-		else if (hCursor == s_hCursorNowRepair)
-			eCursor = CURSOR_NOW_REPAIR;
-		else if (hCursor == nullptr)
-			eCursor = CURSOR_UNKNOWN;
-
 		SetGameCursor(eCursor, bLocked);
 
 		if ((!m_bCursorLocked) && bLocked)
@@ -853,25 +967,26 @@ void CGameProcedure::SetGameCursor(HCURSOR hCursor, bool bLocked)
 	}
 	else
 	{
+#ifdef _WIN32
 		if ((m_bCursorLocked) && (!bLocked))
 			return;
 		else if (((m_bCursorLocked) && bLocked) || ((!m_bCursorLocked) && !bLocked))
 		{
-#ifdef _WIN32
 			SetCursor(hCursor);
-#endif
 			return;
 		}
 		else if ((!m_bCursorLocked) && bLocked)
 		{
-#ifdef _WIN32
 			m_hPrevGameCursor = GetCursor();
-#endif
 			m_bCursorLocked   = true;
-#ifdef _WIN32
 			SetCursor(hCursor);
-#endif
 		}
+#else
+		// POSIX OS-cursor mode: there is no ::SetCursor equivalent through the
+		// engine, so hand the swap to the SDL-backed OSGameCursor, which owns
+		// the same lock/restore semantics CGameCursor uses.
+		OSGameCursor::Set(eCursor, bLocked);
+#endif
 	}
 }
 
@@ -899,6 +1014,8 @@ void CGameProcedure::RestoreGameCursor()
 
 #ifdef _WIN32
 		SetCursor(m_hPrevGameCursor);
+#else
+		OSGameCursor::Restore();
 #endif
 	}
 }

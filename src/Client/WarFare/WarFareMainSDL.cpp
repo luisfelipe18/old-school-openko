@@ -19,6 +19,7 @@
 #include "GameProcLogIn.h"
 #include "LocalInput.h"
 #include "LocalInputSDL.h"
+#include "OSGameCursor.h"
 #include "RHIDeviceGL.h"
 #include "RHIDeviceSDLGPU.h"
 #include "TestScene.h"
@@ -46,7 +47,6 @@
 namespace
 {
 SDL_Window* g_pWindow      = nullptr;
-SDL_Cursor* g_pCursor      = nullptr;
 bool g_bWindowInFocus      = true;
 bool g_bQuitRequested      = false;
 
@@ -101,42 +101,75 @@ std::filesystem::path FindClientResource(const char* szName)
 	return {};
 }
 
-// Replaces the LoadCursor(IDC_...) resource path: the .cur files ship with
-// the client (next to the executable on Linux, inside the .app bundle on
-// macOS) and are decoded into an SDL color cursor.
-void SetupWindowCursor()
+// Decode a single shipped .cur into an SDL cursor and hand it to OSGameCursor.
+// Returns true when the cursor was registered.
+bool RegisterGameCursor(e_Cursor which, const char* szFile)
 {
-	if (!CN3Base::s_Options.bWindowCursor)
-		return; // the game draws its own software cursor (CGameCursor)
-
-	const std::filesystem::path path = FindClientResource("Cursor_Normal.cur");
+	const std::filesystem::path path = FindClientResource(szFile);
 	if (path.empty())
-	{
-		// FindClientResource already logged every path it tried.
-		return;
-	}
-
-	spdlog::info("loading window cursor from '{}'", path.string());
+		return false; // FindClientResource already logged every path it tried
 
 	const DecodedCursor decoded = LoadCursorFromFile(path);
 	if (!decoded.IsValid())
 	{
-		spdlog::warn("Cursor_Normal.cur at '{}' not decodable; keeping the system cursor",
-			path.string());
-		return;
+		spdlog::warn("cursor '{}' not decodable; skipping", path.string());
+		return false;
 	}
 
 	SDL_Surface* pSurface = SDL_CreateSurfaceFrom(decoded.width, decoded.height,
 		SDL_PIXELFORMAT_RGBA32, const_cast<uint8_t*>(decoded.pixelsRgba.data()),
 		decoded.width * 4);
 	if (pSurface == nullptr)
-		return;
+		return false;
 
-	g_pCursor = SDL_CreateColorCursor(pSurface, decoded.hotspotX, decoded.hotspotY);
+	SDL_Cursor* pCursor = SDL_CreateColorCursor(pSurface, decoded.hotspotX, decoded.hotspotY);
 	SDL_DestroySurface(pSurface);
+	if (pCursor == nullptr)
+		return false;
 
-	if (g_pCursor != nullptr)
-		SDL_SetCursor(g_pCursor);
+	OSGameCursor::Register(which, pCursor);
+	return true;
+}
+
+// Replaces the LoadCursor(IDC_...) resource path: the .cur files ship with the
+// client (next to the executable on Linux, inside the .app bundle on macOS).
+// Every cursor the game swaps between (normal/click/attack/repair, per nation)
+// is decoded and registered with OSGameCursor, which applies them as the game
+// logic requests - the POSIX stand-in for Win32 ::SetCursor(hCursor).
+void SetupWindowCursor()
+{
+	if (!CN3Base::s_Options.bWindowCursor)
+		return; // the game draws its own software cursor (CGameCursor)
+
+	// e_Cursor -> shipped .cur file, mirroring the IDC_CURSOR_* entries in
+	// Resource.rc so the OS cursor matches the Windows client exactly.
+	struct CursorFile
+	{
+		e_Cursor    which;
+		const char* file;
+	};
+	static const CursorFile kCursorFiles[] = {
+		{CURSOR_KA_NORMAL, "Cursor_Normal.cur"},
+		{CURSOR_EL_NORMAL, "cursor_normal1.cur"},
+		{CURSOR_KA_CLICK, "Cursor_Click.cur"},
+		{CURSOR_EL_CLICK, "cursor_click1.cur"},
+		{CURSOR_ATTACK, "Cursor_Attack.cur"},
+		{CURSOR_PRE_REPAIR, "repair0.cur"},
+		{CURSOR_NOW_REPAIR, "repair1.cur"},
+	};
+
+	int loaded = 0;
+	for (const CursorFile& cf : kCursorFiles)
+	{
+		if (RegisterGameCursor(cf.which, cf.file))
+			++loaded;
+	}
+
+	spdlog::info("loaded {}/{} game cursors", loaded, static_cast<int>(std::size(kCursorFiles)));
+
+	// Start on the normal Karus pointer; StaticMemberInit's
+	// SetGameCursor(s_hCursorNormal) keeps it in sync once the game logic runs.
+	OSGameCursor::Set(CURSOR_KA_NORMAL, false);
 }
 
 void HandleEvent(const SDL_Event& event)
@@ -528,8 +561,7 @@ int main(int argc, char* argv[])
 				gameDataDir.string());
 			CN3Base::RHIDeviceSet(nullptr);
 			pRHIDevice.reset();
-			if (g_pCursor != nullptr)
-				SDL_DestroyCursor(g_pCursor);
+			OSGameCursor::DestroyAll();
 			SDL_DestroyWindow(g_pWindow);
 			SDL_Quit();
 			return -1;
@@ -669,8 +701,7 @@ int main(int argc, char* argv[])
 	TestSceneRelease(); // GL resources must go before the context
 	CN3Base::RHIDeviceSet(nullptr);
 	pRHIDevice.reset(); // destroy the GL context before the window
-	if (g_pCursor != nullptr)
-		SDL_DestroyCursor(g_pCursor);
+	OSGameCursor::DestroyAll();
 	SDL_DestroyWindow(g_pWindow);
 	SDL_Quit();
 

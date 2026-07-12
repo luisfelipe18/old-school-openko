@@ -329,19 +329,17 @@ void CUIHotKeyDlg::Render()
 	{
 		if (m_pMyHotkey[m_iCurPage][k] != nullptr)
 		{
-			float fCooldown = CGameProcedure::s_pProcMain->m_pMagicSkillMng->GetCooldown(m_pMyHotkey[m_iCurPage][k]->pSkill);
+			// Always draw the skill icon; the cooldown sweep is an overlay on
+			// top of it. Skipping the icon while on cooldown left a hole in the
+			// hotkey bar that showed the moving world through the translucent
+			// wedge (it read as several sweeps running at once).
+			CN3UIIcon* pUIIcon = m_pMyHotkey[m_iCurPage][k]->pUIIcon;
+			if (pUIIcon != nullptr)
+				pUIIcon->Render();
 
-			// not on cooldown
-			if (fCooldown < 0)
-			{
-				CN3UIIcon* pUIIcon = m_pMyHotkey[m_iCurPage][k]->pUIIcon;
-				if (pUIIcon != nullptr)
-					pUIIcon->Render();
-			}
-			else
-			{
+			float fCooldown = CGameProcedure::s_pProcMain->m_pMagicSkillMng->GetCooldown(m_pMyHotkey[m_iCurPage][k]->pSkill);
+			if (fCooldown >= 0)
 				RenderCooldown(m_pMyHotkey[m_iCurPage][k], fCooldown);
-			}
 
 			DisplayCountStr(m_pMyHotkey[m_iCurPage][k]);
 		}
@@ -1042,7 +1040,9 @@ void CUIHotKeyDlg::RenderCooldown(const __IconItemSkill* pSkill, float fCooldown
 	if (pSkill == nullptr)
 		return;
 
-	constexpr D3DCOLOR Color = D3DCOLOR_ARGB(0x80, 0xFF, 0x00, 0x00);
+	// Translucent dark overlay - dims the icon like a standard cooldown sweep.
+	// (The earlier 50% red read as a coloured wedge rather than "charging".)
+	constexpr D3DCOLOR Color = D3DCOLOR_ARGB(0xB0, 0x00, 0x00, 0x00);
 
 	const RECT rc            = pSkill->pUIIcon->GetRegion();
 
@@ -1106,12 +1106,13 @@ void CUIHotKeyDlg::RenderCooldown(const __IconItemSkill* pSkill, float fCooldown
 	//	vertices.emplace_back(x, y, UI_DEFAULT_Z, UI_DEFAULT_RHW, Color);
 	//}
 
-	DWORD dwZ = 0, dwFog = 0, dwAlpha = 0, dwCOP = 0, dwCA1 = 0, dwSrcBlend = 0, dwDestBlend = 0, dwVertexShader = 0, dwAOP = 0, dwAA1 = 0;
+	DWORD dwZ = 0, dwFog = 0, dwAlpha = 0, dwCOP = 0, dwCA1 = 0, dwSrcBlend = 0, dwDestBlend = 0, dwVertexShader = 0, dwAOP = 0, dwAA1 = 0, dwCull = 0;
 	CN3Base::RHIDevice()->GetRenderState(D3DRS_ZENABLE, &dwZ);
 	CN3Base::RHIDevice()->GetRenderState(D3DRS_FOGENABLE, &dwFog);
 	CN3Base::RHIDevice()->GetRenderState(D3DRS_ALPHABLENDENABLE, &dwAlpha);
 	CN3Base::RHIDevice()->GetRenderState(D3DRS_SRCBLEND, &dwSrcBlend);
 	CN3Base::RHIDevice()->GetRenderState(D3DRS_DESTBLEND, &dwDestBlend);
+	CN3Base::RHIDevice()->GetRenderState(D3DRS_CULLMODE, &dwCull);
 	CN3Base::RHIDevice()->GetTextureStageState(0, D3DTSS_COLOROP, &dwCOP);
 	CN3Base::RHIDevice()->GetTextureStageState(0, D3DTSS_COLORARG1, &dwCA1);
 	CN3Base::RHIDevice()->GetTextureStageState(0, D3DTSS_ALPHAOP, &dwAOP);
@@ -1131,7 +1132,9 @@ void CUIHotKeyDlg::RenderCooldown(const __IconItemSkill* pSkill, float fCooldown
 	CN3Base::RHIDevice()->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_DIFFUSE);
 
 	CN3Base::RHIDevice()->SetFVF(FVF_TRANSFORMED);
-	// CN3Base::RHIDevice()->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+	// Draw both faces: the fan winding differs between D3D9 and the GL backend,
+	// so culling could otherwise drop the wedge (or half of it) on one of them.
+	CN3Base::RHIDevice()->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
 	CN3Base::RHIDevice()->DrawPrimitiveUP(
 		D3DPT_TRIANGLEFAN, static_cast<UINT>(vertices.size()) - 2, &vertices[0], sizeof(__VertexTransformedColor));
 
@@ -1140,6 +1143,7 @@ void CUIHotKeyDlg::RenderCooldown(const __IconItemSkill* pSkill, float fCooldown
 	CN3Base::RHIDevice()->SetRenderState(D3DRS_ALPHABLENDENABLE, dwAlpha);
 	CN3Base::RHIDevice()->SetRenderState(D3DRS_SRCBLEND, dwSrcBlend);
 	CN3Base::RHIDevice()->SetRenderState(D3DRS_DESTBLEND, dwDestBlend);
+	CN3Base::RHIDevice()->SetRenderState(D3DRS_CULLMODE, dwCull);
 	CN3Base::RHIDevice()->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
 	CN3Base::RHIDevice()->SetTextureStageState(0, D3DTSS_COLOROP, dwCOP);
 	CN3Base::RHIDevice()->SetTextureStageState(0, D3DTSS_COLORARG1, dwCA1);
