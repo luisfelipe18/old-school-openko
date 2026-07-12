@@ -68,6 +68,7 @@
 #include <N3Base/DFont.h>
 
 #include <algorithm>
+#include <cctype>
 #include <utility>
 
 #include <N3Base/N3SkyMng.h>
@@ -772,6 +773,14 @@ void CGameProcMain::Render()
 // here is gated on the local player being a GM (iAuthority == AUTHORITY_MANAGER).
 // ---------------------------------------------------------------------------
 
+// Lower-case ASCII helper for case-insensitive name matching.
+static std::string GMToLower(std::string s)
+{
+	std::transform(s.begin(), s.end(), s.begin(),
+		[](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+	return s;
+}
+
 void CGameProcMain::GMPanelRebuildList()
 {
 	m_GMPanelIDs.clear();
@@ -785,6 +794,11 @@ void CGameProcMain::GMPanelRebuildList()
 	for (const auto& [iID, pNPC] : s_pOPMgr->m_NPCs)
 	{
 		if (pNPC == nullptr)
+			continue;
+		// Name search: keep only entries whose name contains the filter text
+		// (e.g. "antares" matches the boss). Empty filter keeps everything.
+		if (!m_szGMPanelFilter.empty()
+			&& GMToLower(pNPC->IDString()).find(m_szGMPanelFilter) == std::string::npos)
 			continue;
 		byDist.emplace_back((pNPC->Position() - vMe).Magnitude(), iID);
 	}
@@ -819,28 +833,64 @@ void CGameProcMain::GMPanelTeleportTo(int iNpcID)
 	MsgSend_Move(false, false);
 }
 
+// The letter/space key that was just pressed, as a search character (0 if none).
+static char GMTypedChar(const CLocalInput* pIn)
+{
+	static const struct
+	{
+		int  dik;
+		char ch;
+	} kKeys[] = {
+		{DIK_A, 'a'}, {DIK_B, 'b'}, {DIK_C, 'c'}, {DIK_D, 'd'}, {DIK_E, 'e'}, {DIK_F, 'f'},
+		{DIK_G, 'g'}, {DIK_H, 'h'}, {DIK_I, 'i'}, {DIK_J, 'j'}, {DIK_K, 'k'}, {DIK_L, 'l'},
+		{DIK_M, 'm'}, {DIK_N, 'n'}, {DIK_O, 'o'}, {DIK_P, 'p'}, {DIK_Q, 'q'}, {DIK_R, 'r'},
+		{DIK_S, 's'}, {DIK_T, 't'}, {DIK_U, 'u'}, {DIK_V, 'v'}, {DIK_W, 'w'}, {DIK_X, 'x'},
+		{DIK_Y, 'y'}, {DIK_Z, 'z'}, {DIK_SPACE, ' '},
+	};
+	for (const auto& k : kKeys)
+	{
+		if (pIn->IsKeyPress(k.dik))
+			return k.ch;
+	}
+	return 0;
+}
+
 void CGameProcMain::GMPanelHandleInput()
 {
 	if (s_pPlayer == nullptr || s_pPlayer->m_InfoBase.iAuthority != AUTHORITY_MANAGER)
 		return;
 
-	// J toggles the panel (rebuild the list when opening).
-	if (s_pLocalInput->IsKeyPress(DIK_J))
+	// Closed: J opens it.
+	if (!m_bGMPanelVisible)
 	{
-		m_bGMPanelVisible = !m_bGMPanelVisible;
-		if (m_bGMPanelVisible)
+		if (s_pLocalInput->IsKeyPress(DIK_J))
 		{
-			m_iGMPanelSel = 0;
+			m_bGMPanelVisible = true;
+			m_iGMPanelSel     = 0;
+			m_szGMPanelFilter.clear();
 			GMPanelRebuildList();
 			CommandMove(MD_STOP, true); // halt any in-progress (mouse/continuous) move
 		}
 		return;
 	}
 
-	if (!m_bGMPanelVisible)
+	// Open: the panel is modal. Esc closes it; every keyboard key is consumed at
+	// the end (KeyboardClearInput) so typing a name doesn't also fire the game
+	// hotkeys (I = inventory, etc.).
+	if (s_pLocalInput->IsKeyPress(DIK_ESCAPE))
+	{
+		m_bGMPanelVisible = false;
+		s_pLocalInput->KeyboardClearInput(-1);
 		return;
+	}
 
-	// Refresh each frame so distances/entries track the moving world.
+	// Name search: type to filter (e.g. "antares"), Backspace deletes.
+	if (const char ch = GMTypedChar(s_pLocalInput))
+		m_szGMPanelFilter += ch;
+	if (s_pLocalInput->IsKeyPress(DIK_BACK) && !m_szGMPanelFilter.empty())
+		m_szGMPanelFilter.pop_back();
+
+	// Reflect the current filter and live distances.
 	GMPanelRebuildList();
 
 	const int iCount = static_cast<int>(m_GMPanelIDs.size());
@@ -862,6 +912,9 @@ void CGameProcMain::GMPanelHandleInput()
 		iViewDist = std::min(4096, iViewDist + 128);
 	if (s_pLocalInput->IsKeyPress(DIK_MINUS) || s_pLocalInput->IsKeyPress(DIK_SUBTRACT))
 		iViewDist = std::max(256, iViewDist - 128);
+
+	// Modal: don't let this frame's keys leak into the gameplay hotkeys below.
+	s_pLocalInput->KeyboardClearInput(-1);
 }
 
 void CGameProcMain::GMPanelRender()
@@ -891,12 +944,17 @@ void CGameProcMain::GMPanelRender()
 		y += 18.0f;
 	};
 
-	Row(fmt::format("== GM PANEL (J) ==   View distance: {}  (+/- to adjust)",
+	Row(fmt::format("== GM PANEL ==   View distance: {}  (+/-)   Esc: close",
 			CN3Base::s_Options.iViewDist),
 		0xFFFFFF00);
-	Row(fmt::format("Monsters/NPCs in map: {}   (Up/Down to select, Enter to teleport)",
-			m_GMPanelIDs.size()),
+	Row(fmt::format("Search: {}_   (type a name e.g. antares, Backspace deletes)",
+			m_szGMPanelFilter),
+		0xFF66CCFF);
+	Row(fmt::format("Matches in map: {}   (Up/Down select, Enter teleport)", m_GMPanelIDs.size()),
 		0xFFCCCCCC);
+
+	if (m_GMPanelIDs.empty() && !m_szGMPanelFilter.empty())
+		Row("  (no match present - the monster/boss must be spawned in this zone)", 0xFFFF8080);
 
 	// Show a window of rows centred on the selection.
 	const int iCount   = static_cast<int>(m_GMPanelIDs.size());

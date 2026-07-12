@@ -5,6 +5,7 @@
 
 #include "GameProcedure.h"
 #include <set>
+#include <string>
 #include <vector>
 
 typedef std::set<int>::iterator it_ID;
@@ -84,7 +85,8 @@ public:
 	class CDFont* m_pGMFont   = nullptr;
 	bool m_bGMPanelVisible    = false;
 	int m_iGMPanelSel         = 0;              // selected row (index into m_GMPanelIDs)
-	std::vector<int> m_GMPanelIDs;              // NPC IDs shown, nearest first
+	std::vector<int> m_GMPanelIDs;              // NPC IDs shown (matching filter), nearest first
+	std::string m_szGMPanelFilter;             // name search text (e.g. "antares"), lower-case
 
 	//..
 	BOOL m_bLoadComplete;         // 로딩이 완료되었나??
