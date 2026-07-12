@@ -251,11 +251,30 @@ void CGameProcedure::StaticMemberInit(HINSTANCE /*hInstance*/, HWND /*hWndMain*/
 	s_pSocket    = new CAPISocket();
 	s_pSocketSub = new CAPISocket();
 
+	// The software game cursor (CGameCursor) is driven by e_Cursor, but the
+	// game logic still selects cursors by these HCURSOR handles and the
+	// HCURSOR->e_Cursor mapping in SetGameCursor(HCURSOR) compares them by
+	// identity. On Windows LoadCursor() hands back distinct handles; on POSIX
+	// there is no OS cursor to load, so give each a distinct non-null
+	// sentinel (they are only ever compared, never dereferenced, on POSIX).
+	// Without this every handle stays nullptr, all compare equal, the mapping
+	// always resolves to the first branch (normal), and the attack/repair
+	// cursors never appear.
+	s_hCursorNormal    = reinterpret_cast<HCURSOR>(1);
+	s_hCursorNormal1   = reinterpret_cast<HCURSOR>(2);
+	s_hCursorClick     = reinterpret_cast<HCURSOR>(3);
+	s_hCursorClick1    = reinterpret_cast<HCURSOR>(4);
+	s_hCursorAttack    = reinterpret_cast<HCURSOR>(5);
+	s_hCursorPreRepair = reinterpret_cast<HCURSOR>(6);
+	s_hCursorNowRepair = reinterpret_cast<HCURSOR>(7);
+
 	if (!CN3Base::s_Options.bWindowCursor)
 	{
 		s_pGameCursor = new CGameCursor();
 		s_pGameCursor->LoadFromFile("ui\\cursor.uif");
 	}
+
+	SetGameCursor(s_hCursorNormal);
 
 	s_pLocalInput = new CLocalInput();
 	s_pLocalInput->Init(nullptr, nullptr); // SDL keyboard/mouse
