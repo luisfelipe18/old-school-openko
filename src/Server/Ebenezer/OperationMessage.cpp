@@ -259,6 +259,7 @@ bool OperationMessage::Process(const std::string_view command)
 
 			case "/exp_add"_djb2:
 			case "+exp_add"_djb2:
+			case "+expadd"_djb2:
 				ExpAdd();
 				break;
 
@@ -401,14 +402,11 @@ bool OperationMessage::Process(const std::string_view command)
 				OffPermanent();
 				break;
 
-#ifdef _DEBUG
-			// Unofficial commands for debug builds/purposes only.
 			// +give_item itemId [count]
 			case "+give_item"_djb2:
+			case "+giveitem"_djb2:
 				GiveItem();
 				break;
-
-#endif
 
 			// Unhandled command.
 			default:
@@ -704,9 +702,19 @@ void OperationMessage::MoneyAdd()
 	// TODO
 }
 
+// +exp_add {int: amount}
+// Grants experience to the GM issuing the command (negative subtracts).
 void OperationMessage::ExpAdd()
 {
-	// TODO
+	if (_srcUser == nullptr || GetArgCount() < 1)
+		return;
+
+	int exp = ParseInt(0);
+	if (exp != 0)
+		_srcUser->ExpChange(exp);
+
+	spdlog::warn("OperationMessage::ExpAdd: [srcUser={} authority={} exp={}]",
+		_srcUser->m_pUserData->m_id, _srcUser->m_pUserData->m_bAuthority, exp);
 }
 
 void OperationMessage::UserBonus()
@@ -888,9 +896,9 @@ void OperationMessage::OffPermanent()
 	}
 }
 
-#ifdef _DEBUG
-// unoffical commands for debug builds/purposes only
 // +give_item itemId [count]
+// Creates an item in the GM's own inventory (GM-only; reachable only via the
+// '+' operator-chat path, which already requires AUTHORITY_MANAGER).
 void OperationMessage::GiveItem()
 {
 	// Requires a user.
@@ -914,7 +922,6 @@ void OperationMessage::GiveItem()
 				 "count={} success={}]",
 		_srcUser->m_pUserData->m_id, _srcUser->m_pUserData->m_bAuthority, itemId, count, isSuccess);
 }
-#endif
 
 bool OperationMessage::ParseCommand(const std::string_view command, size_t& key)
 {

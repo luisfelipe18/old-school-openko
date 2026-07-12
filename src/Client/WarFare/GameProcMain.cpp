@@ -846,6 +846,8 @@ static char GMTypedChar(const CLocalInput* pIn)
 		{DIK_M, 'm'}, {DIK_N, 'n'}, {DIK_O, 'o'}, {DIK_P, 'p'}, {DIK_Q, 'q'}, {DIK_R, 'r'},
 		{DIK_S, 's'}, {DIK_T, 't'}, {DIK_U, 'u'}, {DIK_V, 'v'}, {DIK_W, 'w'}, {DIK_X, 'x'},
 		{DIK_Y, 'y'}, {DIK_Z, 'z'}, {DIK_SPACE, ' '},
+		{DIK_0, '0'}, {DIK_1, '1'}, {DIK_2, '2'}, {DIK_3, '3'}, {DIK_4, '4'},
+		{DIK_5, '5'}, {DIK_6, '6'}, {DIK_7, '7'}, {DIK_8, '8'}, {DIK_9, '9'},
 	};
 	for (const auto& k : kKeys)
 	{
@@ -884,11 +886,20 @@ void CGameProcMain::GMPanelHandleInput()
 		return;
 	}
 
-	// Name search: type to filter (e.g. "antares"), Backspace deletes.
+	// The box is dual-purpose: type a name to filter the list, or type a GM
+	// command and press Tab to run it (the client prepends '+' and sends it as
+	// operator chat, which the server routes to OperationMessage). Examples:
+	//   giveitem 379021000 1   zonechange 21   expadd 1000000
 	if (const char ch = GMTypedChar(s_pLocalInput))
 		m_szGMPanelFilter += ch;
 	if (s_pLocalInput->IsKeyPress(DIK_BACK) && !m_szGMPanelFilter.empty())
 		m_szGMPanelFilter.pop_back();
+
+	if (s_pLocalInput->IsKeyPress(DIK_TAB) && !m_szGMPanelFilter.empty())
+	{
+		MsgSend_Chat(N3_CHAT_NORMAL, "+" + m_szGMPanelFilter);
+		m_szGMPanelFilter.clear();
+	}
 
 	// Reflect the current filter and live distances.
 	GMPanelRebuildList();
@@ -947,9 +958,10 @@ void CGameProcMain::GMPanelRender()
 	Row(fmt::format("== GM PANEL ==   View distance: {}  (+/-)   Esc: close",
 			CN3Base::s_Options.iViewDist),
 		0xFFFFFF00);
-	Row(fmt::format("Search: {}_   (type a name e.g. antares, Backspace deletes)",
+	Row(fmt::format("Box: {}_   (name to search, or a GM command + Tab to run)",
 			m_szGMPanelFilter),
 		0xFF66CCFF);
+	Row("  Tab runs: giveitem <id> [n] | expadd <n> | zonechange <zone> [x] [z]", 0xFF88AA88);
 	Row(fmt::format("Matches in map: {}   (Up/Down select, Enter teleport)", m_GMPanelIDs.size()),
 		0xFFCCCCCC);
 
