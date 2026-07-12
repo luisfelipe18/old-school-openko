@@ -60,6 +60,13 @@ void LoadGameOptions()
 	CN3Base::s_Options.iViewWidth  = ini.GetInt("ViewPort", "Width", 1024);
 	CN3Base::s_Options.iViewHeight = ini.GetInt("ViewPort", "Height", 768);
 
+#ifdef _WIN32
+	// Snap the height to the classic 4:3/5:4 mode list the Windows client
+	// supports (ChangeDisplaySettings needs an exact mode). POSIX skips
+	// this: SDL/GL takes any size, the Option tool only offers modes the
+	// display actually reports, and snapping breaks 16:10 panels (a
+	// 1280x800 laptop would be forced to 1280x1024 - taller than the
+	// screen).
 	if (CN3Base::s_Options.iViewWidth == 1024 || CN3Base::s_Options.iViewWidth == 1366)
 		CN3Base::s_Options.iViewHeight = 768;
 	else if (CN3Base::s_Options.iViewWidth == 1280)
@@ -68,6 +75,7 @@ void LoadGameOptions()
 		CN3Base::s_Options.iViewHeight = 1200;
 	else if (CN3Base::s_Options.iViewWidth == 1920)
 		CN3Base::s_Options.iViewHeight = 1080;
+#endif
 
 	// Load the viewport's color depth
 	// Officially this defaults to 16-bit, but this isn't as supported these days so we should

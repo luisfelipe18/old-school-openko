@@ -356,6 +356,55 @@ int main(int argc, char* argv[])
 		return -1;
 	}
 
+	// SDL3's bare SDL_WINDOW_FULLSCREEN flag means "borderless fullscreen at
+	// the desktop resolution", NOT the game resolution - the engine would
+	// then render its iViewWidth x iViewHeight viewport into a corner of a
+	// much larger framebuffer, with mouse coordinates off by the same
+	// amount. Request the display mode closest to the game resolution
+	// instead (the SDL3 equivalent of D3D9's fullscreen mode switch). The
+	// mode is set even when starting windowed so a later Alt+Enter toggle
+	// lands on the same resolution rather than the desktop's.
+	{
+		SDL_DisplayMode fsMode;
+		const SDL_DisplayID displayId = SDL_GetDisplayForWindow(g_pWindow);
+		if (SDL_GetClosestFullscreenDisplayMode(displayId, CN3Base::s_Options.iViewWidth,
+				CN3Base::s_Options.iViewHeight, 0.0f, false, &fsMode))
+		{
+			if (!SDL_SetWindowFullscreenMode(g_pWindow, &fsMode))
+				spdlog::warn("couldn't set fullscreen mode {}x{}: {}", fsMode.w, fsMode.h,
+					SDL_GetError());
+		}
+		else
+		{
+			spdlog::warn("no fullscreen mode close to {}x{} on this display; fullscreen will "
+						 "use the desktop resolution",
+				CN3Base::s_Options.iViewWidth, CN3Base::s_Options.iViewHeight);
+		}
+
+		if (!CN3Base::s_Options.bWindowMode)
+			SDL_SyncWindow(g_pWindow); // fullscreen transitions are async; settle before sizing
+	}
+
+	// Reconcile the engine's idea of the resolution with what we actually
+	// got (requested mode unavailable, window clamped by the window
+	// manager, ...). Everything downstream - RHI viewport, UI layout,
+	// camera projection, mouse hit-testing - keys off s_Options, so adopt
+	// the real size before any of that starts; a silent mismatch here is
+	// exactly the "game drawn wrong for my screen resolution" failure mode.
+	{
+		int actualW = 0, actualH = 0;
+		SDL_GetWindowSizeInPixels(g_pWindow, &actualW, &actualH);
+		if (actualW > 0 && actualH > 0
+			&& (actualW != CN3Base::s_Options.iViewWidth
+				|| actualH != CN3Base::s_Options.iViewHeight))
+		{
+			spdlog::warn("window is {}x{} instead of the requested {}x{}; adopting the actual size",
+				actualW, actualH, CN3Base::s_Options.iViewWidth, CN3Base::s_Options.iViewHeight);
+			CN3Base::s_Options.iViewWidth  = actualW;
+			CN3Base::s_Options.iViewHeight = actualH;
+		}
+	}
+
 	SetupWindowCursor();
 
 	// Render backend: OpenGL when requested and available (draws the clear

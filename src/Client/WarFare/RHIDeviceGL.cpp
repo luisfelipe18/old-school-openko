@@ -664,6 +664,13 @@ HRESULT RHIDeviceGL::Clear(DWORD flags, D3DCOLOR color, float z, DWORD /*stencil
 HRESULT RHIDeviceGL::Present()
 {
 	SDL_GL_SwapWindow(m_pWindow);
+
+	// The window can change size at runtime (Alt+Enter windowed/fullscreen
+	// toggle, window-manager resizes); the cached pixel size feeds the
+	// Y-flip in SetViewport/SetScissorRect and the RHW mapping, so refresh
+	// it once per frame rather than trusting the size captured at init.
+	SDL_GetWindowSizeInPixels(m_pWindow, &m_iWinPixelW, &m_iWinPixelH);
+
 	return RHIDeviceNull::Present(); // keep the present counter for diagnostics
 }
 

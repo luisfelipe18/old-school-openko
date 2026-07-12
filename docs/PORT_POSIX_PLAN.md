@@ -977,6 +977,28 @@ la traen activada).
         nativas de Windows del diálogo original y dio libertad total de
         estilo. Las ventanas de ambas herramientas se agrandaron para
         acomodar el padding nuevo sin recortar contenido.*
+      - ***Bug de resolución de pantalla (macOS/POSIX):** tres capas.
+        (1) En fullscreen se creaba la ventana con `SDL_WINDOW_FULLSCREEN` a
+        secas, que en SDL3 significa "borderless a la resolución del
+        escritorio", no la del juego — el motor renderizaba su viewport de
+        `iViewWidth x iViewHeight` en una esquina de un framebuffer mucho
+        mayor, con el mouse desfasado igual. Ahora se pide el modo de video
+        más cercano a la resolución elegida (`SDL_SetWindowFullscreenMode`,
+        el equivalente SDL3 del cambio de modo de D3D9), y se fija aunque se
+        arranque en ventana para que Alt+Enter caiga en el mismo modo.
+        (2) Red de seguridad: tras crear la ventana se compara el tamaño
+        real en píxeles con el pedido y, si difieren (modo no disponible,
+        ventana recortada por el WM), se adopta el tamaño real en
+        `s_Options` ANTES de arrancar el motor, para que viewport, UI,
+        proyección e input coincidan siempre con la realidad.
+        (3) `RHIDeviceGL` cacheaba el tamaño en píxeles una sola vez al
+        crearse — el flip Y de viewport/scissor y el mapeo RHW quedaban
+        obsoletos tras un Alt+Enter; ahora se refresca en cada `Present()`.
+        Además, la tabla de `GameOptions.cpp` que fuerza la altura según el
+        ancho (1280→1024, 1920→1080...) se dejó solo en `_WIN32`: en un
+        panel 16:10 convertía 1280x800 en 1280x1024 (más alto que la
+        pantalla). SDL/GL acepta cualquier tamaño y el Option portado solo
+        ofrece modos reales del display.*
       - *Descubrimiento del layout de distribución: `FindGameDataDir` no
         contemplaba el layout "todos los binarios + `assets/Client` en una
         misma carpeta" ni, en macOS, que la copia de datos del build vive
