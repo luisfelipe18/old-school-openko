@@ -66,6 +66,8 @@
 #include "text_resources.h"
 
 #include <N3Base/DFont.h>
+#include <N3Base/My_3DStruct.h> // __VertexTransformedColor, FVF_TRANSFORMEDCOLOR
+#include <N3Base/N3UIDef.h>     // UI_DEFAULT_Z / UI_DEFAULT_RHW
 
 #include <algorithm>
 #include <cctype>
@@ -882,7 +884,7 @@ void CGameProcMain::GMPanelHandleInput()
 	if (s_pLocalInput->IsKeyPress(DIK_ESCAPE))
 	{
 		m_bGMPanelVisible = false;
-		s_pLocalInput->KeyboardClearInput(-1);
+		s_pLocalInput->KeyboardClearPresses();
 		return;
 	}
 
@@ -924,8 +926,61 @@ void CGameProcMain::GMPanelHandleInput()
 	if (s_pLocalInput->IsKeyPress(DIK_MINUS) || s_pLocalInput->IsKeyPress(DIK_SUBTRACT))
 		iViewDist = std::max(256, iViewDist - 128);
 
-	// Modal: don't let this frame's keys leak into the gameplay hotkeys below.
-	s_pLocalInput->KeyboardClearInput(-1);
+	// Modal: swallow this frame's key presses so they don't leak into the
+	// gameplay hotkeys below. Clear only the edge flags (not the held state) so
+	// a key you hold while typing registers once, not once per frame.
+	s_pLocalInput->KeyboardClearPresses();
+}
+
+// Filled translucent quad in screen space (for the panel background).
+void CGameProcMain::GMPanelDrawRect(float x, float y, float w, float h, uint32_t color)
+{
+	__VertexTransformedColor v[4] = {
+		{x, y, UI_DEFAULT_Z, UI_DEFAULT_RHW, color},
+		{x + w, y, UI_DEFAULT_Z, UI_DEFAULT_RHW, color},
+		{x + w, y + h, UI_DEFAULT_Z, UI_DEFAULT_RHW, color},
+		{x, y + h, UI_DEFAULT_Z, UI_DEFAULT_RHW, color},
+	};
+
+	DWORD dwZ = 0, dwFog = 0, dwAlpha = 0, dwSrc = 0, dwDest = 0, dwFVF = 0, dwCull = 0;
+	DWORD dwCOP = 0, dwCA1 = 0, dwAOP = 0, dwAA1 = 0;
+	CN3Base::RHIDevice()->GetRenderState(D3DRS_ZENABLE, &dwZ);
+	CN3Base::RHIDevice()->GetRenderState(D3DRS_FOGENABLE, &dwFog);
+	CN3Base::RHIDevice()->GetRenderState(D3DRS_ALPHABLENDENABLE, &dwAlpha);
+	CN3Base::RHIDevice()->GetRenderState(D3DRS_SRCBLEND, &dwSrc);
+	CN3Base::RHIDevice()->GetRenderState(D3DRS_DESTBLEND, &dwDest);
+	CN3Base::RHIDevice()->GetRenderState(D3DRS_CULLMODE, &dwCull);
+	CN3Base::RHIDevice()->GetTextureStageState(0, D3DTSS_COLOROP, &dwCOP);
+	CN3Base::RHIDevice()->GetTextureStageState(0, D3DTSS_COLORARG1, &dwCA1);
+	CN3Base::RHIDevice()->GetTextureStageState(0, D3DTSS_ALPHAOP, &dwAOP);
+	CN3Base::RHIDevice()->GetTextureStageState(0, D3DTSS_ALPHAARG1, &dwAA1);
+	CN3Base::RHIDevice()->GetFVF(&dwFVF);
+
+	CN3Base::RHIDevice()->SetRenderState(D3DRS_ZENABLE, FALSE);
+	CN3Base::RHIDevice()->SetRenderState(D3DRS_FOGENABLE, FALSE);
+	CN3Base::RHIDevice()->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+	CN3Base::RHIDevice()->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
+	CN3Base::RHIDevice()->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+	CN3Base::RHIDevice()->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+	CN3Base::RHIDevice()->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
+	CN3Base::RHIDevice()->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_DIFFUSE);
+	CN3Base::RHIDevice()->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
+	CN3Base::RHIDevice()->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_DIFFUSE);
+	CN3Base::RHIDevice()->SetFVF(FVF_TRANSFORMEDCOLOR);
+
+	CN3Base::RHIDevice()->DrawPrimitiveUP(D3DPT_TRIANGLEFAN, 2, v, sizeof(__VertexTransformedColor));
+
+	CN3Base::RHIDevice()->SetRenderState(D3DRS_ZENABLE, dwZ);
+	CN3Base::RHIDevice()->SetRenderState(D3DRS_FOGENABLE, dwFog);
+	CN3Base::RHIDevice()->SetRenderState(D3DRS_ALPHABLENDENABLE, dwAlpha);
+	CN3Base::RHIDevice()->SetRenderState(D3DRS_SRCBLEND, dwSrc);
+	CN3Base::RHIDevice()->SetRenderState(D3DRS_DESTBLEND, dwDest);
+	CN3Base::RHIDevice()->SetRenderState(D3DRS_CULLMODE, dwCull);
+	CN3Base::RHIDevice()->SetTextureStageState(0, D3DTSS_COLOROP, dwCOP);
+	CN3Base::RHIDevice()->SetTextureStageState(0, D3DTSS_COLORARG1, dwCA1);
+	CN3Base::RHIDevice()->SetTextureStageState(0, D3DTSS_ALPHAOP, dwAOP);
+	CN3Base::RHIDevice()->SetTextureStageState(0, D3DTSS_ALPHAARG1, dwAA1);
+	CN3Base::RHIDevice()->SetFVF(dwFVF);
 }
 
 void CGameProcMain::GMPanelRender()
@@ -940,37 +995,32 @@ void CGameProcMain::GMPanelRender()
 	if (m_pGMFont == nullptr)
 	{
 		const std::string szFontID = fmt::format_text_resource(IDS_FONT_ID);
-		m_pGMFont                  = new CDFont(szFontID, 14, D3DFONT_BOLD);
+		m_pGMFont                  = new CDFont(szFontID, 16, D3DFONT_BOLD);
 		m_pGMFont->InitDeviceObjects(s_lpD3DDev);
 		m_pGMFont->RestoreDeviceObjects();
 	}
 
-	CUIManager::RenderStateSet();
-
-	float x        = 20.0f;
-	float y        = 60.0f;
-	const auto Row = [&](const std::string& szText, uint32_t dwColor) {
-		m_pGMFont->SetText(szText);
-		m_pGMFont->DrawText(x, y, dwColor, 0);
-		y += 18.0f;
-	};
-
-	Row(fmt::format("== GM PANEL ==   View distance: {}  (+/-)   Esc: close",
-			CN3Base::s_Options.iViewDist),
-		0xFFFFFF00);
-	Row(fmt::format("Box: {}_   (name to search, or a GM command + Tab to run)",
-			m_szGMPanelFilter),
-		0xFF66CCFF);
-	Row("  Tab runs: giveitem <id> [n] | expadd <n> | zonechange <zone> [x] [z]", 0xFF88AA88);
-	Row(fmt::format("Matches in map: {}   (Up/Down select, Enter teleport)", m_GMPanelIDs.size()),
-		0xFFCCCCCC);
+	// Build every line first so we can size and place the background box.
+	std::vector<std::pair<std::string, uint32_t>> lines;
+	lines.emplace_back(fmt::format("== GM PANEL ==   View distance: {}  (+/-)   Esc: close",
+						   CN3Base::s_Options.iViewDist),
+		0xFFFFF080);
+	lines.emplace_back(
+		fmt::format("Box: {}_", m_szGMPanelFilter.empty() ? "(type a name or command)" : m_szGMPanelFilter),
+		0xFF80D0FF);
+	lines.emplace_back("Tab runs: giveitem <id> [n] | expadd <n> | zonechange <zone> [x] [z]",
+		0xFF90E090);
+	lines.emplace_back(
+		fmt::format("Matches: {}   (Up/Down select, Enter teleport)", m_GMPanelIDs.size()),
+		0xFFD0D0D0);
 
 	if (m_GMPanelIDs.empty() && !m_szGMPanelFilter.empty())
-		Row("  (no match present - the monster/boss must be spawned in this zone)", 0xFFFF8080);
+		lines.emplace_back("(no match present - the monster must be spawned in this zone)",
+			0xFFFF9090);
 
-	// Show a window of rows centred on the selection.
+	// Window of rows centred on the selection.
 	const int iCount   = static_cast<int>(m_GMPanelIDs.size());
-	const int iMaxRows = 18;
+	const int iMaxRows = 16;
 	int iStart         = m_iGMPanelSel - iMaxRows / 2;
 	iStart             = std::clamp(iStart, 0, std::max(0, iCount - iMaxRows));
 	const int iEnd     = std::min(iCount, iStart + iMaxRows);
@@ -982,16 +1032,40 @@ void CGameProcMain::GMPanelRender()
 		if (pNPC == nullptr)
 			continue;
 
-		const float fDist = (pNPC->Position() - vMe).Magnitude();
+		const float fDist  = (pNPC->Position() - vMe).Magnitude();
 		std::string szName = pNPC->IDString();
 		if (szName.empty())
 			szName = fmt::format("NPC#{}", pNPC->IDNumber());
 
 		const bool bSel = (i == m_iGMPanelSel);
-		Row(fmt::format("{} {}  (id {})  {:.0f}m", bSel ? ">" : "  ", szName, pNPC->IDNumber(), fDist),
-			bSel ? 0xFF00FF00 : 0xFFFFFFFF);
+		lines.emplace_back(
+			fmt::format("{} {}  (id {})  {:.0f}m", bSel ? ">" : "  ", szName, pNPC->IDNumber(), fDist),
+			bSel ? 0xFF60FF60 : 0xFFFFFFFF);
 	}
 
+	// Layout: bottom-left corner.
+	const float fLineH  = 19.0f;
+	const float fPadX   = 12.0f;
+	const float fPadY   = 10.0f;
+	const float fBoxW   = 620.0f;
+	const float fBoxH   = static_cast<float>(lines.size()) * fLineH + fPadY * 2.0f;
+	const float fScreenH = static_cast<float>(CN3Base::s_CameraData.vp.Height);
+	const float fBoxX   = 12.0f;
+	const float fBoxY   = fScreenH - fBoxH - 12.0f;
+
+	// Translucent black background so the text reads over any scene.
+	GMPanelDrawRect(fBoxX, fBoxY, fBoxW, fBoxH, D3DCOLOR_ARGB(0xC0, 0x00, 0x00, 0x00));
+
+	CUIManager::RenderStateSet();
+	float x = fBoxX + fPadX;
+	float y = fBoxY + fPadY;
+	for (const auto& [szText, dwColor] : lines)
+	{
+		m_pGMFont->SetText(szText);
+		m_pGMFont->DrawText(x + 1.0f, y + 1.0f, 0xFF000000, 0); // drop shadow for legibility
+		m_pGMFont->DrawText(x, y, dwColor, 0);
+		y += fLineH;
+	}
 	CUIManager::RenderStateRestore();
 }
 

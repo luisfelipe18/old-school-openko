@@ -344,6 +344,7 @@ public:
 	void GMPanelHandleInput(); // toggle + navigation + view-distance keys (from Tick)
 	void GMPanelRebuildList(); // refresh m_GMPanelIDs from the present NPCs, nearest first
 	void GMPanelRender();      // draw the text overlay (from Render)
+	void GMPanelDrawRect(float x, float y, float w, float h, uint32_t color); // translucent bg
 	void GMPanelTeleportTo(int iNpcID);
 
 	void Init() override;    // UI 와 UI 리소스등을 읽는다.

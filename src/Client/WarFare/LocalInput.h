@@ -89,6 +89,17 @@ public:
 		}
 	}
 
+	// Clears only the edge flags (just-pressed / just-released) for this frame,
+	// leaving the held-key state (cur/old) intact. Use this to "swallow" a
+	// frame's key presses so they don't reach later consumers, WITHOUT breaking
+	// next frame's edge detection - zeroing cur/old (KeyboardClearInput) makes a
+	// still-held key re-fire as a fresh press every frame.
+	void KeyboardClearPresses()
+	{
+		memset(m_bKeyPresses, 0, sizeof(m_bKeyPresses));
+		memset(m_bKeyPresseds, 0, sizeof(m_bKeyPresseds));
+	}
+
 	BOOL IsNoKeyDown() const
 	{
 		return m_bNoKeyDown;
