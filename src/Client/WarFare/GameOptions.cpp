@@ -122,9 +122,19 @@ void LoadGameOptions()
 	// This is officially enabled by default.
 	CN3Base::s_Options.bVSyncEnabled = ini.GetBool("Screen", "VSyncEnabled", true);
 
-	// POSIX-only: pick the RHI render backend. "GL" uses the OpenGL backend
-	// (docs/PORT_POSIX_PLAN.md, T6.5); "Null" is the headless backend for CI
-	// smoke runs. Default to GL so the game is visible out of the box.
-	const std::string szRenderer         = ini.GetString("Screen", "Renderer", "GL");
-	CN3Base::s_Options.bPreferGLRenderer = (szRenderer == "GL" || szRenderer == "gl");
+	// POSIX-only: pick the RHI render backend (docs/PORT_POSIX_PLAN.md,
+	// T6.5/F6b). "SDLGPU" is Metal on macOS / Vulkan on Linux, "GL" the
+	// OpenGL backend, "Null" the headless one for CI smoke runs. Default to
+	// GL until F6b's parity pass promotes SDLGPU (T6b.3).
+	std::string szRenderer = ini.GetString("Screen", "Renderer", "GL");
+	for (char& c : szRenderer)
+		c = static_cast<char>(toupper(static_cast<unsigned char>(c)));
+	if (szRenderer == "SDLGPU")
+		CN3Base::s_Options.eRenderer = __Options::PosixRenderer::SDLGPU;
+	else if (szRenderer == "GL")
+		CN3Base::s_Options.eRenderer = __Options::PosixRenderer::GL;
+	else
+		CN3Base::s_Options.eRenderer = __Options::PosixRenderer::Null;
+	CN3Base::s_Options.bPreferGLRenderer =
+		(CN3Base::s_Options.eRenderer == __Options::PosixRenderer::GL);
 }

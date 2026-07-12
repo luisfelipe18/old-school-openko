@@ -540,15 +540,44 @@ CI verde en las 3 plataformas; el subset POSIX incluye terreno/UI base.
 
 ### Fase 6b — Backend SDL_GPU: el definitivo para macOS/Linux (esfuerzo: ~2 sp)
 
-* [ ] **T6b.1 — Toolchain de shaders.** Über-shader portado a HLSL,
-      compilación offline con `SDL_shadercross` a SPIR-V + MSL como paso de
-      build CMake (find_package con fallback FetchContent).
-* [ ] **T6b.2 — `RHIDeviceSDLGPU`.** Device/swapchain/passes de SDL_GPU;
-      caché de pipelines con `RHIStateKey` (ya existe con tests); buffers
-      transitorios para `Draw*UP`; texturas (BC1-3 nativos en Metal/Vulkan).
-* [ ] **T6b.3 — Paridad y default.** `Renderer=SDLGPU` en `Option.ini`,
-      comparación visual GL vs SDL_GPU con las mismas capturas, Xcode GPU
-      capture en macOS; pasar el default de macOS a SDL_GPU.
+* [x] **T6b.0/T6b.1 — Toolchain + über-shader.** *(Hecho, con una desviación
+      justificada del plan: la fuente es Vulkan GLSL en vez de HLSL — port
+      literal del über-shader GL ya probado (`shaders/uber_sdlgpu.vert/.frag`),
+      y el toolchain es `glslangValidator` (GLSL→SPIR-V) + `spirv-cross`
+      (SPIR-V→MSL), ambos en los archives de apt/brew, en vez de arrastrar
+      `SDL_shadercross`+DXC al build. `shaders/build_shaders.sh` regenera
+      `ShaderBlobsSDLGPU.h` (COMMITEADO: el build normal no necesita ningún
+      toolchain de shaders). El MSL generado cae exactamente en el modelo de
+      bindings del backend Metal de SDL (buffer(0), texture/sampler(0..2),
+      stage_in, entry main0). Diferencias respecto al shader GL, impuestas
+      por las APIs: sin remap de profundidad (SDL_GPU mantiene z∈[0,1] como
+      D3D), swizzle BGRA del color de vértice en el shader (SDL_GPU no tiene
+      formato de vértice BGRA), uniforms en dos bloques std140 (sets 1 y 3),
+      y gl_PointSize escrito para point lists.)*
+* [x] **T6b.2 — `RHIDeviceSDLGPU`.** *(Hecho. Arquitectura "grabar y
+      reproducir": D3D9 permite subir datos y dibujar en cualquier punto del
+      frame, pero SDL_GPU prohíbe copy passes dentro de un render pass — los
+      draws se GRABAN durante el frame (snapshot de estado/uniforms + copia
+      de vértices/índices a una arena) y `Present()` ejecuta un copy pass
+      con todos los uploads seguido del render pass que los reproduce.
+      `Clear()` a mitad de frame = corte de pass con load ops. Render a
+      target offscreen + blit al swapchain (habilita los hooks de test
+      `ReadCenterPixel`/`DumpFramePPM`). Caché de pipelines por clave
+      (FVF/stride/topología/blend/z/cull), caché de samplers, triangle fans
+      expandidos a listas indexadas (SDL_GPU no tiene fans; la UI entera
+      dibuja quads como fans), texturas BC1-3 passthrough y 16bpp/24bpp
+      expandidos a BGRA8 en CPU, texturas liberadas a mitad de frame van a
+      un graveyard drenado tras el submit. Los buffers del motor siguen en
+      memoria de sistema (Null) y se streamean por frame — correcto primero,
+      buffers GPU persistentes como optimización futura. 8 tests de los
+      helpers puros (`SDLGPUTranslate_test.cpp`) + `--renderer sdlgpu` /
+      `Renderer=SDLGPU` cableados.)*
+* [~] **T6b.3 — Paridad y default.** *(Parcial: paridad pixel-perfect del
+      test-scene GL vs SDL_GPU verificada en Linux/Vulkan-lavapipe — diff
+      máximo 1/255 por redondeo, 0 píxeles con diff>16 de 786k, mismo píxel
+      central. Pendiente: validación in-game (login→mundo) sobre Metal en
+      Mac real, y tras ella pasar el default de macOS a SDL_GPU — GL sigue
+      siendo el default hasta entonces.)*
 
 **Nota:** paralelizable con F7 tras T6.7. **Aceptación:** cliente corriendo
 sobre Metal en macOS con paridad visual respecto a GL y D3D9.
@@ -1040,7 +1069,7 @@ Las fases 1 y 2 son el grueso; 3–5 son flecos paralelizables.
 grande restante (~2 sp).** Hoy macOS corre sobre OpenGL deprecado; SDL_GPU
 es la salida definitiva. Desglose concreto:
 
-* [ ] **T6b.0 — Toolchain de shaders (decisión + andamiaje).** Dos
+* [x] **T6b.0 — Toolchain de shaders (decisión + andamiaje).** (Hecho, ver Fase 6b.) Dos
       opciones: (a) `SDL_shadercross` integrado al build (HLSL→SPIR-V/MSL/
       DXIL; arrastra DXC y SPIRV-Cross — dependencias pesadas), o
       (b) precompilación offline commiteada: el über-shader HLSL fuente en
@@ -1048,12 +1077,12 @@ es la salida definitiva. Desglose concreto:
       script reproducible (cero dependencias nuevas en el build normal).
       **Recomendación: (b)** — es un único shader que cambia poco; el
       script corre solo cuando se toca el shader.
-* [ ] **T6b.1 — Über-shader HLSL.** Portar el GLSL actual de
+* [x] **T6b.1 — Über-shader (Vulkan GLSL, ver Fase 6b).** Portar el GLSL actual de
       `RHIDeviceGL` (emulación fixed-function: transform WVP, 2 stages de
       textura con ops D3D9, fog lineal, luces direccionales/puntuales,
       alpha-test, XYZRHW passthrough) a un HLSL único con el mismo layout
       de constantes; verificable offline compilándolo a SPIR-V.
-* [ ] **T6b.2 — `RHIDeviceSDLGPU`.** Device + swapchain + render passes;
+* [x] **T6b.2 — `RHIDeviceSDLGPU`.** (Hecho, ver Fase 6b.) Device + swapchain + render passes;
       caché de pipelines claveada por `RHIStateKey` (ya existe con tests);
       `IRHIVertexBuffer`/`IRHIIndexBuffer`/`IRHITexture` sobre buffers y
       texturas SDL_GPU (upload por transfer buffer); draws UP (el camino

@@ -20,6 +20,7 @@
 #include "LocalInput.h"
 #include "LocalInputSDL.h"
 #include "RHIDeviceGL.h"
+#include "RHIDeviceSDLGPU.h"
 #include "TestScene.h"
 
 #include <N3Base/LogWriter.h>
@@ -225,7 +226,7 @@ int main(int argc, char* argv[])
 	//   --test-scene       draws the RHI diagnostic scene, docs/PORT_POSIX_PLAN.md
 	//                      T6.6/T6.7 (implies diagnostics).
 	//   --diagnostics      runs the diagnostic clear-color loop.
-	//   --renderer <gl|null>  overrides the Option.ini backend.
+	//   --renderer <sdlgpu|gl|null>  overrides the Option.ini backend.
 	//   --dump-frame <path>   saves one GL frame as PPM after the loop.
 	//   --data <path>      points the client at a game-data directory
 	//                      (containing Server.Ini, Data/, UI/, ...); needed on
@@ -303,11 +304,20 @@ int main(int argc, char* argv[])
 					 "run from the directory containing Server.Ini and Data/");
 	}
 
-	bool bWantGL = CN3Base::s_Options.bPreferGLRenderer;
-	if (rendererOverride == "gl" || rendererOverride == "GL")
-		bWantGL = true;
-	else if (rendererOverride == "null" || rendererOverride == "Null")
-		bWantGL = false;
+	__Options::PosixRenderer eRenderer = CN3Base::s_Options.eRenderer;
+	{
+		std::string szOverride = rendererOverride;
+		for (char& c : szOverride)
+			c = static_cast<char>(toupper(static_cast<unsigned char>(c)));
+		if (szOverride == "SDLGPU")
+			eRenderer = __Options::PosixRenderer::SDLGPU;
+		else if (szOverride == "GL")
+			eRenderer = __Options::PosixRenderer::GL;
+		else if (szOverride == "NULL")
+			eRenderer = __Options::PosixRenderer::Null;
+	}
+	bool bWantGL     = (eRenderer == __Options::PosixRenderer::GL);
+	bool bWantSDLGPU = (eRenderer == __Options::PosixRenderer::SDLGPU);
 
 	srand((uint32_t) time(nullptr));
 
@@ -407,18 +417,32 @@ int main(int argc, char* argv[])
 
 	SetupWindowCursor();
 
-	// Render backend: OpenGL when requested and available (draws the clear
-	// colour to the window), otherwise the headless Null backend that CI runs
+	// Render backend: SDL_GPU (Metal/Vulkan, F6b) or OpenGL when requested
+	// and available, otherwise the headless Null backend that CI runs
 	// (render code executes and is counted, pixels come later).
 	std::unique_ptr<IRHIDevice> pRHIDevice;
-	bool bUsingGL = false;
-	if (bWantGL)
+	const char* szBackendName = "Null";
+	if (bWantSDLGPU)
+	{
+		auto pGPU = std::make_unique<RHIDeviceSDLGPU>(g_pWindow, CN3Base::s_Options.bVSyncEnabled);
+		if (pGPU->IsValid())
+		{
+			pRHIDevice    = std::move(pGPU);
+			szBackendName = "SDL_GPU";
+		}
+		else
+		{
+			spdlog::warn("SDL_GPU backend unavailable; falling back to the Null backend "
+						 "(the window was created without the OpenGL flag)");
+		}
+	}
+	else if (bWantGL)
 	{
 		auto pGL = std::make_unique<RHIDeviceGL>(g_pWindow, CN3Base::s_Options.bVSyncEnabled);
 		if (pGL->IsValid())
 		{
-			pRHIDevice = std::move(pGL);
-			bUsingGL   = true;
+			pRHIDevice    = std::move(pGL);
+			szBackendName = "OpenGL";
 		}
 		else
 		{
@@ -429,7 +453,7 @@ int main(int argc, char* argv[])
 		pRHIDevice = std::make_unique<RHIDeviceNull>();
 
 	CN3Base::RHIDeviceSet(pRHIDevice.get());
-	spdlog::info("render backend: {}", bUsingGL ? "OpenGL" : "Null");
+	spdlog::info("render backend: {}", szBackendName);
 
 	CLocalInput localInput;
 	localInput.Init(nullptr, nullptr);
@@ -571,9 +595,10 @@ int main(int argc, char* argv[])
 	if (auto* pNull = dynamic_cast<RHIDeviceNull*>(pRHIDevice.get()))
 		spdlog::info("frames presented through the RHI: {}", pNull->PresentCount());
 
-	// Smoke diagnostics: with the GL backend, prove pixels actually landed by
-	// rendering one final frame and sampling its center before the swap
-	// (glReadPixels reads the back buffer).
+	// Smoke diagnostics: with a hardware backend, prove pixels actually
+	// landed by rendering one final frame and sampling its center (GL reads
+	// the back buffer before the swap; SDL_GPU reads its offscreen target
+	// after the flush).
 	if (auto* pGL = dynamic_cast<RHIDeviceGL*>(pRHIDevice.get()))
 	{
 		pGL->BeginScene();
@@ -592,6 +617,27 @@ int main(int argc, char* argv[])
 
 		if (!dumpFramePath.empty() && pGL->DumpFramePPM(dumpFramePath.c_str()))
 			spdlog::info("GL frame dumped to {}", dumpFramePath);
+	}
+	else if (auto* pGPU = dynamic_cast<RHIDeviceSDLGPU*>(pRHIDevice.get()))
+	{
+		pGPU->BeginScene();
+		pGPU->Clear(D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, 0xFF102040, 1.0f, 0);
+		if (bTestScene)
+		{
+			int pixelW = 0, pixelH = 0;
+			SDL_GetWindowSizeInPixels(g_pWindow, &pixelW, &pixelH);
+			TestSceneTick(pRHIDevice.get(), static_cast<float>(frame) * 0.02f, pixelW, pixelH);
+		}
+		pGPU->EndScene();
+		pGPU->Present(); // flush the recorded frame into the offscreen target
+
+		uint8_t rgba[4] = {};
+		if (pGPU->ReadCenterPixel(rgba))
+			spdlog::info(
+				"SDL_GPU center pixel: R={} G={} B={} A={}", rgba[0], rgba[1], rgba[2], rgba[3]);
+
+		if (!dumpFramePath.empty() && pGPU->DumpFramePPM(dumpFramePath.c_str()))
+			spdlog::info("SDL_GPU frame dumped to {}", dumpFramePath);
 	}
 
 	TestSceneRelease(); // GL resources must go before the context

@@ -328,6 +328,10 @@ else()
     LocalInputSDL.h
     RHIDeviceGL.cpp
     RHIDeviceGL.h
+    RHIDeviceSDLGPU.cpp
+    RHIDeviceSDLGPU.h
+    SDLGPUTranslate.h
+    shaders/ShaderBlobsSDLGPU.h
     StdAfx.h
     TestScene.cpp
     TestScene.h

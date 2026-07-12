@@ -148,9 +148,19 @@ struct __Options
 
 	bool bVSyncEnabled    = true;
 
-	// POSIX render backend selection (docs/PORT_POSIX_PLAN.md, T6.5): the RHI
-	// OpenGL backend when true, the headless Null backend otherwise. Windows
-	// always renders through Direct3D 9 and ignores this.
+	// POSIX render backend selection (docs/PORT_POSIX_PLAN.md, T6.5/F6b):
+	// SDLGPU (Metal/Vulkan) and GL are the hardware backends, Null is the
+	// headless one for CI/smoke. Windows always renders through Direct3D 9
+	// and ignores this.
+	enum class PosixRenderer
+	{
+		Null,
+		GL,
+		SDLGPU,
+	};
+	PosixRenderer eRenderer = PosixRenderer::Null;
+
+	// Legacy alias for eRenderer == GL (pre-F6b call sites).
 	bool bPreferGLRenderer = false;
 };
 

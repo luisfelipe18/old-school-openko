@@ -35,6 +35,13 @@ public:
 		return m_dwFVF;
 	}
 
+	// Backends that stream from system memory (SDL_GPU) read the CPU copy at
+	// draw time instead of keeping a GPU twin of every buffer.
+	const std::vector<uint8_t>& StorageBytes() const
+	{
+		return m_Storage;
+	}
+
 protected:
 	std::vector<uint8_t> m_Storage;
 	DWORD m_dwFVF   = 0;
@@ -93,6 +100,12 @@ public:
 	D3DFORMAT Format() const override
 	{
 		return m_eFormat;
+	}
+
+	// See RHIVertexBufferNull::StorageBytes().
+	const std::vector<uint8_t>& StorageBytes() const
+	{
+		return m_Storage;
 	}
 
 protected:

@@ -25,6 +25,7 @@ if(NOT WIN32)
     CursorDecoder_test.cpp
     GLTranslate_test.cpp
     ScancodeMap_test.cpp
+    SDLGPUTranslate_test.cpp
     TextResource_test.cpp)
 
   set_target_properties(WarFareClient.Tests PROPERTIES
