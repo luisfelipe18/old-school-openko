@@ -1,4 +1,5 @@
 add_executable(Platform.Tests
+  GameDataDir_test.cpp
   IconDecoder_test.cpp
   PlatformCrypto_test.cpp
   PlatformEncoding_test.cpp

@@ -120,10 +120,15 @@ bool ReadOneFrame(asio::ip::tcp::socket& socket, std::vector<uint8_t>& buffer,
 
 void NetworkThreadMain(SharedState& shared, fs::path gameDir)
 {
-	const std::vector<std::string> ips = launcher_core::ReadServerIpList((gameDir / "Server.Ini").string());
+	const fs::path serverIni = gameDir / "Server.Ini";
+	const std::vector<std::string> ips = launcher_core::ReadServerIpList(serverIni.string());
 	if (ips.empty())
 	{
-		SetStatus(shared, LauncherState::Error, "No servers listed in Server.Ini");
+		// Spell out the exact path so a wrong game-data directory (the usual
+		// cause) is visible in the window itself, not just in the log.
+		SetStatus(shared, LauncherState::Error,
+			"No servers listed in " + serverIni.string()
+				+ " - point --data (or OPENKO_GAME_DATA) at the folder holding Server.Ini");
 		return;
 	}
 

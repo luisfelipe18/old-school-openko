@@ -976,7 +976,20 @@ la traen activada).
         el usuario confirmó que no hace falta replicar las fuentes
         nativas de Windows del diálogo original y dio libertad total de
         estilo. Las ventanas de ambas herramientas se agrandaron para
-        acomodar el padding nuevo sin recortar contenido.)*
+        acomodar el padding nuevo sin recortar contenido.*
+      - *Descubrimiento del layout de distribución: `FindGameDataDir` no
+        contemplaba el layout "todos los binarios + `assets/Client` en una
+        misma carpeta" ni, en macOS, que la copia de datos del build vive
+        DENTRO del bundle (`KnightOnLine.app/Contents/Resources/GameData`)
+        donde un binario plano vecino (Option/Launcher) no miraba — por eso
+        `Launcher` en macOS caía al CWD y fallaba con "No servers listed".
+        Se añadieron los candidatos `<cwd>/assets/Client`,
+        `<exeDir>/assets/Client` y (macOS) el `GameData` dentro del bundle
+        hermano `KnightOnLine.app`/`Knight OnLine.app`. El error de
+        `Server.Ini` vacío ahora muestra la ruta exacta que se intentó leer.
+        4 tests nuevos (`tests/Platform/GameDataDir_test.cpp`) + verificación
+        end-to-end en un directorio de distribución simulado, con CWD dentro
+        y fuera de él.)*
 
 **Aceptación (parcial):** `Option` y `Launcher` compilan, pasan sus tests
 (27 en `Platform.Tests`, 7 en `Option.Tests`, 11 en `Launcher.Tests`, 16 en

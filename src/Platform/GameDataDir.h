@@ -43,7 +43,12 @@ inline std::filesystem::path FindGameDataDir(const std::string& explicitOverride
 	std::vector<std::filesystem::path> candidates;
 
 	std::error_code cwdEc;
-	candidates.push_back(std::filesystem::current_path(cwdEc));
+	std::filesystem::path cwd = std::filesystem::current_path(cwdEc);
+	candidates.push_back(cwd);
+	// The repo/distribution layout: binaries living alongside an
+	// assets/Client/ folder holding the game data (this is also what the
+	// build tree's staging step copies from).
+	candidates.push_back(cwd / "assets" / "Client");
 
 	if (std::filesystem::path exeDir = GetExecutableDir(); !exeDir.empty())
 	{
@@ -51,6 +56,7 @@ inline std::filesystem::path FindGameDataDir(const std::string& explicitOverride
 		// binary (Linux) or inside Contents/Resources/ (macOS bundle), so
 		// those slots take priority over the raw exe dir.
 		candidates.push_back(exeDir / "GameData");
+		candidates.push_back(exeDir / "assets" / "Client");
 		candidates.push_back(exeDir);
 #if defined(__APPLE__)
 		// macOS bundle-relative locations. GameData/ inside Resources/ is
@@ -60,6 +66,11 @@ inline std::filesystem::path FindGameDataDir(const std::string& explicitOverride
 		// A data dir next to the .app is another common install layout.
 		candidates.push_back(exeDir / ".." / ".." / ".." / "GameData");
 		candidates.push_back(exeDir / ".." / ".." / "..");
+		// Plain-binary tools (Option, Launcher) sitting NEXT TO the game's
+		// .app bundle: on macOS the staging step puts GameData inside the
+		// bundle, so a sibling tool has to reach into it.
+		candidates.push_back(exeDir / "KnightOnLine.app" / "Contents" / "Resources" / "GameData");
+		candidates.push_back(exeDir / "Knight OnLine.app" / "Contents" / "Resources" / "GameData");
 #endif
 	}
 	if (const char* home = std::getenv("HOME"); home != nullptr && home[0] != '\0')
