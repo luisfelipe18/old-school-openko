@@ -893,18 +893,54 @@ la traen activada).
       formato JPEG propietario) con soporte para exportar a `.jpg` plano.
       Reutiliza el decriptado ya portado en `N3JpegFile`/`JpegFile`
       (libjpeg ya es dependencia POSIX). Pendiente.
-* [ ] **Launcher.** El más grande de los tres: version-check contra
-      VersionManager, descarga de parches por FTP, extracción de ZIP
-      (`ZipArchive`, hoy Windows-only), y lanzamiento del cliente. Se
-      planea un alcance reducido para la primera pasada POSIX — conectar,
-      mostrar version-check y lista de servidores, y lanzar `KnightOnLine`
-      directamente — dejando el flujo de auto-parcheo (necesita un cliente
-      FTP y una librería ZIP portables, ninguno trivial) como extensión
-      posterior explícitamente separada. Pendiente.
+* [x] **Launcher.** Version-check real contra VersionManager (mismo puerto
+      15100 / IPs de `Server.Ini` que usa la escena de login de `WarFare`)
+      y lanzamiento del cliente. Descarga de parches por FTP + extracción
+      ZIP (`ZipArchive`, hoy Windows-only) quedan explícitamente diferidas.
+      *(Hecho. Antes de escribir código se auditó qué hace *realmente* el
+      Launcher de Windows — hallazgo importante: los bitmaps con arte
+      (`res/Bkg.bmp` con el caballero, botones `Btn_Connect`/`Btn_join`/...)
+      están compilados como recursos pero **ningún código los carga**
+      (`grep` exhaustivo sin resultados sobre sus `IDB_*`); el diálogo real
+      (`IDD_LAUNCHER_DIALOG` en `Launcher.rc`) es una tira de 279x60 con
+      solo una barra de progreso y una línea de estado. Replicar el arte
+      habría sido inventar una UI que nunca corrió en Windows, así que se
+      portó la de verdad. También se auditó el protocolo: `LauncherDlg.cpp`
+      define localmente `LOGIN_REQ=0x03`/`SERVER_LIST=0x05`, que ya NO
+      coinciden con `LS_LOGIN_REQ=0xF3`/`LS_SERVERLIST=0xF5` del protocolo
+      actual (`shared/packets.h`) — ese camino ya es código muerto contra
+      el `VersionManager` real incluso en el binario de Windows, así que no
+      tenía sentido para portarlo (la propia escena de login de `WarFare`
+      ya es el camino real y funcional de login/lista de servidores). Lo
+      que SÍ coincide y funciona: `VERSION_REQ=0x01`/`DOWNLOAD_INFO_REQ=0x02`
+      contra `LS_VERSION_REQ`/`LS_DOWNLOADINFO_REQ`, sin cifrado (verificado
+      en `Server/VersionManager/User.cpp` — esos dos casos nunca llaman a
+      `JvCryption`). `LauncherCore.h/.cpp` reimplementa ese subconjunto
+      byte a byte: mismo framing `0xAA55`/`0x55AA` que `CAPISocket::Send`
+      (verificado contra `APISocket.cpp` línea por línea), mismos layouts
+      `SetString2`/`SetShort` que `VersionManagerApp::SendDownloadInfo`.
+      `LauncherMainSDL.cpp` conecta en un hilo de fondo (Asio síncrono,
+      mismo patrón sin timeout explícito que `CAPISocket::Connect`), pide
+      versión, y si coincide lanza `KnightOnLine` (con una pausa breve
+      visible en vez de un salto instantáneo) — si el servidor está por
+      delante, pide `DOWNLOAD_INFO_REQ` y muestra la lista de archivos
+      pendientes sin descargarlos (el flujo de parcheo FTP/ZIP sigue
+      diferido). 11 tests (`tests/Launcher/LauncherCore_test.cpp`) fijan el
+      framing/parsing byte a byte contra los layouts reales del servidor.
+      **Verificado con un `VersionManager` de juguete real** (socket Python
+      hablando el protocolo exacto, no mocks): el intercambio completo
+      versión-coincide → auto-lanza `KnightOnLine` (que a su vez abrió un
+      contexto GL real y arrancó) y versión-desactualizada → pide y muestra
+      la lista de parches, ambos capturados visualmente con Xvfb+Mesa. De
+      paso se corrigió que ni `Option` ni `Launcher` reenviaban `--data` al
+      `KnightOnLine` que lanzan — ahora ambos lo hacen (solo cuando el
+      directorio resuelto es uno real, no el CWD de respaldo). Limpio bajo
+      el preset `linux-asan` (ASan+UBSan) ejercitando el socket real.)*
 
-**Aceptación (parcial):** `Option` compila, pasa sus tests, y se verificó
-visualmente en Linux headless (Xvfb). `KscViewer`/`Launcher` quedan para
-continuar esta fase.
+**Aceptación (parcial):** `Option` y `Launcher` compilan, pasan sus tests,
+y se verificaron visualmente en Linux headless (Xvfb) — `Launcher` además
+contra un servidor de protocolo real. `KscViewer` queda para continuar
+esta fase.
 
 ---
 

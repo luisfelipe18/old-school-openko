@@ -90,6 +90,22 @@ std::vector<option_core::Resolution> DetectDisplayResolutions()
 // Best-effort launch of the game client next to this tool (the original
 // launches Launcher.exe, which isn't ported yet - launching WarFare directly
 // gets you into the game, matching the self-contained POSIX bundle from F8).
+// Wraps a path in double quotes for a shell command line, escaping any
+// embedded backslash or double-quote so paths with spaces (common under
+// "~/Library/Application Support/...") survive std::system's `sh -c`.
+std::string ShellQuote(const std::string& s)
+{
+	std::string out = "\"";
+	for (char c : s)
+	{
+		if (c == '"' || c == '\\')
+			out += '\\';
+		out += c;
+	}
+	out += '"';
+	return out;
+}
+
 void LaunchWarFareAndExit(const fs::path& gameDir)
 {
 	const fs::path candidates[] = {
@@ -104,7 +120,17 @@ void LaunchWarFareAndExit(const fs::path& gameDir)
 			continue;
 
 		spdlog::info("Option: launching {}", candidate.string());
-		const std::string cmd = "\"" + candidate.string() + "\" &";
+		// Forward the resolved game data dir explicitly (same spirit as
+		// StartGame() re-passing its own command line) rather than relying
+		// on WarFare's own auto-discovery to land on the same directory -
+		// but only when it's a real one; ResolveGameDir() falls back to CWD
+		// when discovery finds nothing, and passing that through would
+		// override WarFare's own (equally capable) auto-discovery with a
+		// guess instead of leaving it to try on its own.
+		std::string cmd = ShellQuote(candidate.string());
+		if (LooksLikeGameDataDir(gameDir))
+			cmd += " --data " + ShellQuote(gameDir.string());
+		cmd += " &";
 		std::system(cmd.c_str()); // NOLINT(cert-env33-c) - fire-and-forget launch, same spirit as ShellExecute
 		return;
 	}
