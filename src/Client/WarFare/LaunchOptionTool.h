@@ -22,8 +22,14 @@
 
 inline void LaunchOptionTool()
 {
+	std::vector<std::filesystem::path> searchDirs = { GetExecutableDir() };
+#if defined(__APPLE__)
+	// WarFare's executable lives inside the bundle (Contents/MacOS/) while
+	// the plain-binary tools sit NEXT TO the .app - search there too.
+	searchDirs.push_back(GetExecutableDir() / ".." / ".." / "..");
+#endif
 	const std::filesystem::path candidate =
-		platform_launch::FindSiblingExecutable({ GetExecutableDir() }, "Option");
+		platform_launch::FindSiblingExecutable(searchDirs, "Option");
 
 	if (candidate.empty())
 	{

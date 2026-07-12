@@ -265,13 +265,14 @@ int main(int argc, char* argv[])
 			bLoginScene = true;
 	}
 
-	LoadGameOptions();
-
 	// --data (or auto-discovery) points the client at the game-data directory
-	// (docs/PORT_POSIX_PLAN.md, F8). LoadGameOptions() has already anchored
-	// CN3Base::PathGet() at the CWD; that stays correct when the user cd'd
-	// into the data directory. In a bundle-double-click / IDE-Run scenario
-	// the CWD isn't the data dir, so we override it here.
+	// (docs/PORT_POSIX_PLAN.md, F8). This must run BEFORE LoadGameOptions():
+	// Option.ini lives in the game-data directory (it's what the Option tool
+	// edits), and LoadGameOptions reads it relative to the current directory
+	// - the same invariant Windows relies on (its CWD is always the game
+	// folder). Loading first meant a bundle-double-click / IDE-Run launch
+	// read a nonexistent <launch-CWD>/Option.ini and silently played on
+	// defaults, ignoring every resolution/window-mode change made in Option.
 	//
 	// Precedence: --data <path> > OPENKO_GAME_DATA env var > CWD if it looks
 	// like a data dir > the executable's own directory > well-known user
@@ -284,8 +285,7 @@ int main(int argc, char* argv[])
 	{
 		// The engine loads assets with paths relative to the process working
 		// directory (FileReader/ResolveCaseInsensitivePath anchor a relative
-		// "Data\\..." at "."), so change into the data directory - the same
-		// invariant Windows relies on (its CWD is the game folder). Without
+		// "Data\\..." at "."), so change into the data directory. Without
 		// this, PathSet only fixes the logical base string while the actual
 		// file opens still hit the launch CWD (e.g. the .app's bin/Debug).
 		std::error_code chdirEc;
@@ -303,6 +303,10 @@ int main(int argc, char* argv[])
 		spdlog::warn("no game data directory found; pass --data <path> or "
 					 "run from the directory containing Server.Ini and Data/");
 	}
+
+	// Reads <data dir>/Option.ini now that the CWD points at it (its own
+	// PathSet(current_path()) re-anchor is a no-op after the chdir above).
+	LoadGameOptions();
 
 	__Options::PosixRenderer eRenderer = CN3Base::s_Options.eRenderer;
 	{

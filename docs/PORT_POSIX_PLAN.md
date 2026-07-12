@@ -1050,6 +1050,23 @@ la traen activada).
         panel 16:10 convertía 1280x800 en 1280x1024 (más alto que la
         pantalla). SDL/GL acepta cualquier tamaño y el Option portado solo
         ofrece modos reales del display.*
+      - ***Bug: los cambios de Option no aplicaban al juego.** Dos capas:
+        (1) `LoadGameOptions()` corría ANTES de resolver el directorio de
+        datos, así que leía `<CWD-de-lanzamiento>/Option.ini` (inexistente
+        al lanzar el .app) y el juego ignoraba silenciosamente la
+        resolución/modo ventana editados en Option — reordenado en
+        `WarFareMainSDL.cpp`: primero `FindGameDataDir`+chdir, después
+        `LoadGameOptions()` (que ahora lee el `Option.ini` real de
+        GameData, mismo invariante que Windows con su CWD). (2) En macOS,
+        el botón "Option" del menú de salida in-game buscaba el binario
+        junto al EJECUTABLE (`Contents/MacOS/` dentro del bundle) cuando
+        las herramientas viven junto al `.app` — `LaunchOptionTool` ahora
+        también busca en el directorio que contiene el bundle. Con ambos,
+        el circuito completo del menú in-game funciona: ESC → Option →
+        editar resolución/ventana → "Apply and Execute" → el juego
+        relanza con la configuración nueva. Verificado end-to-end en
+        Linux (`Option.ini` 800x600+WindowMode=1 → "window created:
+        800x600 (windowed)").*
       - *Descubrimiento del layout de distribución: `FindGameDataDir` no
         contemplaba el layout "todos los binarios + `assets/Client` en una
         misma carpeta" ni, en macOS, que la copia de datos del build vive
