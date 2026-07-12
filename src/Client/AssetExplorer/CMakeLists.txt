@@ -1,0 +1,46 @@
+# Asset Explorer (docs/ASSET_EXPLORER_PLAN.md). A modern SDL3 + Dear ImGui tool
+# to browse and preview every N3 asset type. POSIX-only: it is a new tool with
+# no MFC original, so there is no Windows arm to preserve (the legacy per-type
+# MFC tools under src/Tools remain for Windows).
+if(NOT WIN32)
+  find_package(OpenGL REQUIRED)
+
+  add_executable(AssetExplorer
+    AssetType.cpp
+    AssetType.h
+    AssetIndex.cpp
+    AssetIndex.h
+    AssetExplorerMainSDL.cpp)
+
+  target_link_libraries(AssetExplorer PRIVATE
+    Platform
+    SDL3::SDL3
+    imgui
+    OpenGL::GL
+    spdlog::spdlog)
+
+  if(APPLE)
+    # Apple deprecated the desktop OpenGL API in 10.14; see Option's
+    # CMakeLists.txt for the full rationale (same fix, same tradeoff).
+    target_compile_definitions(AssetExplorer PRIVATE GL_SILENCE_DEPRECATION)
+  endif()
+
+  set_target_properties(AssetExplorer PROPERTIES
+    CXX_SCAN_FOR_MODULES OFF
+  )
+
+  # Enable warnings as errors
+  if(OPENKO_COMPILE_WARNINGS_AS_ERROR)
+    set_property(TARGET AssetExplorer PROPERTY COMPILE_WARNING_AS_ERROR ON)
+  endif()
+
+  # Setup warning levels
+  target_compile_options(AssetExplorer PRIVATE
+    $<$<CXX_COMPILER_ID:GNU>:-Wall>
+    $<$<CXX_COMPILER_ID:Clang>:-Wall -Wextra>
+  )
+
+  add_custom_command(TARGET AssetExplorer POST_BUILD
+    COMMAND "${CMAKE_COMMAND}" -E echo "$<TARGET_FILE:AssetExplorer> has been built"
+  )
+endif()
