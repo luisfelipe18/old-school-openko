@@ -329,17 +329,19 @@ void CUIHotKeyDlg::Render()
 	{
 		if (m_pMyHotkey[m_iCurPage][k] != nullptr)
 		{
-			// Always draw the skill icon; the cooldown sweep is an overlay on
-			// top of it. Skipping the icon while on cooldown left a hole in the
-			// hotkey bar that showed the moving world through the translucent
-			// wedge (it read as several sweeps running at once).
-			CN3UIIcon* pUIIcon = m_pMyHotkey[m_iCurPage][k]->pUIIcon;
-			if (pUIIcon != nullptr)
-				pUIIcon->Render();
-
 			float fCooldown = CGameProcedure::s_pProcMain->m_pMagicSkillMng->GetCooldown(m_pMyHotkey[m_iCurPage][k]->pSkill);
-			if (fCooldown >= 0)
+
+			// not on cooldown
+			if (fCooldown < 0)
+			{
+				CN3UIIcon* pUIIcon = m_pMyHotkey[m_iCurPage][k]->pUIIcon;
+				if (pUIIcon != nullptr)
+					pUIIcon->Render();
+			}
+			else
+			{
 				RenderCooldown(m_pMyHotkey[m_iCurPage][k], fCooldown);
+			}
 
 			DisplayCountStr(m_pMyHotkey[m_iCurPage][k]);
 		}
@@ -1040,9 +1042,7 @@ void CUIHotKeyDlg::RenderCooldown(const __IconItemSkill* pSkill, float fCooldown
 	if (pSkill == nullptr)
 		return;
 
-	// Translucent dark overlay - dims the icon like a standard cooldown sweep.
-	// (The earlier 50% red read as a coloured wedge rather than "charging".)
-	constexpr D3DCOLOR Color = D3DCOLOR_ARGB(0xB0, 0x00, 0x00, 0x00);
+	constexpr D3DCOLOR Color = D3DCOLOR_ARGB(0x80, 0xFF, 0x00, 0x00);
 
 	const RECT rc            = pSkill->pUIIcon->GetRegion();
 
@@ -1131,9 +1131,17 @@ void CUIHotKeyDlg::RenderCooldown(const __IconItemSkill* pSkill, float fCooldown
 	CN3Base::RHIDevice()->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
 	CN3Base::RHIDevice()->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_DIFFUSE);
 
-	CN3Base::RHIDevice()->SetFVF(FVF_TRANSFORMED);
-	// Draw both faces: the fan winding differs between D3D9 and the GL backend,
-	// so culling could otherwise drop the wedge (or half of it) on one of them.
+	// FVF_TRANSFORMEDCOLOR (XYZRHW|DIFFUSE), not FVF_TRANSFORMED: these vertices
+	// are __VertexTransformedColor, which carries no texture coordinate, yet
+	// FVF_TRANSFORMED declares D3DFVF_TEX1. D3D9 tolerates the phantom UV, but
+	// the GL backend then binds a UV attribute that reads past the vertex
+	// buffer, and Apple's GL renders the whole fan as garbage (it looked like
+	// several sweeps at once). Match the sibling RenderSelectIcon.
+	CN3Base::RHIDevice()->SetFVF(FVF_TRANSFORMEDCOLOR);
+	// The fan sweeps counter-clockwise in screen space; the GL backend defaults
+	// to back-face culling (D3DCULL_CCW), which would drop it. D3D9's UI pass
+	// happens to run with culling off, so master gets away without this - set
+	// it explicitly so the pie shows on both.
 	CN3Base::RHIDevice()->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
 	CN3Base::RHIDevice()->DrawPrimitiveUP(
 		D3DPT_TRIANGLEFAN, static_cast<UINT>(vertices.size()) - 2, &vertices[0], sizeof(__VertexTransformedColor));
