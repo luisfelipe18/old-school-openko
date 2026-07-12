@@ -65,6 +65,11 @@
 #include "LightMgr.h"
 #include "text_resources.h"
 
+#include <N3Base/DFont.h>
+
+#include <algorithm>
+#include <utility>
+
 #include <N3Base/N3SkyMng.h>
 #include <N3Base/N3ShapeExtra.h>
 #include <N3Base/N3Camera.h>
@@ -210,6 +215,7 @@ CGameProcMain::~CGameProcMain()
 	delete m_pTargetSymbol; // 플레이어가 타겟으로 잡은 캐릭터의 위치위에 그리면 된다..
 
 	delete m_pLightMgr;
+	delete m_pGMFont;
 }
 
 void CGameProcMain::Release()
@@ -750,6 +756,7 @@ void CGameProcMain::Render()
 	ACT_WORLD->RenderSkyWeather(); // 하늘 렌더링..
 
 	CGameProcedure::Render();      // UI 나 그밖의 기본적인 것들 렌더링..
+	GMPanelRender();               // GM tools overlay (J), drawn on top of the UI
 	if (m_pWarMessage)
 		m_pWarMessage->RenderMessage();
 	if (s_pGameCursor)
@@ -757,6 +764,165 @@ void CGameProcMain::Render()
 
 	s_pEng->RHIDevice()->EndScene();
 	s_pEng->Present(CN3Base::s_hWndBase);
+}
+
+// ---------------------------------------------------------------------------
+// GM tools panel (J): a text overlay listing the NPCs/monsters currently in the
+// map so a GM can teleport to one, plus a live view-distance tweak. Everything
+// here is gated on the local player being a GM (iAuthority == AUTHORITY_MANAGER).
+// ---------------------------------------------------------------------------
+
+void CGameProcMain::GMPanelRebuildList()
+{
+	m_GMPanelIDs.clear();
+	if (s_pOPMgr == nullptr || s_pPlayer == nullptr)
+		return;
+
+	const __Vector3 vMe = s_pPlayer->Position();
+
+	std::vector<std::pair<float, int>> byDist;
+	byDist.reserve(s_pOPMgr->m_NPCs.size());
+	for (const auto& [iID, pNPC] : s_pOPMgr->m_NPCs)
+	{
+		if (pNPC == nullptr)
+			continue;
+		byDist.emplace_back((pNPC->Position() - vMe).Magnitude(), iID);
+	}
+
+	std::sort(byDist.begin(), byDist.end(),
+		[](const auto& a, const auto& b) { return a.first < b.first; });
+
+	m_GMPanelIDs.reserve(byDist.size());
+	for (const auto& [fDist, iID] : byDist)
+		m_GMPanelIDs.push_back(iID);
+
+	if (m_iGMPanelSel >= static_cast<int>(m_GMPanelIDs.size()))
+		m_iGMPanelSel = std::max(0, static_cast<int>(m_GMPanelIDs.size()) - 1);
+	if (m_iGMPanelSel < 0)
+		m_iGMPanelSel = 0;
+}
+
+void CGameProcMain::GMPanelTeleportTo(int iNpcID)
+{
+	if (s_pOPMgr == nullptr || s_pPlayer == nullptr)
+		return;
+
+	CPlayerNPC* pNPC = s_pOPMgr->CharacterGetByID(iNpcID, false);
+	if (pNPC == nullptr)
+		return;
+
+	// Move the local character onto the target and tell the server we stopped
+	// there. GMs bypass the movement/collision checks (see CPlayerMySelf), so
+	// the jump is not rejected client-side; a GM account is likewise exempt from
+	// the server's speed checks.
+	s_pPlayer->PositionSet(pNPC->Position(), true);
+	MsgSend_Move(false, false);
+}
+
+void CGameProcMain::GMPanelHandleInput()
+{
+	if (s_pPlayer == nullptr || s_pPlayer->m_InfoBase.iAuthority != AUTHORITY_MANAGER)
+		return;
+
+	// J toggles the panel (rebuild the list when opening).
+	if (s_pLocalInput->IsKeyPress(DIK_J))
+	{
+		m_bGMPanelVisible = !m_bGMPanelVisible;
+		if (m_bGMPanelVisible)
+		{
+			m_iGMPanelSel = 0;
+			GMPanelRebuildList();
+			CommandMove(MD_STOP, true); // halt any in-progress (mouse/continuous) move
+		}
+		return;
+	}
+
+	if (!m_bGMPanelVisible)
+		return;
+
+	// Refresh each frame so distances/entries track the moving world.
+	GMPanelRebuildList();
+
+	const int iCount = static_cast<int>(m_GMPanelIDs.size());
+	if (iCount > 0)
+	{
+		if (s_pLocalInput->IsKeyPress(DIK_DOWN))
+			m_iGMPanelSel = (m_iGMPanelSel + 1) % iCount;
+		if (s_pLocalInput->IsKeyPress(DIK_UP))
+			m_iGMPanelSel = (m_iGMPanelSel + iCount - 1) % iCount;
+		if (s_pLocalInput->IsKeyPress(DIK_RETURN))
+			GMPanelTeleportTo(m_GMPanelIDs[m_iGMPanelSel]);
+	}
+
+	// Render/view distance: +/- (main row or numpad) in 128-unit steps. The
+	// engine feeds s_Options.iViewDist into the camera far plane every frame
+	// (CGameEng::Tick), so this takes effect live.
+	int& iViewDist = CN3Base::s_Options.iViewDist;
+	if (s_pLocalInput->IsKeyPress(DIK_EQUALS) || s_pLocalInput->IsKeyPress(DIK_ADD))
+		iViewDist = std::min(4096, iViewDist + 128);
+	if (s_pLocalInput->IsKeyPress(DIK_MINUS) || s_pLocalInput->IsKeyPress(DIK_SUBTRACT))
+		iViewDist = std::max(256, iViewDist - 128);
+}
+
+void CGameProcMain::GMPanelRender()
+{
+	if (!m_bGMPanelVisible)
+		return;
+	if (s_pPlayer == nullptr || s_pPlayer->m_InfoBase.iAuthority != AUTHORITY_MANAGER)
+		return;
+	if (s_pOPMgr == nullptr)
+		return;
+
+	if (m_pGMFont == nullptr)
+	{
+		const std::string szFontID = fmt::format_text_resource(IDS_FONT_ID);
+		m_pGMFont                  = new CDFont(szFontID, 14, D3DFONT_BOLD);
+		m_pGMFont->InitDeviceObjects(s_lpD3DDev);
+		m_pGMFont->RestoreDeviceObjects();
+	}
+
+	CUIManager::RenderStateSet();
+
+	float x        = 20.0f;
+	float y        = 60.0f;
+	const auto Row = [&](const std::string& szText, uint32_t dwColor) {
+		m_pGMFont->SetText(szText);
+		m_pGMFont->DrawText(x, y, dwColor, 0);
+		y += 18.0f;
+	};
+
+	Row(fmt::format("== GM PANEL (J) ==   View distance: {}  (+/- to adjust)",
+			CN3Base::s_Options.iViewDist),
+		0xFFFFFF00);
+	Row(fmt::format("Monsters/NPCs in map: {}   (Up/Down to select, Enter to teleport)",
+			m_GMPanelIDs.size()),
+		0xFFCCCCCC);
+
+	// Show a window of rows centred on the selection.
+	const int iCount   = static_cast<int>(m_GMPanelIDs.size());
+	const int iMaxRows = 18;
+	int iStart         = m_iGMPanelSel - iMaxRows / 2;
+	iStart             = std::clamp(iStart, 0, std::max(0, iCount - iMaxRows));
+	const int iEnd     = std::min(iCount, iStart + iMaxRows);
+
+	const __Vector3 vMe = s_pPlayer->Position();
+	for (int i = iStart; i < iEnd; ++i)
+	{
+		CPlayerNPC* pNPC = s_pOPMgr->CharacterGetByID(m_GMPanelIDs[i], false);
+		if (pNPC == nullptr)
+			continue;
+
+		const float fDist = (pNPC->Position() - vMe).Magnitude();
+		std::string szName = pNPC->IDString();
+		if (szName.empty())
+			szName = fmt::format("NPC#{}", pNPC->IDNumber());
+
+		const bool bSel = (i == m_iGMPanelSel);
+		Row(fmt::format("{} {}  (id {})  {:.0f}m", bSel ? ">" : "  ", szName, pNPC->IDNumber(), fDist),
+			bSel ? 0xFF00FF00 : 0xFFFFFFFF);
+	}
+
+	CUIManager::RenderStateRestore();
 }
 
 void CGameProcMain::RenderTarget()
@@ -1280,6 +1446,9 @@ void CGameProcMain::ProcessLocalInput(uint32_t dwMouseFlags)
 				s_pPlayer->m_bTempMoveTurbo = true;                   // 엄청 빨리 움직이게 한다..  // 임시 함수.. 나중에 없애자..
 			else
 				s_pPlayer->m_bTempMoveTurbo = false;                  // 엄청 빨리 움직이게 한다..  // 임시 함수.. 나중에 없애자..
+
+			// GM tools panel (J): monster list + teleport + view distance.
+			GMPanelHandleInput();
 		}
 
 		if (s_pLocalInput->IsKeyPress(KM_TOGGLE_ATTACK))
@@ -1334,7 +1503,10 @@ void CGameProcMain::ProcessLocalInput(uint32_t dwMouseFlags)
 				m_pUIDroppedItemDlg->LeaveDroppedState();
 		}
 
-		if (s_pLocalInput->IsKeyDown(KM_MOVE_FOWARD) || s_pLocalInput->IsKeyDown(DIK_UP))
+		// While the GM panel is open the Up/Down arrows drive its selection, so
+		// suppress keyboard movement (the panel is modal for those keys).
+		if ((s_pLocalInput->IsKeyDown(KM_MOVE_FOWARD) || s_pLocalInput->IsKeyDown(DIK_UP))
+			&& !m_bGMPanelVisible)
 		{
 			bool bStart = false;
 			if (s_pLocalInput->IsKeyPress(KM_MOVE_FOWARD) || s_pLocalInput->IsKeyPress(DIK_UP))
@@ -1358,7 +1530,8 @@ void CGameProcMain::ProcessLocalInput(uint32_t dwMouseFlags)
 
 			CommandMove(MD_FORWARD, bStart); // 앞으로 이동..
 		}
-		else if (s_pLocalInput->IsKeyDown(KM_MOVE_BACKWARD) || s_pLocalInput->IsKeyDown(DIK_DOWN))
+		else if ((s_pLocalInput->IsKeyDown(KM_MOVE_BACKWARD) || s_pLocalInput->IsKeyDown(DIK_DOWN))
+			&& !m_bGMPanelVisible)
 		{
 			bool bStart = false;
 			if (s_pLocalInput->IsKeyPress(KM_MOVE_BACKWARD) || s_pLocalInput->IsKeyPress(DIK_DOWN))
@@ -1388,8 +1561,9 @@ void CGameProcMain::ProcessLocalInput(uint32_t dwMouseFlags)
 		}
 
 		// 전진/후진 키를 떼는 순간.
-		if (s_pLocalInput->IsKeyPressed(KM_MOVE_FOWARD) || s_pLocalInput->IsKeyPressed(DIK_UP)
-			|| s_pLocalInput->IsKeyPressed(KM_MOVE_BACKWARD) || s_pLocalInput->IsKeyPressed(DIK_DOWN))
+		if ((s_pLocalInput->IsKeyPressed(KM_MOVE_FOWARD) || s_pLocalInput->IsKeyPressed(DIK_UP)
+				|| s_pLocalInput->IsKeyPressed(KM_MOVE_BACKWARD) || s_pLocalInput->IsKeyPressed(DIK_DOWN))
+			&& !m_bGMPanelVisible)
 			CommandMove(MD_STOP, true);
 
 		if (s_pLocalInput->IsKeyPress(KM_TOGGLE_INVENTORY))
@@ -8060,7 +8234,8 @@ void CGameProcMain::ProcessUIKeyInput(bool /*bEnable*/)
 	{
 		CGameProcedure::ProcessUIKeyInput();
 
-		if (s_pLocalInput->IsKeyPress(DIK_RETURN) && !s_bKeyPress)
+		// Enter teleports in the GM panel instead of opening chat while it's open.
+		if (s_pLocalInput->IsKeyPress(DIK_RETURN) && !s_bKeyPress && !m_bGMPanelVisible)
 			m_pUIChatDlg->SetFocus();
 	}
 	else

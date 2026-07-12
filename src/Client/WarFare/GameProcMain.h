@@ -5,6 +5,7 @@
 
 #include "GameProcedure.h"
 #include <set>
+#include <vector>
 
 typedef std::set<int>::iterator it_ID;
 typedef std::pair<it_ID, bool> pair_ID;
@@ -76,6 +77,14 @@ public:
 	class CUIWarp* m_pUIWarp;
 	class CWarMessage* m_pWarMessage; // 전쟁관련 메시지
 	class CLightMgr* m_pLightMgr;
+
+	// GM tools panel (toggled with J, GM only / iAuthority == AUTHORITY_MANAGER).
+	// Lists the NPCs/monsters currently present in the map so a GM can teleport
+	// to one, and adjusts the render/view distance. See GameProcMain.cpp.
+	class CDFont* m_pGMFont   = nullptr;
+	bool m_bGMPanelVisible    = false;
+	int m_iGMPanelSel         = 0;              // selected row (index into m_GMPanelIDs)
+	std::vector<int> m_GMPanelIDs;              // NPC IDs shown, nearest first
 
 	//..
 	BOOL m_bLoadComplete;         // 로딩이 완료되었나??
@@ -328,6 +337,12 @@ public:
 	void UpdateCameraAndLight();
 
 	void RenderTarget();
+
+	// GM tools panel (J). All are no-ops unless the local player is a GM.
+	void GMPanelHandleInput(); // toggle + navigation + view-distance keys (from Tick)
+	void GMPanelRebuildList(); // refresh m_GMPanelIDs from the present NPCs, nearest first
+	void GMPanelRender();      // draw the text overlay (from Render)
+	void GMPanelTeleportTo(int iNpcID);
 
 	void Init() override;    // UI 와 UI 리소스등을 읽는다.
 	void Release() override; // Release..
