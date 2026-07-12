@@ -10,6 +10,7 @@
 
 #include "AssetIndex.h"
 #include "AssetType.h"
+#include "OrbitCamera.h"
 
 // Engine + RHI: the tool renders previews through the same GL backend the
 // client uses, into an offscreen render target it then samples into the UI
@@ -18,6 +19,8 @@
 
 #include <N3Base/My_3DStruct.h>
 #include <N3Base/N3Base.h>
+#include <N3Base/N3PMesh.h>
+#include <N3Base/N3Shape.h>
 #include <N3Base/N3Texture.h>
 
 // KscViewer's platform-neutral decrypt/decode core, reused for .ksc textures.
@@ -319,6 +322,107 @@ bool WriteBmp24(const fs::path& dst, const std::vector<uint8_t>& rgba, int w, in
 	return static_cast<bool>(out);
 }
 
+// --- Shape preview (M3) -----------------------------------------------------
+
+using assetexplorer::OrbitCamera;
+
+// A loaded CN3Shape plus its orbit camera and display stats.
+struct ShapePreview
+{
+	bool loaded = false;
+	std::string error;
+
+	std::unique_ptr<CN3Shape> shape;
+	OrbitCamera camera;
+
+	int partCount = 0;
+	int triCount  = 0;
+	int texCount  = 0;
+	bool wireframe = false;
+	bool demoCube  = false; // --demo: a synthetic cube to exercise the 3D path
+};
+
+// Draws a unit cube (per-face colors) through whatever view/projection is
+// currently set - used by --demo and the render smoke to validate the camera /
+// transform / depth path without a real .n3shape asset.
+void DrawDemoCube(IRHIDevice* rhi)
+{
+	struct Vtx
+	{
+		float x, y, z;
+		uint32_t color; // 0xAARRGGBB
+	};
+	auto face = [](Vtx* v, const float c[3][4], uint32_t col) {
+		for (int i = 0; i < 6; ++i)
+			v[i].color = col;
+		v[0] = {c[0][0], c[0][1], c[0][2], col};
+		v[1] = {c[1][0], c[1][1], c[1][2], col};
+		v[2] = {c[2][0], c[2][1], c[2][2], col};
+		v[3] = {c[0][0], c[0][1], c[0][2], col};
+		v[4] = {c[2][0], c[2][1], c[2][2], col};
+		v[5] = {c[3][0], c[3][1], c[3][2], col};
+	};
+	const float n = -1.0f, p = 1.0f;
+	Vtx verts[36];
+	const float px[4][4] = {{p, n, n, 0}, {p, p, n, 0}, {p, p, p, 0}, {p, n, p, 0}};
+	const float nx[4][4] = {{n, n, p, 0}, {n, p, p, 0}, {n, p, n, 0}, {n, n, n, 0}};
+	const float py[4][4] = {{n, p, n, 0}, {n, p, p, 0}, {p, p, p, 0}, {p, p, n, 0}};
+	const float ny[4][4] = {{n, n, p, 0}, {n, n, n, 0}, {p, n, n, 0}, {p, n, p, 0}};
+	const float pz[4][4] = {{p, n, p, 0}, {p, p, p, 0}, {n, p, p, 0}, {n, n, p, 0}};
+	const float nz[4][4] = {{n, n, n, 0}, {n, p, n, 0}, {p, p, n, 0}, {p, n, n, 0}};
+	face(&verts[0], px, 0xFFE24A4A);
+	face(&verts[6], nx, 0xFF7A2A2A);
+	face(&verts[12], py, 0xFF4AE26A);
+	face(&verts[18], ny, 0xFF2A7A3A);
+	face(&verts[24], pz, 0xFF4A78E2);
+	face(&verts[30], nz, 0xFF2A3A7A);
+
+	rhi->SetTexture(0, nullptr);
+	rhi->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
+	rhi->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_DIFFUSE);
+	rhi->SetFVF(FVF_XYZCOLOR);
+	rhi->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 12, verts, sizeof(Vtx));
+}
+
+void ReleaseShapePreview(ShapePreview& sp)
+{
+	sp.shape.reset();
+	sp = ShapePreview{};
+}
+
+void LoadShapePreview(ShapePreview& sp, const fs::path& abs)
+{
+	ReleaseShapePreview(sp);
+
+	auto shape = std::make_unique<CN3Shape>();
+	if (!shape->LoadFromFile(abs.string()) || shape->PartCount() == 0)
+	{
+		sp.error = "Failed to load " + abs.filename().string();
+		return;
+	}
+	shape->Tick(0.0f);      // resolve part matrices / texture animation index
+	shape->FindMinMax();    // populate the bounding box for framing
+
+	int tris = 0;
+	int texs = 0;
+	for (int i = 0; i < shape->PartCount(); ++i)
+	{
+		CN3SPart* part = shape->Part(i);
+		if (part == nullptr)
+			continue;
+		if (const CN3PMesh* mesh = part->Mesh())
+			tris += mesh->GetMaxNumIndices() / 3;
+		texs += part->TexCount();
+	}
+
+	sp.partCount = shape->PartCount();
+	sp.triCount  = tris;
+	sp.texCount  = texs;
+	sp.camera.FrameBounds(shape->Min(), shape->Max());
+	sp.shape  = std::move(shape);
+	sp.loaded = true;
+}
+
 // All UI/session state for the explorer.
 struct ExplorerState
 {
@@ -341,13 +445,66 @@ struct ExplorerState
 	int viewportW = 0;
 	int viewportH = 0;
 
-	TexturePreview tex; // populated when a texture asset is selected (M2)
+	TexturePreview tex;   // populated when a texture asset is selected (M2)
+	ShapePreview shape;   // populated when a shape asset is selected (M3)
 
 	fs::path AbsPathOf(const AssetEntry& e) const
 	{
 		return dataDir / fs::path(e.relativePath);
 	}
 };
+
+// Renders the loaded shape into the viewport-sized render target with the orbit
+// camera (M3). The RT is (re)created to match the panel; the engine's own part
+// render sets world matrices, textures and materials, so we only supply the
+// view/projection and a neutral unlit-textured state.
+void RenderShapeToRT(ExplorerState& state)
+{
+	if (state.rhi == nullptr || !state.shape.loaded)
+		return;
+	if (state.shape.shape == nullptr && !state.shape.demoCube)
+		return;
+	if (state.viewportW <= 0 || state.viewportH <= 0)
+		return;
+
+	if (state.previewRT == nullptr || state.rtWidth != state.viewportW
+		|| state.rtHeight != state.viewportH)
+	{
+		delete state.previewRT;
+		RHIRenderTargetDesc desc;
+		desc.width  = static_cast<UINT>(state.viewportW);
+		desc.height = static_cast<UINT>(state.viewportH);
+		desc.depth  = true;
+		state.previewRT = state.rhi->CreateRenderTarget(desc);
+		state.rtWidth   = state.viewportW;
+		state.rtHeight  = state.viewportH;
+	}
+	if (state.previewRT == nullptr)
+		return;
+
+	const float aspect = static_cast<float>(state.rtWidth) / static_cast<float>(state.rtHeight);
+	const __Matrix44 view = state.shape.camera.View();
+	const __Matrix44 proj = state.shape.camera.Projection(aspect);
+
+	state.rhi->BeginRenderTarget(state.previewRT);
+	state.rhi->Clear(D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, 0xFF14161B, 1.0f, 0);
+	state.rhi->SetTransform(D3DTS_VIEW, view.toD3D());
+	state.rhi->SetTransform(D3DTS_PROJECTION, proj.toD3D());
+	state.rhi->SetRenderState(D3DRS_LIGHTING, FALSE);
+	state.rhi->SetRenderState(D3DRS_ZENABLE, TRUE);
+	state.rhi->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
+	state.rhi->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+	// Show both sides so back-facing or reverse-wound parts are never invisible.
+	state.rhi->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+	state.rhi->SetRenderState(D3DRS_FILLMODE,
+		state.shape.wireframe ? D3DFILL_WIREFRAME : D3DFILL_SOLID);
+	if (state.shape.demoCube)
+		DrawDemoCube(state.rhi);
+	else
+		state.shape.shape->Render();
+	state.rhi->SetRenderState(D3DRS_FILLMODE, D3DFILL_SOLID);
+	state.rhi->EndRenderTarget();
+}
 
 // Exports an engine texture (.dxt/.tga) by rendering it into an offscreen RGBA
 // target and reading it back to a 24-bit BMP - self-contained, no encoder
@@ -402,58 +559,6 @@ bool ExportEngineTextureToBmp(ExplorerState& state, const fs::path& dst)
 	return WriteBmp24(dst, rgba, tp.width, tp.height);
 }
 
-// A single spinning-free RGB triangle in render-target pixel space, proving the
-// engine renders into the offscreen target and the tool samples it back. Real
-// asset scenes replace this in M3+.
-void RenderPreview(ExplorerState& state)
-{
-	if (state.rhi == nullptr || state.viewportW <= 0 || state.viewportH <= 0)
-		return;
-
-	// (Re)create the target when the panel size changes.
-	if (state.previewRT == nullptr || state.rtWidth != state.viewportW
-		|| state.rtHeight != state.viewportH)
-	{
-		delete state.previewRT;
-		RHIRenderTargetDesc desc;
-		desc.width  = static_cast<UINT>(state.viewportW);
-		desc.height = static_cast<UINT>(state.viewportH);
-		desc.depth  = true;
-		state.previewRT = state.rhi->CreateRenderTarget(desc);
-		state.rtWidth   = state.viewportW;
-		state.rtHeight  = state.viewportH;
-	}
-	if (state.previewRT == nullptr)
-		return;
-
-	struct VtxRHW
-	{
-		float x, y, z, rhw;
-		uint32_t color; // 0xAARRGGBB (D3D DIFFUSE)
-	};
-	const float w = static_cast<float>(state.rtWidth);
-	const float h = static_cast<float>(state.rtHeight);
-	const float cx = w * 0.5f;
-	const float cy = h * 0.5f;
-	const float r  = 0.35f * ((w < h) ? w : h);
-	const VtxRHW verts[3] = {
-		{cx,          cy - r, 0.0f, 1.0f, 0xFFE24A4A},
-		{cx + r,      cy + r, 0.0f, 1.0f, 0xFF4AE26A},
-		{cx - r,      cy + r, 0.0f, 1.0f, 0xFF4A78E2},
-	};
-
-	state.rhi->BeginRenderTarget(state.previewRT);
-	state.rhi->Clear(D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, 0xFF14161B, 1.0f, 0);
-	state.rhi->SetRenderState(D3DRS_LIGHTING, FALSE);
-	state.rhi->SetRenderState(D3DRS_ZENABLE, FALSE);
-	state.rhi->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
-	state.rhi->SetTexture(0, nullptr);
-	state.rhi->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
-	state.rhi->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_DIFFUSE);
-	state.rhi->SetFVF(FVF_TRANSFORMEDCOLOR);
-	state.rhi->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 1, verts, sizeof(VtxRHW));
-	state.rhi->EndRenderTarget();
-}
 
 void RescanDataDir(ExplorerState& state, const fs::path& dir)
 {
@@ -645,15 +750,56 @@ void DrawViewport(ExplorerState& state, const ImVec2& size)
 	{
 		DrawTextureCanvas(state.tex);
 	}
+	else if (state.shape.loaded && state.previewRT != nullptr
+		&& state.previewRT->ColorHandle() != nullptr)
+	{
+		// Toolbar.
+		ImGui::Checkbox("Wireframe", &state.shape.wireframe);
+		ImGui::SameLine();
+		if (ImGui::Button("Reset view"))
+		{
+			if (state.shape.shape != nullptr)
+				state.shape.camera.FrameBounds(state.shape.shape->Min(), state.shape.shape->Max());
+			else
+				state.shape.camera.FrameBounds(__Vector3(-1, -1, -1), __Vector3(1, 1, 1));
+		}
+		ImGui::SameLine();
+		ImGui::TextDisabled("drag: orbit  |  wheel: zoom");
+
+		const ImVec2 canvas = ImGui::GetContentRegionAvail();
+		const ImVec2 cursor = ImGui::GetCursorScreenPos();
+		// GL renders bottom-up into the target; flip V so it displays upright.
+		ImGui::Image(reinterpret_cast<ImTextureID>(state.previewRT->ColorHandle()), canvas,
+			ImVec2(0, 1), ImVec2(1, 0));
+
+		// Orbit/zoom over the image.
+		ImGui::SetCursorScreenPos(cursor);
+		ImGui::InvisibleButton("##shapecanvas", canvas);
+		if (ImGui::IsItemActive() && ImGui::IsMouseDragging(ImGuiMouseButton_Left))
+		{
+			const ImVec2 d = ImGui::GetIO().MouseDelta;
+			state.shape.camera.Orbit(d.x * 0.01f, d.y * 0.01f);
+		}
+		if (ImGui::IsItemHovered())
+		{
+			const float wheel = ImGui::GetIO().MouseWheel;
+			if (wheel != 0.0f)
+				state.shape.camera.Dolly(1.0f - wheel * 0.1f);
+		}
+	}
 	else if (!state.tex.error.empty())
 	{
 		centeredText(state.tex.error.c_str());
+	}
+	else if (!state.shape.error.empty())
+	{
+		centeredText(state.shape.error.c_str());
 	}
 	else if (haveSel)
 	{
 		const AssetEntry& e = state.index.Entries()[static_cast<std::size_t>(state.selected)];
 		char msg[128];
-		std::snprintf(msg, sizeof(msg), "Preview for %s arrives in a later milestone (M3+).",
+		std::snprintf(msg, sizeof(msg), "Preview for %s arrives in a later milestone.",
 			AssetTypeName(e.type));
 		centeredText(msg);
 	}
@@ -746,6 +892,29 @@ void DrawInspector(ExplorerState& state, const ImVec2& size)
 		ImGui::Separator();
 		ImGui::TextColored(ImVec4(0.9f, 0.5f, 0.4f, 1.0f), "%s", tp.error.c_str());
 	}
+
+	// Shape-specific metadata.
+	const ShapePreview& sp = state.shape;
+	if (sp.loaded)
+	{
+		ImGui::Spacing();
+		ImGui::Separator();
+		ImGui::Spacing();
+		ImGui::Text("Parts");
+		ImGui::TextDisabled("%d", sp.partCount);
+		ImGui::Spacing();
+		ImGui::Text("Triangles");
+		ImGui::TextDisabled("%d", sp.triCount);
+		ImGui::Spacing();
+		ImGui::Text("Textures");
+		ImGui::TextDisabled("%d", sp.texCount);
+	}
+	else if (!sp.error.empty())
+	{
+		ImGui::Spacing();
+		ImGui::Separator();
+		ImGui::TextColored(ImVec4(0.9f, 0.5f, 0.4f, 1.0f), "%s", sp.error.c_str());
+	}
 	ImGui::EndChild();
 }
 
@@ -760,14 +929,26 @@ void SyncPreview(ExplorerState& state)
 	if (state.selected < 0 || state.selected >= static_cast<int>(state.index.Entries().size()))
 	{
 		ReleaseTexturePreview(state.tex);
+		ReleaseShapePreview(state.shape);
 		return;
 	}
 
 	const AssetEntry& e = state.index.Entries()[static_cast<std::size_t>(state.selected)];
 	if (e.category == AssetCategory::Texture)
+	{
+		ReleaseShapePreview(state.shape);
 		LoadTexturePreview(state.tex, e.type, state.AbsPathOf(e), e.sizeBytes);
-	else
+	}
+	else if (e.type == AssetType::Shape)
+	{
 		ReleaseTexturePreview(state.tex);
+		LoadShapePreview(state.shape, state.AbsPathOf(e));
+	}
+	else
+	{
+		ReleaseTexturePreview(state.tex);
+		ReleaseShapePreview(state.shape);
+	}
 }
 
 // Offscreen render smoke (docs/ASSET_EXPLORER_PLAN.md, M1): brings up the GL
@@ -799,7 +980,12 @@ int RunRenderSmokeTest()
 		state.rhi = pRHI;
 		state.viewportW = 256;
 		state.viewportH = 256;
-		RenderPreview(state);
+		// Exercise the 3D path (orbit camera -> view/projection -> depth -> RT):
+		// render the demo cube and read back the center, which the cube covers.
+		state.shape.loaded   = true;
+		state.shape.demoCube = true;
+		state.shape.camera.FrameBounds(__Vector3(-1, -1, -1), __Vector3(1, 1, 1));
+		RenderShapeToRT(state);
 
 		uint8_t rgba[4] = {};
 		const bool read = state.previewRT != nullptr
@@ -839,12 +1025,15 @@ int main(int argc, char** argv)
 	std::string smokeDir;
 	std::string dataOverride;
 	bool renderSmoke = false;
+	bool demoCube    = false;
 	for (int i = 1; i < argc; ++i)
 	{
 		if (std::strcmp(argv[i], "--smoke") == 0 && i + 1 < argc)
 			smokeDir = argv[++i];
 		else if (std::strcmp(argv[i], "--smoke-render") == 0)
 			renderSmoke = true;
+		else if (std::strcmp(argv[i], "--demo") == 0)
+			demoCube = true; // show a synthetic 3D cube (no game data needed)
 		else if (std::strcmp(argv[i], "--data") == 0 && i + 1 < argc)
 			dataOverride = argv[++i];
 		else if (argv[i][0] != '-')
@@ -917,6 +1106,18 @@ int main(int argc, char** argv)
 		}
 	}
 
+	if (demoCube)
+	{
+		// Bypass selection loading and pin the demo cube so the 3D viewport is
+		// visible without any .n3shape asset present.
+		state.loadedForSelection = -1;
+		state.shape.loaded   = true;
+		state.shape.demoCube = true;
+		state.shape.partCount = 1;
+		state.shape.triCount  = 12;
+		state.shape.camera.FrameBounds(__Vector3(-1, -1, -1), __Vector3(1, 1, 1));
+	}
+
 	bool bRunning = true;
 	while (bRunning)
 	{
@@ -931,8 +1132,10 @@ int main(int argc, char** argv)
 		}
 
 		// Bring the preview in line with the current selection (loads a texture
-		// or clears the preview) before the UI references it below.
+		// or shape, or clears it), then render the 3D preview into the target
+		// using the panel size measured last frame, before the UI references it.
 		SyncPreview(state);
+		RenderShapeToRT(state);
 
 		ImGui_ImplOpenGL3_NewFrame();
 		ImGui_ImplSDL3_NewFrame();
@@ -981,6 +1184,7 @@ int main(int argc, char** argv)
 	// Delete GL resources while the context is still current, then tear down the
 	// backend (its destructor destroys the GL context).
 	ReleaseTexturePreview(state.tex);
+	ReleaseShapePreview(state.shape);
 	delete state.previewRT;
 	CN3Base::RHIDeviceSet(nullptr);
 	delete pRHI;

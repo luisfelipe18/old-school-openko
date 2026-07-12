@@ -208,8 +208,8 @@ jobs:
           SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy ./Option --smoke 1
           SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy ./Launcher --smoke
           # AssetExplorer headless index smoke over the repo tree (which has
-          # .bmp/.tga assets). The offscreen render smoke (--smoke-render) needs
-          # a real GL context, so it's a local/Xvfb guard, not run here.
+          # .bmp/.tga assets). The offscreen 3D render smoke (--smoke-render)
+          # needs a real GL context, so it's a local/Xvfb guard, not run here.
           SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy ./AssetExplorer --smoke "$GITHUB_WORKSPACE/src"
 
   build_macos:

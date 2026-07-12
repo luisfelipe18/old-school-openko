@@ -996,6 +996,10 @@ void RHIDeviceGL::ApplyFixedState()
 		gl::CullFace(value == D3DCULL_CCW ? gl::BACK : gl::FRONT);
 	}
 
+	GetRenderState(D3DRS_FILLMODE, &value);
+	gl::PolygonMode(gl::FRONT_AND_BACK, value == D3DFILL_WIREFRAME ? gl::LINE
+			: (value == D3DFILL_POINT ? gl::POINT : gl::FILL));
+
 	GetRenderState(D3DRS_SCISSORTESTENABLE, &value);
 	if (value)
 	{

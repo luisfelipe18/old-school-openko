@@ -70,10 +70,16 @@ constexpr Enum ONE_MINUS_DST_COLOR = 0x0307;
 constexpr Enum SRC_ALPHA_SATURATE  = 0x0308;
 
 // Faces / winding
-constexpr Enum FRONT = 0x0404;
-constexpr Enum BACK  = 0x0405;
-constexpr Enum CW    = 0x0900;
-constexpr Enum CCW   = 0x0901;
+constexpr Enum FRONT          = 0x0404;
+constexpr Enum BACK           = 0x0405;
+constexpr Enum FRONT_AND_BACK = 0x0408;
+constexpr Enum CW             = 0x0900;
+constexpr Enum CCW            = 0x0901;
+
+// Polygon fill modes (glPolygonMode; desktop GL only)
+constexpr Enum POINT = 0x1B00;
+constexpr Enum LINE  = 0x1B01;
+constexpr Enum FILL  = 0x1B02;
 
 // Primitives
 constexpr Enum POINTS         = 0x0000;
@@ -171,6 +177,7 @@ extern void (*DepthFunc)(Enum func);
 extern void (*DepthMask)(Boolean flag);
 extern void (*CullFace)(Enum mode);
 extern void (*FrontFace)(Enum mode);
+extern void (*PolygonMode)(Enum face, Enum mode);
 
 // Buffers + vertex arrays
 extern void (*GenBuffers)(Sizei n, Uint* buffers);

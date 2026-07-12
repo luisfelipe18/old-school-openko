@@ -23,6 +23,7 @@ void (*DepthFunc)(Enum)       = nullptr;
 void (*DepthMask)(Boolean)    = nullptr;
 void (*CullFace)(Enum)        = nullptr;
 void (*FrontFace)(Enum)       = nullptr;
+void (*PolygonMode)(Enum, Enum) = nullptr;
 
 void (*GenBuffers)(Sizei, Uint*)                           = nullptr;
 void (*DeleteBuffers)(Sizei, const Uint*)                  = nullptr;
@@ -124,6 +125,7 @@ bool Load(ProcLoader loader)
 	ok &= Resolve(DepthMask, loader, "glDepthMask");
 	ok &= Resolve(CullFace, loader, "glCullFace");
 	ok &= Resolve(FrontFace, loader, "glFrontFace");
+	ok &= Resolve(PolygonMode, loader, "glPolygonMode");
 
 	ok &= Resolve(GenBuffers, loader, "glGenBuffers");
 	ok &= Resolve(DeleteBuffers, loader, "glDeleteBuffers");

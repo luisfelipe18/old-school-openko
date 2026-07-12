@@ -10,6 +10,8 @@ if(NOT WIN32)
     AssetType.h
     AssetIndex.cpp
     AssetIndex.h
+    OrbitCamera.cpp
+    OrbitCamera.h
     AssetExplorerMainSDL.cpp
     # Reuse KscViewer's platform-neutral .ksc decrypt/decode/export core for the
     # encrypted-texture preview (M2), rather than duplicating the cipher.
@@ -19,7 +21,10 @@ if(NOT WIN32)
   # (RHIDeviceGL) the preview viewport renders through; N3Base_client comes
   # transitively. The tool needs the WarFare source dir on its include path to
   # reach RHIDeviceGL.h.
-  target_include_directories(AssetExplorer PRIVATE
+  # SYSTEM so the engine headers' own warnings (e.g. -Wdeprecated-copy in the
+  # math types) don't fail the tool's -Werror build; the tool's own headers are
+  # found relative to the sources, so their warnings are still active.
+  target_include_directories(AssetExplorer SYSTEM PRIVATE
     "${CMAKE_SOURCE_DIR}/src"
     "${CMAKE_SOURCE_DIR}/src/Client/WarFare"
     "${CMAKE_SOURCE_DIR}/src/Client/KscViewer")
