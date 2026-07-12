@@ -970,9 +970,11 @@ la traen activada).
       xdotool): un `.ksc` cifrado se muestra correctamente y "Export JPEG"
       escribe un `.jpg` válido de 400x300.)*
 * [x] **Launcher.** Version-check real contra VersionManager (mismo puerto
-      15100 / IPs de `Server.Ini` que usa la escena de login de `WarFare`)
-      y lanzamiento del cliente. Descarga de parches por FTP + extracción
-      ZIP (`ZipArchive`, hoy Windows-only) quedan explícitamente diferidas.
+      15100 / IPs de `Server.Ini` que usa la escena de login de `WarFare`),
+      **descarga e instalación de parches**, y lanzamiento del cliente.
+      *(Descarga por HTTP(S) + extracción ZIP — ver la entrada dedicada
+      "Descarga de parches (HTTP+ZIP)" más abajo; reemplaza el FTP+ZipArchive
+      del original.)*
       *(Hecho. Antes de escribir código se auditó qué hace *realmente* el
       Launcher de Windows — hallazgo importante: los bitmaps con arte
       (`res/Bkg.bmp` con el caballero, botones `Btn_Connect`/`Btn_join`/...)
@@ -999,9 +1001,8 @@ la traen activada).
       mismo patrón sin timeout explícito que `CAPISocket::Connect`), pide
       versión, y si coincide lanza `KnightOnLine` (con una pausa breve
       visible en vez de un salto instantáneo) — si el servidor está por
-      delante, pide `DOWNLOAD_INFO_REQ` y muestra la lista de archivos
-      pendientes sin descargarlos (el flujo de parcheo FTP/ZIP sigue
-      diferido). 11 tests (`tests/Launcher/LauncherCore_test.cpp`) fijan el
+      delante, pide `DOWNLOAD_INFO_REQ` y descarga/instala los parches (ver
+      abajo). 11 tests (`tests/Launcher/LauncherCore_test.cpp`) fijan el
       framing/parsing byte a byte contra los layouts reales del servidor.
       **Verificado con un `VersionManager` de juguete real** (socket Python
       hablando el protocolo exacto, no mocks): el intercambio completo
@@ -1012,6 +1013,38 @@ la traen activada).
       `KnightOnLine` que lanzan — ahora ambos lo hacen (solo cuando el
       directorio resuelto es uno real, no el CWD de respaldo). Limpio bajo
       el preset `linux-asan` (ASan+UBSan) ejercitando el socket real.)*
+* [x] **Descarga de parches (HTTP+ZIP) + recreación de la UI original del
+      Launcher.** *(Hecho. El original bajaba cada `.zip` por FTP (WinInet)
+      y lo extraía con `ZipArchive` (MFC). El FTP está obsoleto para
+      distribución de software, así que `LauncherPatch.h/.cpp` lo reemplaza
+      por **HTTP(S) sobre Asio (+ OpenSSL para TLS)** y **extracción ZIP con
+      miniz** (`cmake/FindMiniz.cmake`, FetchContent). Piezas puras y
+      testeables: `ParseUrl`/`BuildPatchUrl` (construcción de URL desde el
+      host/dir que envía el VersionManager, o un override), `ExtractZip`
+      (con guarda anti *zip-slip*) y `DownloadFile` (Asio para http, Asio+SSL
+      para https, un nivel de redirect, callback de progreso). Override por
+      `Server.Ini [Patch] BaseUrl=` para apuntar a un mirror/CDN HTTPS sin
+      tocar el protocolo del VersionManager. El worker de descarga corre en
+      su propio hilo, baja cada parche a un temporal, lo extrae en el
+      directorio de datos y auto-lanza al terminar. HTTPS es opt-in según
+      `find_package(OpenSSL)` (siempre en Linux; `brew install openssl` en
+      macOS); http:// funciona sin él. 8 tests nuevos
+      (`tests/Launcher/LauncherPatch_test.cpp`): URLs, extracción con zip
+      real (incl. rechazo de zip-slip), descarga HTTP contra un servidor
+      local de un solo uso, y el ciclo end-to-end descargar→extraer.
+      **Verificado end-to-end en Linux** (Xvfb + xdotool + VersionManager de
+      juguete + servidor HTTP local sirviendo zips reales): clic en START →
+      descarga `patch1299.zip`/`patch1300.zip` por HTTP → extrae a `Data/` →
+      auto-lanza `KnightOnLine`.*
+      *La UI se rehízo para recrear el launcher clásico (a partir de
+      capturas de referencia del usuario): el propio `res/Bkg.bmp` del
+      cliente (arte del caballero + logo "Knight Online") como fondo — un
+      decodificador BMP mínimo 8-bit-paletado/24bpp lo sube a textura GL —,
+      un panel de noticias arriba-derecha (items clicables + links sociales,
+      configurables por `Server.Ini [Launcher]` HomePage/News0../Discord/...
+      que abren el navegador con `open`/`xdg-open`), una barra de progreso
+      ámbar que se llena con la descarga, y los botones START / HOME PAGE /
+      OPTION (este último lanza la herramienta Option portada).)*
 * [x] **Pulido post-port de Option/Launcher** (icono, integración con
       WarFare, bug del botón de lanzar, estilo). *(Hecho:*
       - *Icono de ventana: `Platform/IconDecoder.h/.cpp` decodifica el `.ico`

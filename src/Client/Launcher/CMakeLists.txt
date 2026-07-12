@@ -53,14 +53,18 @@ if(WIN32)
 else()
   # POSIX port (docs/PORT_POSIX_PLAN.md, F10): MFC has no POSIX equivalent.
   # LauncherCore holds the platform-neutral packet framing/parsing and
-  # Server.Ini reading, so it's unit-testable without a socket or a display
-  # (see tests/Launcher). Patch download (FTP) and extraction (ZipArchive,
-  # Windows-only) aren't ported - see LauncherMainSDL.cpp's header comment.
+  # Server.Ini reading; LauncherPatch holds the modern patch-download logic
+  # (HTTP[S] over Asio + miniz ZIP extraction, replacing the original's
+  # FTP + Windows-only ZipArchive). Both are unit-testable without a display
+  # (see tests/Launcher).
   find_package(OpenGL REQUIRED)
+  require_package(Miniz)
 
   add_executable(Launcher
     LauncherCore.cpp
     LauncherCore.h
+    LauncherPatch.cpp
+    LauncherPatch.h
     LauncherMainSDL.cpp)
 
   target_link_libraries(Launcher PRIVATE
@@ -71,6 +75,7 @@ else()
     spdlog::spdlog
     asio
     shared
+    miniz
   )
 
   if(APPLE)
@@ -79,17 +84,33 @@ else()
     target_compile_definitions(Launcher PRIVATE GL_SILENCE_DEPRECATION)
   endif()
 
+  # TLS for https:// patch URLs is opt-in on the presence of OpenSSL (always
+  # available on Linux; `brew install openssl` on macOS). Plain http:// works
+  # without it. On macOS point CMake at the Homebrew copy with
+  # -DOPENSSL_ROOT_DIR=$(brew --prefix openssl) if find_package misses it.
+  find_package(OpenSSL)
+  if(OpenSSL_FOUND)
+    target_link_libraries(Launcher PRIVATE OpenSSL::SSL OpenSSL::Crypto)
+    target_compile_definitions(Launcher PRIVATE LAUNCHER_HAVE_TLS)
+  else()
+    message(STATUS "OpenKO: OpenSSL not found - Launcher patch downloads will "
+                   "support http:// only (install OpenSSL for https://)")
+  endif()
+
   find_package(Threads REQUIRED)
   target_link_libraries(Launcher PRIVATE Threads::Threads)
 
-  # Stage the original Launcher.ico next to the built binary so
-  # LauncherMainSDL's runtime lookup (next to the executable) finds it
-  # without an install step - see Option's identical rationale.
+  # Stage the original Launcher.ico + Bkg.bmp (the classic launcher's
+  # background artwork) next to the built binary so LauncherMainSDL's
+  # runtime lookups find them without an install step.
   add_custom_command(TARGET Launcher POST_BUILD
     COMMAND "${CMAKE_COMMAND}" -E copy_if_different
       "${CMAKE_CURRENT_SOURCE_DIR}/res/Launcher.ico"
       "$<TARGET_FILE_DIR:Launcher>/Launcher.ico"
-    COMMENT "Staging Launcher.ico next to the Launcher binary")
+    COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+      "${CMAKE_CURRENT_SOURCE_DIR}/res/Bkg.bmp"
+      "$<TARGET_FILE_DIR:Launcher>/Bkg.bmp"
+    COMMENT "Staging Launcher.ico + Bkg.bmp next to the Launcher binary")
 endif()
 
 set_target_properties(Launcher PROPERTIES
