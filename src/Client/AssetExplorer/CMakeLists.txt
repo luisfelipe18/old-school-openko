@@ -12,6 +12,8 @@ if(NOT WIN32)
     AssetIndex.h
     OrbitCamera.cpp
     OrbitCamera.h
+    AnimationPlayer.cpp
+    AnimationPlayer.h
     AssetExplorerMainSDL.cpp
     # Reuse KscViewer's platform-neutral .ksc decrypt/decode/export core for the
     # encrypted-texture preview (M2), rather than duplicating the cipher.

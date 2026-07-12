@@ -792,6 +792,16 @@ void RHIDeviceGL::BeginRenderTarget(IRHIRenderTarget* pTarget)
 	m_iWinPixelH = static_cast<int>(pGL->Height());
 	gl::Viewport(0, 0, m_iWinPixelW, m_iWinPixelH);
 
+	// Point the recorded D3D viewport at the target too, so per-draw ApplyViewport
+	// and anything reading GetViewport (e.g. CN3Camera's aspect ratio) match the
+	// target rather than the window.
+	GetViewport(&m_SavedViewport);
+	D3DVIEWPORT9 vp = {};
+	vp.Width  = static_cast<DWORD>(m_iWinPixelW);
+	vp.Height = static_cast<DWORD>(m_iWinPixelH);
+	vp.MaxZ   = 1.0f;
+	SetViewport(&vp);
+
 	m_bRenderTargetBound = true;
 }
 
@@ -803,6 +813,7 @@ void RHIDeviceGL::EndRenderTarget()
 	gl::BindFramebuffer(gl::FRAMEBUFFER, m_uSavedFBO);
 	m_iWinPixelW = m_iSavedWinPixelW;
 	m_iWinPixelH = m_iSavedWinPixelH;
+	SetViewport(&m_SavedViewport);
 	gl::Viewport(0, 0, m_iWinPixelW, m_iWinPixelH);
 	m_bRenderTargetBound = false;
 }

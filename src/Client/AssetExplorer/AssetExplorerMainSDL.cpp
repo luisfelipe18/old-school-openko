@@ -8,6 +8,7 @@
 // A --smoke <dir> flag indexes a directory headlessly and prints the per-type
 // counts for CI, without opening a window.
 
+#include "AnimationPlayer.h"
 #include "AssetIndex.h"
 #include "AssetType.h"
 #include "OrbitCamera.h"
@@ -18,7 +19,10 @@
 #include <RHIDeviceGL.h>
 
 #include <N3Base/My_3DStruct.h>
+#include <N3Base/N3AnimControl.h>
 #include <N3Base/N3Base.h>
+#include <N3Base/N3Camera.h>
+#include <N3Base/N3Chr.h>
 #include <N3Base/N3PMesh.h>
 #include <N3Base/N3Shape.h>
 #include <N3Base/N3Texture.h>
@@ -423,6 +427,100 @@ void LoadShapePreview(ShapePreview& sp, const fs::path& abs)
 	sp.loaded = true;
 }
 
+using assetexplorer::AnimationPlayer;
+
+// --- Character preview (M4) -------------------------------------------------
+
+// A loaded CN3Chr with its skeleton-animation timeline, LOD, and orbit camera.
+struct CharacterPreview
+{
+	bool loaded = false;
+	std::string error;
+
+	std::unique_ptr<CN3Chr> chr;
+	OrbitCamera camera;
+	AnimationPlayer player;
+
+	std::vector<std::string> animNames;
+	int animIndex = -1;
+	int lod = 0;
+	bool wireframe = false;
+	bool showSkeleton = false;
+
+	int jointCount = 0;
+	int partCount  = 0;
+	int plugCount  = 0;
+};
+
+void ReleaseCharacterPreview(CharacterPreview& cp)
+{
+	cp.chr.reset();
+	cp = CharacterPreview{};
+}
+
+// Selects animation `iAni` and arms the timeline over its frame range.
+void SelectAnimation(CharacterPreview& cp, int iAni)
+{
+	if (cp.chr == nullptr)
+		return;
+	CN3AnimControl* ctrl = cp.chr->AniCtrl();
+	if (ctrl == nullptr || iAni < 0 || iAni >= ctrl->Count())
+		return;
+
+	cp.animIndex = iAni;
+	cp.chr->AniCurSet(iAni); // establishes the current clip on the character
+	if (const __AnimData* data = ctrl->DataGet(iAni))
+	{
+		const float fps = data->fFrmPerSec > 0.0f ? data->fFrmPerSec : 30.0f;
+		cp.player.SetClip(data->fFrmStart, data->fFrmEnd, fps);
+		cp.player.Play();
+	}
+}
+
+void LoadCharacterPreview(CharacterPreview& cp, const fs::path& abs)
+{
+	ReleaseCharacterPreview(cp);
+
+	// The engine culls characters against the global camera when calculating
+	// LOD; keep LODDelta at 0 so Render honours the LOD we set explicitly.
+	CN3Chr::LODDeltaSet(0);
+
+	auto chr = std::make_unique<CN3Chr>();
+	if (!chr->LoadFromFile(abs.string()) || chr->PartCount() == 0)
+	{
+		cp.error = "Failed to load " + abs.filename().string();
+		return;
+	}
+	chr->Tick(0.0f);
+	chr->FindMinMax();
+
+	// Count joints via the public matrix accessor (no size getter is exposed).
+	int joints = 0;
+	while (chr->MatrixGet(joints) != nullptr)
+		++joints;
+
+	cp.jointCount = joints;
+	cp.partCount  = chr->PartCount();
+	cp.plugCount  = chr->PlugCount();
+
+	if (CN3AnimControl* ctrl = chr->AniCtrl())
+	{
+		for (int i = 0; i < ctrl->Count(); ++i)
+		{
+			const __AnimData* d = ctrl->DataGet(i);
+			cp.animNames.push_back(d != nullptr && !d->szName.empty()
+				? d->szName
+				: ("anim " + std::to_string(i)));
+		}
+	}
+
+	cp.camera.FrameBounds(chr->Min(), chr->Max());
+	cp.chr = std::move(chr);
+	if (!cp.animNames.empty())
+		SelectAnimation(cp, 0);
+	cp.loaded = true;
+}
+
 // All UI/session state for the explorer.
 struct ExplorerState
 {
@@ -445,14 +543,75 @@ struct ExplorerState
 	int viewportW = 0;
 	int viewportH = 0;
 
-	TexturePreview tex;   // populated when a texture asset is selected (M2)
-	ShapePreview shape;   // populated when a shape asset is selected (M3)
+	TexturePreview tex;        // populated when a texture asset is selected (M2)
+	ShapePreview shape;        // populated when a shape asset is selected (M3)
+	CharacterPreview character; // populated when a character is selected (M4)
+	CN3Camera engineCamera;    // drives s_CameraData for character LOD/culling
 
 	fs::path AbsPathOf(const AssetEntry& e) const
 	{
 		return dataDir / fs::path(e.relativePath);
 	}
 };
+
+// Renders the loaded character into the viewport-sized target (M4). Unlike the
+// shape path this drives the engine CN3Camera so s_CameraData is populated
+// (CN3Chr culls/LODs against it), poses the skeleton to the timeline's current
+// frame, and forces the chosen LOD.
+void RenderCharacterToRT(ExplorerState& state)
+{
+	CharacterPreview& cp = state.character;
+	if (state.rhi == nullptr || !cp.loaded || cp.chr == nullptr)
+		return;
+	if (state.viewportW <= 0 || state.viewportH <= 0)
+		return;
+
+	if (state.previewRT == nullptr || state.rtWidth != state.viewportW
+		|| state.rtHeight != state.viewportH)
+	{
+		delete state.previewRT;
+		RHIRenderTargetDesc desc;
+		desc.width  = static_cast<UINT>(state.viewportW);
+		desc.height = static_cast<UINT>(state.viewportH);
+		desc.depth  = true;
+		state.previewRT = state.rhi->CreateRenderTarget(desc);
+		state.rtWidth   = state.viewportW;
+		state.rtHeight  = state.viewportH;
+	}
+	if (state.previewRT == nullptr)
+		return;
+
+	state.rhi->BeginRenderTarget(state.previewRT);
+	state.rhi->Clear(D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, 0xFF14161B, 1.0f, 0);
+
+	// Drive the engine camera from the orbit camera; Apply() sets the view/proj
+	// transforms and updates s_CameraData (used by CN3Chr's LOD/frustum checks).
+	const __Vector3 eye = cp.camera.Eye();
+	const __Vector3 at  = cp.camera.Target();
+	CN3Camera& cam = state.engineCamera;
+	cam.m_bFogUse   = FALSE;
+	cam.m_Data.fFOV = 0.9f;
+	cam.m_Data.fNP  = cp.camera.NearPlane();
+	cam.m_Data.fFP  = std::max(cp.camera.FarPlane(), 512.0f);
+	cam.LookAt(eye, at, __Vector3(0.0f, 1.0f, 0.0f));
+	cam.Tick();
+	cam.Apply();
+
+	state.rhi->SetRenderState(D3DRS_LIGHTING, FALSE);
+	state.rhi->SetRenderState(D3DRS_ZENABLE, TRUE);
+	state.rhi->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
+	state.rhi->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+	state.rhi->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+	state.rhi->SetRenderState(D3DRS_FILLMODE,
+		cp.wireframe ? D3DFILL_WIREFRAME : D3DFILL_SOLID);
+
+	cp.chr->Tick(cp.player.Frame()); // pose the skeleton to the current frame
+	cp.chr->m_nLOD = std::clamp(cp.lod, 0, MAX_CHR_LOD - 1); // force the chosen LOD
+	cp.chr->Render();
+
+	state.rhi->SetRenderState(D3DRS_FILLMODE, D3DFILL_SOLID);
+	state.rhi->EndRenderTarget();
+}
 
 // Renders the loaded shape into the viewport-sized render target with the orbit
 // camera (M3). The RT is (re)created to match the panel; the engine's own part
@@ -726,6 +885,97 @@ void DrawTextureCanvas(TexturePreview& tp)
 	}
 }
 
+// Shows an RT image filling `canvas` and maps drag->orbit, wheel->dolly onto
+// the given camera. Shared by the shape (M3) and character (M4) viewports.
+void DrawOrbitImage(IRHIRenderTarget* rt, OrbitCamera& cam, const char* id, const ImVec2& canvas)
+{
+	const ImVec2 cursor = ImGui::GetCursorScreenPos();
+	// GL renders bottom-up into the target; flip V so it displays upright.
+	ImGui::Image(reinterpret_cast<ImTextureID>(rt->ColorHandle()), canvas, ImVec2(0, 1), ImVec2(1, 0));
+
+	ImGui::SetCursorScreenPos(cursor);
+	ImGui::InvisibleButton(id, canvas);
+	if (ImGui::IsItemActive() && ImGui::IsMouseDragging(ImGuiMouseButton_Left))
+	{
+		const ImVec2 d = ImGui::GetIO().MouseDelta;
+		cam.Orbit(d.x * 0.01f, d.y * 0.01f);
+	}
+	if (ImGui::IsItemHovered())
+	{
+		const float wheel = ImGui::GetIO().MouseWheel;
+		if (wheel != 0.0f)
+			cam.Dolly(1.0f - wheel * 0.1f);
+	}
+}
+
+// Character viewport: animation/LOD toolbar, the orbit image, and a scrub
+// timeline (M4).
+void DrawCharacterViewport(ExplorerState& state)
+{
+	CharacterPreview& cp = state.character;
+
+	// --- Toolbar row 1: animation selection + transport ---
+	if (!cp.animNames.empty())
+	{
+		ImGui::SetNextItemWidth(200);
+		const char* cur = (cp.animIndex >= 0 && cp.animIndex < static_cast<int>(cp.animNames.size()))
+			? cp.animNames[static_cast<std::size_t>(cp.animIndex)].c_str()
+			: "(none)";
+		if (ImGui::BeginCombo("##anim", cur))
+		{
+			for (int i = 0; i < static_cast<int>(cp.animNames.size()); ++i)
+			{
+				const bool sel = (i == cp.animIndex);
+				if (ImGui::Selectable(cp.animNames[static_cast<std::size_t>(i)].c_str(), sel))
+					SelectAnimation(cp, i);
+			}
+			ImGui::EndCombo();
+		}
+		ImGui::SameLine();
+		if (ImGui::Button(cp.player.IsPlaying() ? "Pause" : "Play"))
+			cp.player.TogglePlay();
+		ImGui::SameLine();
+		bool loop = cp.player.IsLooping();
+		if (ImGui::Checkbox("Loop", &loop))
+			cp.player.SetLooping(loop);
+		ImGui::SameLine();
+		float speed = cp.player.Speed();
+		ImGui::SetNextItemWidth(120);
+		if (ImGui::SliderFloat("Speed", &speed, 0.1f, 4.0f, "%.2fx"))
+			cp.player.SetSpeed(speed);
+	}
+	else
+	{
+		ImGui::TextDisabled("no animations");
+	}
+
+	// --- Toolbar row 2: LOD + display toggles ---
+	ImGui::SetNextItemWidth(90);
+	const char* lods[] = {"LOD 0", "LOD 1", "LOD 2", "LOD 3"};
+	ImGui::Combo("##lod", &cp.lod, lods, MAX_CHR_LOD);
+	ImGui::SameLine();
+	ImGui::Checkbox("Wireframe", &cp.wireframe);
+	ImGui::SameLine();
+	if (ImGui::Button("Reset view") && cp.chr != nullptr)
+		cp.camera.FrameBounds(cp.chr->Min(), cp.chr->Max());
+	ImGui::SameLine();
+	ImGui::TextDisabled("drag: orbit  |  wheel: zoom");
+
+	// --- Orbit image (leave room for the timeline) ---
+	const float timelineH = ImGui::GetFrameHeightWithSpacing();
+	ImVec2 canvas = ImGui::GetContentRegionAvail();
+	canvas.y = canvas.y > timelineH ? canvas.y - timelineH : canvas.y;
+	if (state.previewRT != nullptr && state.previewRT->ColorHandle() != nullptr)
+		DrawOrbitImage(state.previewRT, cp.camera, "##chrcanvas", canvas);
+
+	// --- Timeline scrub ---
+	float frame = cp.player.Frame();
+	ImGui::SetNextItemWidth(-FLT_MIN);
+	if (ImGui::SliderFloat("##timeline", &frame, cp.player.StartFrame(), cp.player.EndFrame(),
+			"frame %.0f"))
+		cp.player.Scrub(frame);
+}
+
 void DrawViewport(ExplorerState& state, const ImVec2& size)
 {
 	if (!ImGui::BeginChild("##viewport", size, ImGuiChildFlags_Borders))
@@ -750,6 +1000,10 @@ void DrawViewport(ExplorerState& state, const ImVec2& size)
 	{
 		DrawTextureCanvas(state.tex);
 	}
+	else if (state.character.loaded)
+	{
+		DrawCharacterViewport(state);
+	}
 	else if (state.shape.loaded && state.previewRT != nullptr
 		&& state.previewRT->ColorHandle() != nullptr)
 	{
@@ -765,31 +1019,16 @@ void DrawViewport(ExplorerState& state, const ImVec2& size)
 		}
 		ImGui::SameLine();
 		ImGui::TextDisabled("drag: orbit  |  wheel: zoom");
-
-		const ImVec2 canvas = ImGui::GetContentRegionAvail();
-		const ImVec2 cursor = ImGui::GetCursorScreenPos();
-		// GL renders bottom-up into the target; flip V so it displays upright.
-		ImGui::Image(reinterpret_cast<ImTextureID>(state.previewRT->ColorHandle()), canvas,
-			ImVec2(0, 1), ImVec2(1, 0));
-
-		// Orbit/zoom over the image.
-		ImGui::SetCursorScreenPos(cursor);
-		ImGui::InvisibleButton("##shapecanvas", canvas);
-		if (ImGui::IsItemActive() && ImGui::IsMouseDragging(ImGuiMouseButton_Left))
-		{
-			const ImVec2 d = ImGui::GetIO().MouseDelta;
-			state.shape.camera.Orbit(d.x * 0.01f, d.y * 0.01f);
-		}
-		if (ImGui::IsItemHovered())
-		{
-			const float wheel = ImGui::GetIO().MouseWheel;
-			if (wheel != 0.0f)
-				state.shape.camera.Dolly(1.0f - wheel * 0.1f);
-		}
+		DrawOrbitImage(state.previewRT, state.shape.camera, "##shapecanvas",
+			ImGui::GetContentRegionAvail());
 	}
 	else if (!state.tex.error.empty())
 	{
 		centeredText(state.tex.error.c_str());
+	}
+	else if (!state.character.error.empty())
+	{
+		centeredText(state.character.error.c_str());
 	}
 	else if (!state.shape.error.empty())
 	{
@@ -915,6 +1154,32 @@ void DrawInspector(ExplorerState& state, const ImVec2& size)
 		ImGui::Separator();
 		ImGui::TextColored(ImVec4(0.9f, 0.5f, 0.4f, 1.0f), "%s", sp.error.c_str());
 	}
+
+	// Character-specific metadata.
+	const CharacterPreview& cp = state.character;
+	if (cp.loaded)
+	{
+		ImGui::Spacing();
+		ImGui::Separator();
+		ImGui::Spacing();
+		ImGui::Text("Joints");
+		ImGui::TextDisabled("%d", cp.jointCount);
+		ImGui::Spacing();
+		ImGui::Text("Parts");
+		ImGui::TextDisabled("%d", cp.partCount);
+		ImGui::Spacing();
+		ImGui::Text("Plugs");
+		ImGui::TextDisabled("%d", cp.plugCount);
+		ImGui::Spacing();
+		ImGui::Text("Animations");
+		ImGui::TextDisabled("%d", static_cast<int>(cp.animNames.size()));
+	}
+	else if (!cp.error.empty())
+	{
+		ImGui::Spacing();
+		ImGui::Separator();
+		ImGui::TextColored(ImVec4(0.9f, 0.5f, 0.4f, 1.0f), "%s", cp.error.c_str());
+	}
 	ImGui::EndChild();
 }
 
@@ -926,29 +1191,26 @@ void SyncPreview(ExplorerState& state)
 		return;
 	state.loadedForSelection = state.selected;
 
-	if (state.selected < 0 || state.selected >= static_cast<int>(state.index.Entries().size()))
-	{
+	auto clearAll = [&]() {
 		ReleaseTexturePreview(state.tex);
 		ReleaseShapePreview(state.shape);
+		ReleaseCharacterPreview(state.character);
+	};
+
+	if (state.selected < 0 || state.selected >= static_cast<int>(state.index.Entries().size()))
+	{
+		clearAll();
 		return;
 	}
 
 	const AssetEntry& e = state.index.Entries()[static_cast<std::size_t>(state.selected)];
+	clearAll();
 	if (e.category == AssetCategory::Texture)
-	{
-		ReleaseShapePreview(state.shape);
 		LoadTexturePreview(state.tex, e.type, state.AbsPathOf(e), e.sizeBytes);
-	}
 	else if (e.type == AssetType::Shape)
-	{
-		ReleaseTexturePreview(state.tex);
 		LoadShapePreview(state.shape, state.AbsPathOf(e));
-	}
-	else
-	{
-		ReleaseTexturePreview(state.tex);
-		ReleaseShapePreview(state.shape);
-	}
+	else if (e.type == AssetType::Character)
+		LoadCharacterPreview(state.character, state.AbsPathOf(e));
 }
 
 // Offscreen render smoke (docs/ASSET_EXPLORER_PLAN.md, M1): brings up the GL
@@ -1131,11 +1393,15 @@ int main(int argc, char** argv)
 				bRunning = false;
 		}
 
-		// Bring the preview in line with the current selection (loads a texture
-		// or shape, or clears it), then render the 3D preview into the target
-		// using the panel size measured last frame, before the UI references it.
+		// Bring the preview in line with the current selection (loads a texture,
+		// shape or character, or clears it), advance the animation timeline, then
+		// render the 3D preview into the target using the panel size measured last
+		// frame, before the UI references it.
 		SyncPreview(state);
+		if (state.character.loaded)
+			state.character.player.Update(ImGui::GetIO().DeltaTime);
 		RenderShapeToRT(state);
+		RenderCharacterToRT(state);
 
 		ImGui_ImplOpenGL3_NewFrame();
 		ImGui_ImplSDL3_NewFrame();
@@ -1185,6 +1451,7 @@ int main(int argc, char** argv)
 	// backend (its destructor destroys the GL context).
 	ReleaseTexturePreview(state.tex);
 	ReleaseShapePreview(state.shape);
+	ReleaseCharacterPreview(state.character);
 	delete state.previewRT;
 	CN3Base::RHIDeviceSet(nullptr);
 	delete pRHI;

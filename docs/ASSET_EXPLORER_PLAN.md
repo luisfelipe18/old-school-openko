@@ -300,7 +300,7 @@ none needed; builds under the existing `linux-clang-*` / `macos-arm64-*`.
 | **M1** ✅ | RHI offscreen RT | `CreateRenderTarget/Begin/End` on `IRHIDevice` (default no-op) + GL backend impl; a triangle rendered through the engine into the viewport's `ImGui::Image`; `--smoke-render` readback guard | all 3D |
 | **M2** ✅ | Texture panel | `CN3Texture` (`.dxt`/`.tga`) + `.ksc` 2D preview with checkerboard backdrop and fit/zoom/pan, inspector (dims/format/mips/alpha), export (`.ksc`→JPEG, engine→BMP via RT readback) | replaces N3TexViewer |
 | **M3** ✅ | Shape viewport | `CN3Shape` rendered through the engine into the RT with an orbit camera (drag-orbit / wheel-dolly / reset-frame), wireframe toggle (adds `glPolygonMode` to the GL backend), parts/tris/textures inspector; `--demo` cube + 3D render smoke | replaces N3Viewer |
-| **M4** | Character + animation | `CN3Chr` with anim timeline, LOD, plugs, skeleton | replaces N3CE |
+| **M4** ✅ | Character + animation | `CN3Chr` posed through the engine camera (so `s_CameraData` LOD/culling works), `AnimationPlayer` timeline (clip dropdown / play-pause / scrub / speed / loop), LOD 0-3 selector, wireframe; joints/parts/plugs/anims inspector. `AnimationPlayer` unit-tested | replaces N3CE |
 | **M5** | FX bundles | `CN3FXBundle` playback controls | replaces N3FXE |
 | **M6** | Maps | `CN3Terrain` + placed shapes, fly camera, minimap | replaces N3ME (view-only) |
 | **M7** | Polish | Thumbnails, command palette, drag-drop, layout presets, SDLGPU RT path | the "modern app" feel |

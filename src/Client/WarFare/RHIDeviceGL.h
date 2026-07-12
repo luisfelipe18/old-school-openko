@@ -199,6 +199,7 @@ private:
 	gl::Uint m_uSavedFBO = 0;
 	int m_iSavedWinPixelW = 0;
 	int m_iSavedWinPixelH = 0;
+	D3DVIEWPORT9 m_SavedViewport = {};
 	bool m_bRenderTargetBound = false;
 
 	// Uniform locations, cached at link time.
