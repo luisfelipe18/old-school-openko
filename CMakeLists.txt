@@ -238,6 +238,20 @@ if(OPENKO_BUILD_TOOLS)
   add_subdirectory(src/Tools/UIE)
 endif()
 
+if(OPENKO_BUILD_SERVERS AND NOT WIN32)
+  # The servers need a system ODBC library (unixODBC on Linux, unixodbc or
+  # iODBC from Homebrew on macOS). Rather than letting the "all" build fail
+  # at link time on client-only development machines, detect it up front
+  # and skip the server projects with a clear notice.
+  find_library(OPENKO_ODBC_LIBRARY NAMES odbc iodbc)
+  if(NOT OPENKO_ODBC_LIBRARY)
+    message(STATUS "OpenKO: no ODBC library found (unixODBC/iODBC) - skipping the server "
+                   "projects. Install it (apt: unixodbc-dev / brew: unixodbc) and "
+                   "reconfigure to build them.")
+    set(OPENKO_BUILD_SERVERS OFF)
+  endif()
+endif()
+
 if(OPENKO_BUILD_SERVERS)
   message(STATUS "OpenKO: Preparing to configure servers...")
 
