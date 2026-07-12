@@ -899,7 +899,12 @@ void CGameProcMain::GMPanelHandleInput()
 
 	if (s_pLocalInput->IsKeyPress(DIK_TAB) && !m_szGMPanelFilter.empty())
 	{
-		MsgSend_Chat(N3_CHAT_NORMAL, "+" + m_szGMPanelFilter);
+		const std::string szCmd = "+" + m_szGMPanelFilter;
+		MsgSend_Chat(N3_CHAT_NORMAL, szCmd);
+		// Echo locally so it's obvious the command was sent (the server acts on
+		// it; effects like exp/item/zone appear as their own updates).
+		if (m_pUIChatDlg != nullptr)
+			m_pUIChatDlg->AddChatMsg(N3_CHAT_NORMAL, "GM command sent: " + szCmd, 0xFFFFDD33);
 		m_szGMPanelFilter.clear();
 	}
 
@@ -1008,7 +1013,9 @@ void CGameProcMain::GMPanelRender()
 	lines.emplace_back(
 		fmt::format("Box: {}_", m_szGMPanelFilter.empty() ? "(type a name or command)" : m_szGMPanelFilter),
 		0xFF80D0FF);
-	lines.emplace_back("Tab runs: giveitem <id> [n] | expadd <n> | zonechange <zone> [x] [z]",
+	lines.emplace_back("Tab runs a GM command. exp to a user: expadd <charName> <n>",
+		0xFF90E090);
+	lines.emplace_back("  also: expadd <n> (self) | giveitem [charName] <id> [n] | zonechange <zone>",
 		0xFF90E090);
 	lines.emplace_back(
 		fmt::format("Matches: {}   (Up/Down select, Enter teleport)", m_GMPanelIDs.size()),
