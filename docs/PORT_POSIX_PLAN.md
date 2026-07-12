@@ -953,10 +953,22 @@ la traen activada).
       visual real: capturado con Xvfb + Mesa llvmpipe (mismo método que
       validó el backend GL del cliente en T6.6), los 6 grupos de controles
       renderizan y funcionan.)*
-* [ ] **KscViewer.** Visor de `.ksc` (imágenes de splash/loading cifradas,
-      formato JPEG propietario) con soporte para exportar a `.jpg` plano.
-      Reutiliza el decriptado ya portado en `N3JpegFile`/`JpegFile`
-      (libjpeg ya es dependencia POSIX). Pendiente.
+* [x] **KscViewer.** Visor de `.ksc` (imágenes de splash/loading cifradas:
+      un JPEG detrás del stream cipher clásico del juego + cabecera de 8
+      bytes con magic "KSC\x01") con exportación a `.jpg` plano. *(Hecho:
+      `KscViewerCore.h/.cpp` reimplementa el cifrado de forma auto-contenida
+      y reentrante (no depende del estado estático de `CJpegFile`),
+      decodifica vía `JpegFileToRGB` (libjpeg, ya dependencia POSIX) y
+      exporta. `KscViewerMainSDL.cpp` lo envuelve en ImGui: navegador de
+      carpetas (lista dirs + `.ksc`/`.jpg`, sin diálogo nativo), preview de
+      la imagen como textura GL escalada a la ventana, y botón "Export
+      JPEG". Flags `--file <path>` (abrir directo) y `--smoke <path>`
+      (decodifica headless para CI). 6 tests (`tests/KscViewer/`) cubren el
+      ciclo cipher round-trip, rechazo de magic/tamaño inválido, y el flujo
+      completo cifrar→`.ksc`→decodificar→exportar contra JPEGs reales
+      generados por libjpeg. Verificado end-to-end en Linux (Xvfb +
+      xdotool): un `.ksc` cifrado se muestra correctamente y "Export JPEG"
+      escribe un `.jpg` válido de 400x300.)*
 * [x] **Launcher.** Version-check real contra VersionManager (mismo puerto
       15100 / IPs de `Server.Ini` que usa la escena de login de `WarFare`)
       y lanzamiento del cliente. Descarga de parches por FTP + extracción
@@ -1099,7 +1111,7 @@ la traen activada).
 `WarFareClient.Tests`), y se verificaron visualmente e interactivamente en
 Linux headless (Xvfb + `xdotool`) — `Launcher` además contra un servidor de
 protocolo real, y `WarFare` compilado con el nuevo hookup de `Option`.
-`KscViewer` queda para continuar esta fase.
+`KscViewer` también portado (visor+export de `.ksc`), cerrando F10 en su totalidad.
 
 ### Fase 11 — Plan de cierre hacia Hito E ("distribuible")
 
@@ -1150,7 +1162,7 @@ es la salida definitiva. Desglose concreto:
 
 **3. F10 — Flecos de herramientas.**
 
-* [ ] KscViewer (ImGui): descifrar `.ksc` (reutiliza `N3JpegFile`),
+* [x] KscViewer (ImGui): descifrar `.ksc` (reutiliza `N3JpegFile`),
       mostrar y exportar `.jpg`.
 * [ ] (Opcional) Descarga de parches del Launcher: recomendado HTTP(S) +
       miniz en vez del FTP fiel al original; mantener la UI de progreso

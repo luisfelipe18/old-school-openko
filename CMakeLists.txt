@@ -209,19 +209,17 @@ if(OPENKO_BUILD_CLIENT_TOOLS)
   endif()
 
   if(WIN32)
-    # ZipArchive/KscViewer aren't ported to POSIX yet - MFC-only. Launcher's
-    # Windows build also needs ZipArchive for patch extraction.
+    # ZipArchive is MFC-only. Launcher's Windows build needs it for patch
+    # extraction.
     set(CMAKE_FOLDER "Client tools/_deps")
     require_package(Zlib)
     add_subdirectory(src/Client/ZipArchive)
-
-    set(CMAKE_FOLDER "Client tools")
-    add_subdirectory(src/Client/KscViewer)
   endif()
 
   set(CMAKE_FOLDER "Client tools")
   add_subdirectory(src/Client/Option)
   add_subdirectory(src/Client/Launcher)
+  add_subdirectory(src/Client/KscViewer)
 endif()
 
 if(OPENKO_BUILD_TOOLS)
@@ -303,6 +301,7 @@ if(OPENKO_BUILD_TESTS)
   if(OPENKO_BUILD_CLIENT_TOOLS)
     add_subdirectory(tests/Option)
     add_subdirectory(tests/Launcher)
+    add_subdirectory(tests/KscViewer)
   endif()
 
   if(OPENKO_BUILD_SERVERS)
