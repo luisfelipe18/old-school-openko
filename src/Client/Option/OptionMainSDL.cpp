@@ -7,7 +7,9 @@
 #include "OptionCore.h"
 
 #include <Platform/GameDataDir.h>
+#include <Platform/IconDecoder.h>
 #include <Platform/PlatformPaths.h>
+#include <Platform/ProcessLaunch.h>
 
 #include <imgui.h>
 #include <imgui_impl_opengl3.h>
@@ -90,53 +92,109 @@ std::vector<option_core::Resolution> DetectDisplayResolutions()
 // Best-effort launch of the game client next to this tool (the original
 // launches Launcher.exe, which isn't ported yet - launching WarFare directly
 // gets you into the game, matching the self-contained POSIX bundle from F8).
-// Wraps a path in double quotes for a shell command line, escaping any
-// embedded backslash or double-quote so paths with spaces (common under
-// "~/Library/Application Support/...") survive std::system's `sh -c`.
-std::string ShellQuote(const std::string& s)
+// Returns false (leaving the Option window open so the failure is visible)
+// when the binary can't be found - e.g. WarFare ships as a KnightOnLine.app
+// bundle on macOS, which FindSiblingExecutable accounts for.
+bool LaunchWarFareAndExit(const fs::path& gameDir)
 {
-	std::string out = "\"";
-	for (char c : s)
+	const fs::path candidate = platform_launch::FindSiblingExecutable(
+		{ GetExecutableDir(), gameDir }, "KnightOnLine");
+
+	if (candidate.empty())
 	{
-		if (c == '"' || c == '\\')
-			out += '\\';
-		out += c;
+		spdlog::warn(
+			"Option: couldn't find the KnightOnLine binary next to this tool - start it manually.");
+		return false;
 	}
-	out += '"';
-	return out;
+
+	spdlog::info("Option: launching {}", candidate.string());
+	// Forward the resolved game data dir explicitly (same spirit as
+	// StartGame() re-passing its own command line) rather than relying on
+	// WarFare's own auto-discovery to land on the same directory - but only
+	// when it's a real one; ResolveGameDir() falls back to CWD when
+	// discovery finds nothing, and passing that through would override
+	// WarFare's own (equally capable) auto-discovery with a guess instead of
+	// leaving it to try on its own.
+	platform_launch::LaunchDetached(candidate, gameDir);
+	return true;
 }
 
-void LaunchWarFareAndExit(const fs::path& gameDir)
+// Decodes Option.ico (staged next to the binary by CMake) and applies it as
+// the SDL window icon. Best-effort: a missing/undecodable file just leaves
+// the window manager's default icon, same as any other resource lookup miss
+// in this tool.
+void ApplyWindowIcon(SDL_Window* pWindow)
 {
-	const fs::path candidates[] = {
-		GetExecutableDir() / "KnightOnLine",
-		gameDir / "KnightOnLine",
-	};
-
-	for (const fs::path& candidate : candidates)
+	const fs::path iconPath = GetExecutableDir() / "Option.ico";
+	const DecodedIcon icon  = LoadIconFromFile(iconPath);
+	if (!icon.IsValid())
 	{
-		std::error_code ec;
-		if (!fs::exists(candidate, ec) || !fs::is_regular_file(candidate, ec))
-			continue;
-
-		spdlog::info("Option: launching {}", candidate.string());
-		// Forward the resolved game data dir explicitly (same spirit as
-		// StartGame() re-passing its own command line) rather than relying
-		// on WarFare's own auto-discovery to land on the same directory -
-		// but only when it's a real one; ResolveGameDir() falls back to CWD
-		// when discovery finds nothing, and passing that through would
-		// override WarFare's own (equally capable) auto-discovery with a
-		// guess instead of leaving it to try on its own.
-		std::string cmd = ShellQuote(candidate.string());
-		if (LooksLikeGameDataDir(gameDir))
-			cmd += " --data " + ShellQuote(gameDir.string());
-		cmd += " &";
-		std::system(cmd.c_str()); // NOLINT(cert-env33-c) - fire-and-forget launch, same spirit as ShellExecute
+		spdlog::warn("Option: couldn't load window icon from {}", iconPath.string());
 		return;
 	}
 
-	spdlog::warn(
-		"Option: couldn't find the KnightOnLine binary next to this tool - start it manually.");
+	SDL_Surface* pSurface = SDL_CreateSurfaceFrom(
+		icon.width, icon.height, SDL_PIXELFORMAT_RGBA32,
+		const_cast<uint8_t*>(icon.pixelsRgba.data()), icon.width * 4);
+	if (pSurface == nullptr)
+	{
+		spdlog::warn("Option: SDL_CreateSurfaceFrom failed: {}", SDL_GetError());
+		return;
+	}
+
+	SDL_SetWindowIcon(pWindow, pSurface);
+	SDL_DestroySurface(pSurface);
+}
+
+// A flat, rounded "modern" dark theme, replacing ImGui's stock StyleColorsDark
+// (the original MFC dialog's Windows-native fonts/controls have no POSIX
+// equivalent worth emulating pixel-for-pixel - this leans into the ImGui
+// toolkit's own look instead of imitating the Windows 98-era dialog it
+// replaces).
+void ApplyModernStyle()
+{
+	ImGui::StyleColorsDark();
+	ImGuiStyle& style = ImGui::GetStyle();
+
+	style.WindowRounding    = 8.0f;
+	style.ChildRounding     = 6.0f;
+	style.FrameRounding     = 5.0f;
+	style.PopupRounding     = 6.0f;
+	style.ScrollbarRounding = 8.0f;
+	style.GrabRounding      = 5.0f;
+	style.TabRounding       = 5.0f;
+
+	style.WindowPadding    = ImVec2(16, 16);
+	style.FramePadding     = ImVec2(10, 6);
+	style.ItemSpacing      = ImVec2(10, 8);
+	style.ItemInnerSpacing = ImVec2(8, 6);
+	style.IndentSpacing    = 18.0f;
+	style.ScrollbarSize    = 14.0f;
+	style.GrabMinSize      = 10.0f;
+
+	ImVec4* colors = style.Colors;
+	// Slate background with a desaturated blue accent - distinct from the
+	// stock ImGui palette every other ImGui tool ships with.
+	colors[ImGuiCol_WindowBg]         = ImVec4(0.10f, 0.11f, 0.13f, 1.00f);
+	colors[ImGuiCol_ChildBg]          = ImVec4(0.10f, 0.11f, 0.13f, 1.00f);
+	colors[ImGuiCol_PopupBg]          = ImVec4(0.12f, 0.13f, 0.16f, 1.00f);
+	colors[ImGuiCol_Border]           = ImVec4(0.20f, 0.22f, 0.27f, 1.00f);
+	colors[ImGuiCol_FrameBg]          = ImVec4(0.16f, 0.18f, 0.22f, 1.00f);
+	colors[ImGuiCol_FrameBgHovered]   = ImVec4(0.20f, 0.23f, 0.29f, 1.00f);
+	colors[ImGuiCol_FrameBgActive]    = ImVec4(0.24f, 0.28f, 0.36f, 1.00f);
+	colors[ImGuiCol_TitleBg]          = ImVec4(0.08f, 0.09f, 0.11f, 1.00f);
+	colors[ImGuiCol_TitleBgActive]    = ImVec4(0.08f, 0.09f, 0.11f, 1.00f);
+	colors[ImGuiCol_CheckMark]        = ImVec4(0.35f, 0.65f, 1.00f, 1.00f);
+	colors[ImGuiCol_SliderGrab]       = ImVec4(0.35f, 0.65f, 1.00f, 1.00f);
+	colors[ImGuiCol_SliderGrabActive] = ImVec4(0.45f, 0.72f, 1.00f, 1.00f);
+	colors[ImGuiCol_Button]           = ImVec4(0.20f, 0.23f, 0.29f, 1.00f);
+	colors[ImGuiCol_ButtonHovered]    = ImVec4(0.28f, 0.45f, 0.68f, 1.00f);
+	colors[ImGuiCol_ButtonActive]     = ImVec4(0.24f, 0.53f, 0.83f, 1.00f);
+	colors[ImGuiCol_Header]           = ImVec4(0.20f, 0.23f, 0.29f, 1.00f);
+	colors[ImGuiCol_HeaderHovered]    = ImVec4(0.28f, 0.45f, 0.68f, 1.00f);
+	colors[ImGuiCol_HeaderActive]     = ImVec4(0.24f, 0.53f, 0.83f, 1.00f);
+	colors[ImGuiCol_Separator]        = ImVec4(0.22f, 0.24f, 0.29f, 1.00f);
+	colors[ImGuiCol_SeparatorHovered] = ImVec4(0.35f, 0.65f, 1.00f, 0.60f);
 }
 
 struct UiState
@@ -251,7 +309,7 @@ int main(int argc, char** argv)
 	SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
 
 	SDL_Window* pWindow = SDL_CreateWindow(
-		"Knight OnLine - Option", 560, 720, SDL_WINDOW_OPENGL | SDL_WINDOW_HIDDEN);
+		"Knight OnLine - Option", 640, 860, SDL_WINDOW_OPENGL | SDL_WINDOW_HIDDEN);
 	if (pWindow == nullptr)
 	{
 		spdlog::error("Option: SDL_CreateWindow failed: {}", SDL_GetError());
@@ -269,12 +327,13 @@ int main(int argc, char** argv)
 	}
 	SDL_GL_MakeCurrent(pWindow, glContext);
 	SDL_GL_SetSwapInterval(1);
+	ApplyWindowIcon(pWindow);
 	SDL_ShowWindow(pWindow);
 
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
 	ImGui::GetIO().IniFilename = nullptr; // no imgui.ini next to Option.ini
-	ImGui::StyleColorsDark();
+	ApplyModernStyle();
 	ImGui_ImplSDL3_InitForOpenGL(pWindow, glContext);
 	ImGui_ImplOpenGL3_Init("#version 330");
 
@@ -283,6 +342,8 @@ int main(int argc, char** argv)
 	ui.option        = option_core::LoadOptions((gameDir / "Option.ini").string());
 	ui.serverVersion = option_core::ReadServerVersion((gameDir / "Server.Ini").string());
 	SyncUiFromOption(ui);
+
+	std::string launchError;
 
 	std::vector<std::string> resolutionLabels;
 	resolutionLabels.reserve(ui.resolutions.size());
@@ -372,8 +433,19 @@ int main(int argc, char** argv)
 		{
 			SyncOptionFromUi(ui);
 			option_core::SaveOptions((gameDir / "Option.ini").string(), ui.option);
-			LaunchWarFareAndExit(gameDir);
-			bRunning = false;
+			if (LaunchWarFareAndExit(gameDir))
+				bRunning = false;
+			else
+				launchError = "Couldn't find the KnightOnLine binary next to Option "
+							  "(looked in " + GetExecutableDir().string() + " and "
+							  + gameDir.string() + "). Your settings were saved.";
+		}
+		if (!launchError.empty())
+		{
+			ImGui::Spacing();
+			ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.45f, 0.45f, 1.0f));
+			ImGui::TextWrapped("%s", launchError.c_str());
+			ImGui::PopStyleColor();
 		}
 
 		ImGui::End();

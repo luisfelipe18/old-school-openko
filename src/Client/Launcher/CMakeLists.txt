@@ -81,6 +81,15 @@ else()
 
   find_package(Threads REQUIRED)
   target_link_libraries(Launcher PRIVATE Threads::Threads)
+
+  # Stage the original Launcher.ico next to the built binary so
+  # LauncherMainSDL's runtime lookup (next to the executable) finds it
+  # without an install step - see Option's identical rationale.
+  add_custom_command(TARGET Launcher POST_BUILD
+    COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+      "${CMAKE_CURRENT_SOURCE_DIR}/res/Launcher.ico"
+      "$<TARGET_FILE_DIR:Launcher>/Launcher.ico"
+    COMMENT "Staging Launcher.ico next to the Launcher binary")
 endif()
 
 set_target_properties(Launcher PROPERTIES

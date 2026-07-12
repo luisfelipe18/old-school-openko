@@ -14,6 +14,8 @@
 #ifdef _WIN32
 #include <shellapi.h>
 #else
+#include "LaunchOptionTool.h"
+
 #include <Platform/PlatformTime.h> // Sleep()
 #endif
 
@@ -109,6 +111,8 @@ bool CUIExitMenu::ReceiveMessage(CN3UIBase* pSender, uint32_t dwMsg)
 
 #ifdef _WIN32
 			::ShellExecute(nullptr, "open", "Option.exe", nullptr, nullptr, SW_SHOWNORMAL);
+#else
+			LaunchOptionTool();
 #endif
 			PostQuitMessage(0);
 		}

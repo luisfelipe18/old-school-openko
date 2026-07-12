@@ -46,6 +46,15 @@ else()
     # the warning rather than the API itself.
     target_compile_definitions(Option PRIVATE GL_SILENCE_DEPRECATION)
   endif()
+
+  # Stage the original Option.ico next to the built binary so OptionMainSDL's
+  # runtime lookup (next to the executable, same spirit as WarFare's cursor
+  # resources) finds it without an install step.
+  add_custom_command(TARGET Option POST_BUILD
+    COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+      "${CMAKE_CURRENT_SOURCE_DIR}/res/Option.ico"
+      "$<TARGET_FILE_DIR:Option>/Option.ico"
+    COMMENT "Staging Option.ico next to the Option binary")
 endif()
 
 set_target_properties(Option PROPERTIES

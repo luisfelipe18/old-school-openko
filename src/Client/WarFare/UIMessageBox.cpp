@@ -20,6 +20,8 @@
 #ifdef _WIN32
 #include <shellapi.h>
 #else
+#include "LaunchOptionTool.h"
+
 #include <Platform/PlatformTime.h> // Sleep()
 #endif
 
@@ -173,8 +175,10 @@ bool CUIMessageBox::ReceiveMessage(CN3UIBase* pSender, uint32_t dwMsg)
 				{
 #ifdef _WIN32
 					::ShellExecute(nullptr, "open", "Option.exe", nullptr, nullptr, SW_SHOWNORMAL); // 홈페이지로 이동..
-					PostQuitMessage(0);                                                             // 종료...
+#else
+					LaunchOptionTool();
 #endif
+					PostQuitMessage(0); // 종료...
 				}
 				break;
 				default:

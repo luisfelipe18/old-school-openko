@@ -23,7 +23,9 @@
 #include "LauncherCore.h"
 
 #include <Platform/GameDataDir.h>
+#include <Platform/IconDecoder.h>
 #include <Platform/PlatformPaths.h>
+#include <Platform/ProcessLaunch.h>
 
 #include <imgui.h>
 #include <imgui_impl_opengl3.h>
@@ -229,49 +231,98 @@ void NetworkThreadMain(SharedState& shared, fs::path gameDir)
 	}
 }
 
-// Wraps a path in double quotes for a shell command line, escaping any
-// embedded backslash or double-quote so paths with spaces (common under
-// "~/Library/Application Support/...") survive std::system's `sh -c`.
-std::string ShellQuote(const std::string& s)
+// Returns false (leaving the Launcher window open with an error instead of
+// handing off silently) when the binary can't be found - e.g. WarFare ships
+// as a KnightOnLine.app bundle on macOS, which FindSiblingExecutable
+// accounts for.
+bool LaunchWarFareAndExit(const fs::path& gameDir)
 {
-	std::string out = "\"";
-	for (char c : s)
+	const fs::path candidate = platform_launch::FindSiblingExecutable(
+		{ GetExecutableDir(), gameDir }, "KnightOnLine");
+
+	if (candidate.empty())
 	{
-		if (c == '"' || c == '\\')
-			out += '\\';
-		out += c;
+		spdlog::warn("Launcher: couldn't find the KnightOnLine binary next to this tool.");
+		return false;
 	}
-	out += '"';
-	return out;
+
+	spdlog::info("Launcher: launching {}", candidate.string());
+	// Forward the resolved game data dir explicitly (StartGame() on Windows
+	// re-passes its own command line the same way) - but only when it's a
+	// real one; see Option's identical comment for why the CWD fallback
+	// isn't forwarded.
+	platform_launch::LaunchDetached(candidate, gameDir);
+	return true;
 }
 
-void LaunchWarFareAndExit(const fs::path& gameDir)
+// Decodes Launcher.ico (staged next to the binary by CMake) and applies it
+// as the SDL window icon. Best-effort: a missing/undecodable file just
+// leaves the window manager's default icon.
+void ApplyWindowIcon(SDL_Window* pWindow)
 {
-	const fs::path candidates[] = {
-		GetExecutableDir() / "KnightOnLine",
-		gameDir / "KnightOnLine",
-	};
-
-	for (const fs::path& candidate : candidates)
+	const fs::path iconPath = GetExecutableDir() / "Launcher.ico";
+	const DecodedIcon icon  = LoadIconFromFile(iconPath);
+	if (!icon.IsValid())
 	{
-		std::error_code ec;
-		if (!fs::exists(candidate, ec) || !fs::is_regular_file(candidate, ec))
-			continue;
-
-		spdlog::info("Launcher: launching {}", candidate.string());
-		// Forward the resolved game data dir explicitly (StartGame() on
-		// Windows re-passes its own command line the same way) - but only
-		// when it's a real one; see Option's identical comment for why the
-		// CWD fallback isn't forwarded.
-		std::string cmd = ShellQuote(candidate.string());
-		if (LooksLikeGameDataDir(gameDir))
-			cmd += " --data " + ShellQuote(gameDir.string());
-		cmd += " &";
-		std::system(cmd.c_str()); // NOLINT(cert-env33-c) - fire-and-forget, same spirit as ShellExecute
+		spdlog::warn("Launcher: couldn't load window icon from {}", iconPath.string());
 		return;
 	}
 
-	spdlog::warn("Launcher: couldn't find the KnightOnLine binary next to this tool.");
+	SDL_Surface* pSurface = SDL_CreateSurfaceFrom(
+		icon.width, icon.height, SDL_PIXELFORMAT_RGBA32,
+		const_cast<uint8_t*>(icon.pixelsRgba.data()), icon.width * 4);
+	if (pSurface == nullptr)
+	{
+		spdlog::warn("Launcher: SDL_CreateSurfaceFrom failed: {}", SDL_GetError());
+		return;
+	}
+
+	SDL_SetWindowIcon(pWindow, pSurface);
+	SDL_DestroySurface(pSurface);
+}
+
+// Same flat, rounded "modern" dark theme as Option (see OptionMainSDL.cpp's
+// identical function for the rationale) so the two tools look like a matched
+// pair instead of one modernized and one left on stock ImGui colors.
+void ApplyModernStyle()
+{
+	ImGui::StyleColorsDark();
+	ImGuiStyle& style = ImGui::GetStyle();
+
+	style.WindowRounding    = 8.0f;
+	style.ChildRounding     = 6.0f;
+	style.FrameRounding     = 5.0f;
+	style.PopupRounding     = 6.0f;
+	style.ScrollbarRounding = 8.0f;
+	style.GrabRounding      = 5.0f;
+	style.TabRounding       = 5.0f;
+
+	style.WindowPadding    = ImVec2(16, 16);
+	style.FramePadding     = ImVec2(10, 6);
+	style.ItemSpacing      = ImVec2(10, 8);
+	style.ItemInnerSpacing = ImVec2(8, 6);
+
+	ImVec4* colors = style.Colors;
+	colors[ImGuiCol_WindowBg]         = ImVec4(0.10f, 0.11f, 0.13f, 1.00f);
+	colors[ImGuiCol_ChildBg]          = ImVec4(0.10f, 0.11f, 0.13f, 1.00f);
+	colors[ImGuiCol_PopupBg]          = ImVec4(0.12f, 0.13f, 0.16f, 1.00f);
+	colors[ImGuiCol_Border]           = ImVec4(0.20f, 0.22f, 0.27f, 1.00f);
+	colors[ImGuiCol_FrameBg]          = ImVec4(0.16f, 0.18f, 0.22f, 1.00f);
+	colors[ImGuiCol_FrameBgHovered]   = ImVec4(0.20f, 0.23f, 0.29f, 1.00f);
+	colors[ImGuiCol_FrameBgActive]    = ImVec4(0.24f, 0.28f, 0.36f, 1.00f);
+	colors[ImGuiCol_TitleBg]          = ImVec4(0.08f, 0.09f, 0.11f, 1.00f);
+	colors[ImGuiCol_TitleBgActive]    = ImVec4(0.08f, 0.09f, 0.11f, 1.00f);
+	colors[ImGuiCol_CheckMark]        = ImVec4(0.35f, 0.65f, 1.00f, 1.00f);
+	colors[ImGuiCol_SliderGrab]       = ImVec4(0.35f, 0.65f, 1.00f, 1.00f);
+	colors[ImGuiCol_SliderGrabActive] = ImVec4(0.45f, 0.72f, 1.00f, 1.00f);
+	colors[ImGuiCol_Button]           = ImVec4(0.20f, 0.23f, 0.29f, 1.00f);
+	colors[ImGuiCol_ButtonHovered]    = ImVec4(0.28f, 0.45f, 0.68f, 1.00f);
+	colors[ImGuiCol_ButtonActive]     = ImVec4(0.24f, 0.53f, 0.83f, 1.00f);
+	colors[ImGuiCol_Header]           = ImVec4(0.20f, 0.23f, 0.29f, 1.00f);
+	colors[ImGuiCol_HeaderHovered]    = ImVec4(0.28f, 0.45f, 0.68f, 1.00f);
+	colors[ImGuiCol_HeaderActive]     = ImVec4(0.24f, 0.53f, 0.83f, 1.00f);
+	colors[ImGuiCol_Separator]        = ImVec4(0.22f, 0.24f, 0.29f, 1.00f);
+	colors[ImGuiCol_SeparatorHovered] = ImVec4(0.35f, 0.65f, 1.00f, 0.60f);
 }
 
 // Headless path for CI/no-display environments: exercises the packet
@@ -344,7 +395,7 @@ int main(int argc, char** argv)
 	SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
 
 	SDL_Window* pWindow =
-		SDL_CreateWindow("AUTO UPGRADE LAUNCHER", 420, 110, SDL_WINDOW_OPENGL | SDL_WINDOW_HIDDEN);
+		SDL_CreateWindow("AUTO UPGRADE LAUNCHER", 540, 260, SDL_WINDOW_OPENGL | SDL_WINDOW_HIDDEN);
 	if (pWindow == nullptr)
 	{
 		spdlog::error("Launcher: SDL_CreateWindow failed: {}", SDL_GetError());
@@ -364,17 +415,19 @@ int main(int argc, char** argv)
 	}
 	SDL_GL_MakeCurrent(pWindow, glContext);
 	SDL_GL_SetSwapInterval(1);
+	ApplyWindowIcon(pWindow);
 	SDL_ShowWindow(pWindow);
 
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
 	ImGui::GetIO().IniFilename = nullptr;
-	ImGui::StyleColorsDark();
+	ApplyModernStyle();
 	ImGui_ImplSDL3_InitForOpenGL(pWindow, glContext);
 	ImGui_ImplOpenGL3_Init("#version 330");
 
 	bool bRunning = true;
 	bool bLaunchRequested = false;
+	bool bLaunchFailed = false;
 	float launchDelayRemaining = 0.0f;
 	uint64_t lastTicks = SDL_GetTicks();
 
@@ -411,13 +464,15 @@ int main(int argc, char** argv)
 			bLaunchRequested     = true;
 			launchDelayRemaining = 1.0f; // brief, visible pause before handoff - not an instant jump-cut
 		}
-		if (bLaunchRequested)
+		if (bLaunchRequested && !bLaunchFailed)
 		{
 			launchDelayRemaining -= deltaSeconds;
 			if (launchDelayRemaining <= 0.0f)
 			{
-				LaunchWarFareAndExit(resolvedGameDir);
-				bRunning = false;
+				if (LaunchWarFareAndExit(resolvedGameDir))
+					bRunning = false;
+				else
+					bLaunchFailed = true; // keep the window open with an error instead of vanishing
 			}
 		}
 
@@ -433,7 +488,7 @@ int main(int argc, char** argv)
 			ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove
 				| ImGuiWindowFlags_NoCollapse);
 
-		ImGui::TextUnformatted(statusText.c_str());
+		ImGui::TextWrapped("%s", statusText.c_str());
 		if (serverVersion != 0)
 			ImGui::Text("Server version: %d (client: %d)", serverVersion, CLIENT_VERSION);
 
@@ -461,6 +516,18 @@ int main(int argc, char** argv)
 		else if (state == LauncherState::Error)
 		{
 			ImGui::Spacing();
+			if (ImGui::Button("Quit", ImVec2(100, 0)))
+				bRunning = false;
+		}
+
+		if (bLaunchFailed)
+		{
+			ImGui::Spacing();
+			ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.45f, 0.45f, 1.0f));
+			ImGui::TextWrapped(
+				"Couldn't find the KnightOnLine binary next to Launcher (looked in %s and %s).",
+				GetExecutableDir().string().c_str(), resolvedGameDir.string().c_str());
+			ImGui::PopStyleColor();
 			if (ImGui::Button("Quit", ImVec2(100, 0)))
 				bRunning = false;
 		}

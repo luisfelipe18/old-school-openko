@@ -936,11 +936,54 @@ la traen activada).
       `KnightOnLine` que lanzan — ahora ambos lo hacen (solo cuando el
       directorio resuelto es uno real, no el CWD de respaldo). Limpio bajo
       el preset `linux-asan` (ASan+UBSan) ejercitando el socket real.)*
+* [x] **Pulido post-port de Option/Launcher** (icono, integración con
+      WarFare, bug del botón de lanzar, estilo). *(Hecho:*
+      - *Icono de ventana: `Platform/IconDecoder.h/.cpp` decodifica el `.ico`
+        original (mismo contenedor que los `.cur` de `CursorDecoder.h`, solo
+        cambia el tipo de `ICONDIR` y el par color-count/reserved en vez del
+        hotspot) y lo aplica vía `SDL_SetWindowIcon`. `Option.ico`/
+        `Launcher.ico` se copian junto al binario en el `POST_BUILD` de cada
+        `CMakeLists.txt`. 5 tests contra el `Option.ico` real y datos
+        basura.*
+      - ***Bug encontrado:** el botón "Apply and Execute" de `Option` (y el
+        auto-lanzado de `Launcher`) no hacía nada en macOS porque
+        `LaunchWarFareAndExit` solo buscaba `<dir>/KnightOnLine`, pero
+        `WarFare` se empaqueta como `MACOSX_BUNDLE` ahí
+        (`KnightOnLine.app/Contents/MacOS/KnightOnLine`) — la ventana se
+        cerraba en silencio sin lanzar nada. Se extrajo
+        `Platform/ProcessLaunch.h` (`FindSiblingExecutable`, que ahora
+        también prueba el layout de bundle en `__APPLE__`; `ShellQuote`;
+        `LaunchDetached`) compartido entre `Option`, `Launcher` y el nuevo
+        hookup de `WarFare`. Además, si el binario no aparece, la ventana ya
+        no se cierra: muestra un mensaje de error en rojo con los
+        directorios probados (antes fallaba en silencio). 5 tests
+        (`tests/Platform/ProcessLaunch_test.cpp`) fijan la búsqueda,
+        incluyendo el layout de bundle de macOS. Verificado end-to-end con
+        `xdotool` sobre Xvfb: clic real en "Apply and Execute" con y sin el
+        binario presente, y con `Launcher` contra el `VersionManager` de
+        juguete (rama "up to date" y rama de fallo).*
+      - *Integración con WarFare: el menú de salida en juego
+        (`UIExitMenu.cpp`, opción "Option") y el mensaje de confirmación de
+        salida (`UIMessageBox.cpp`, `BEHAVIOR_EXECUTE_OPTION`) llamaban
+        `ShellExecute(..., "Option.exe", ...)` solo bajo `_WIN32`, sin rama
+        POSIX — el equivalente no existía. Se agregó
+        `Client/WarFare/LaunchOptionTool.h` (usa `Platform/ProcessLaunch.h`
+        + `CN3Base::PathGet()` para pasarle a `Option` el mismo directorio
+        de datos activo) y se llama desde ambos sitios antes de
+        `PostQuitMessage(0)`, igual que en Windows.*
+      - *Estilo: reemplazado `ImGui::StyleColorsDark()` por un tema plano y
+        redondeado propio (`ApplyModernStyle()` en ambos `*MainSDL.cpp`) —
+        el usuario confirmó que no hace falta replicar las fuentes
+        nativas de Windows del diálogo original y dio libertad total de
+        estilo. Las ventanas de ambas herramientas se agrandaron para
+        acomodar el padding nuevo sin recortar contenido.)*
 
-**Aceptación (parcial):** `Option` y `Launcher` compilan, pasan sus tests,
-y se verificaron visualmente en Linux headless (Xvfb) — `Launcher` además
-contra un servidor de protocolo real. `KscViewer` queda para continuar
-esta fase.
+**Aceptación (parcial):** `Option` y `Launcher` compilan, pasan sus tests
+(27 en `Platform.Tests`, 7 en `Option.Tests`, 11 en `Launcher.Tests`, 16 en
+`WarFareClient.Tests`), y se verificaron visualmente e interactivamente en
+Linux headless (Xvfb + `xdotool`) — `Launcher` además contra un servidor de
+protocolo real, y `WarFare` compilado con el nuevo hookup de `Option`.
+`KscViewer` queda para continuar esta fase.
 
 ---
 

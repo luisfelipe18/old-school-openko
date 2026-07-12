@@ -1,6 +1,8 @@
 add_library(Platform STATIC
   D3D9Types.h
   GameDataDir.h
+  IconDecoder.cpp
+  IconDecoder.h
   PlatformCrypto.cpp
   PlatformCrypto.h
   PlatformEncoding.cpp
@@ -10,6 +12,7 @@ add_library(Platform STATIC
   PlatformString.h
   PlatformTime.h
   PlatformTypes.h
+  ProcessLaunch.h
 )
 
 set_target_properties(Platform PROPERTIES
