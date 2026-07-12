@@ -43,6 +43,7 @@ option(OPENKO_BUILD_TESTS "Build the test projects (default on)" ON)
 option(OPENKO_COMPILE_WARNINGS_AS_ERROR "Enable treating warnings as errors (default on)" ON)
 option(OPENKO_FETCH_CLIENT_ASSETS "Enable fetching client assets (default on)" ON)
 option(OPENKO_CLIENT_POSIX_EXPERIMENTAL "Experimental: allow enabling the client build on POSIX platforms (macOS/Linux) while the port is in progress - see docs/PORT_POSIX_PLAN.md (default off)" OFF)
+option(OPENKO_CLIENT_TOOLS_POSIX_EXPERIMENTAL "Experimental: allow enabling the client tool ports (Option, KscViewer, Launcher - reimplemented on Dear ImGui instead of MFC) on POSIX platforms while they're being ported - see docs/PORT_POSIX_PLAN.md (default off)" OFF)
 
 # Define the bin directory; defaults to repo/bin
 set(OPENKO_BIN_DIR "${CMAKE_BINARY_DIR}/bin" CACHE PATH "Directory for final binaries")
@@ -66,7 +67,11 @@ else()
   else()
     set(OPENKO_BUILD_CLIENT OFF)
   endif()
-  set(OPENKO_BUILD_CLIENT_TOOLS OFF)
+  if(OPENKO_CLIENT_TOOLS_POSIX_EXPERIMENTAL)
+    message(STATUS "OpenKO: OPENKO_CLIENT_TOOLS_POSIX_EXPERIMENTAL is ON - keeping OPENKO_BUILD_CLIENT_TOOLS=${OPENKO_BUILD_CLIENT_TOOLS} on this platform (work-in-progress port)")
+  else()
+    set(OPENKO_BUILD_CLIENT_TOOLS OFF)
+  endif()
   set(OPENKO_BUILD_TOOLS OFF)
 endif()
 
@@ -78,6 +83,7 @@ message(STATUS "OpenKO feature: OPENKO_BUILD_TESTS - ${OPENKO_BUILD_TESTS}")
 message(STATUS "OpenKO feature: OPENKO_COMPILE_WARNINGS_AS_ERROR - ${OPENKO_COMPILE_WARNINGS_AS_ERROR}")
 message(STATUS "OpenKO feature: OPENKO_FETCH_CLIENT_ASSETS - ${OPENKO_FETCH_CLIENT_ASSETS}")
 message(STATUS "OpenKO feature: OPENKO_CLIENT_POSIX_EXPERIMENTAL - ${OPENKO_CLIENT_POSIX_EXPERIMENTAL}")
+message(STATUS "OpenKO feature: OPENKO_CLIENT_TOOLS_POSIX_EXPERIMENTAL - ${OPENKO_CLIENT_TOOLS_POSIX_EXPERIMENTAL}")
 message(STATUS "OpenKO feature: OPENKO_BIN_DIR - ${OPENKO_BIN_DIR}")
 
 if(WIN32)
@@ -193,13 +199,27 @@ endif()
 if(OPENKO_BUILD_CLIENT_TOOLS)
   message(STATUS "OpenKO: Preparing to configure client tools...")
 
-  set(CMAKE_FOLDER "Client tools/_deps")
-  require_package(Zlib)
-  add_subdirectory(src/Client/ZipArchive)
+  if(NOT WIN32)
+    # POSIX ports (experimental, docs/PORT_POSIX_PLAN.md): the MFC dialogs
+    # are reimplemented on Dear ImGui, reusing the SDL3 windowing stack the
+    # WarFare client already brought in.
+    set(CMAKE_FOLDER "Client tools/_deps")
+    require_package(SDL3)
+    require_package(ImGui)
+  endif()
+
+  if(WIN32)
+    # ZipArchive/KscViewer/Launcher aren't ported to POSIX yet - MFC-only.
+    set(CMAKE_FOLDER "Client tools/_deps")
+    require_package(Zlib)
+    add_subdirectory(src/Client/ZipArchive)
+
+    set(CMAKE_FOLDER "Client tools")
+    add_subdirectory(src/Client/KscViewer)
+    add_subdirectory(src/Client/Launcher)
+  endif()
 
   set(CMAKE_FOLDER "Client tools")
-  add_subdirectory(src/Client/KscViewer)
-  add_subdirectory(src/Client/Launcher)
   add_subdirectory(src/Client/Option)
 endif()
 
@@ -264,7 +284,11 @@ if(OPENKO_BUILD_TESTS)
     add_subdirectory(tests/N3Base)
     add_subdirectory(tests/WarFare)
   endif()
-  
+
+  if(OPENKO_BUILD_CLIENT_TOOLS)
+    add_subdirectory(tests/Option)
+  endif()
+
   if(OPENKO_BUILD_SERVERS)
     add_subdirectory(tests/Server/Ebenezer)
   endif() 

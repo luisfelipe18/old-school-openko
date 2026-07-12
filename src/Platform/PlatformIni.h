@@ -15,6 +15,7 @@
 #include <cstring>
 #include <fstream>
 #include <string>
+#include <vector>
 
 #include "PlatformTypes.h" // DWORD
 
@@ -125,6 +126,91 @@ inline int GetPrivateProfileInt(const char* szSection, const char* szKey, int nD
 	if (end == value.c_str())
 		return nDefault;
 	return static_cast<int>(parsed);
+}
+
+/// Win32 WritePrivateProfileStringA shim. Updates szKey in place if it
+/// already exists under [szSection] (preserving the rest of the file - other
+/// sections, comments, key order), otherwise appends it to the section
+/// (creating the section at end-of-file if it doesn't exist yet). Returns
+/// false only on I/O failure.
+inline bool WritePrivateProfileString(
+	const char* szSection, const char* szKey, const char* szValue, const char* szFile)
+{
+	if (szSection == nullptr || szKey == nullptr || szFile == nullptr)
+		return false;
+
+	std::vector<std::string> lines;
+	{
+		std::ifstream in(szFile);
+		std::string line;
+		while (std::getline(in, line))
+			lines.push_back(line);
+	}
+
+	const std::string wantSection = szSection;
+	const std::string wantKey     = szKey;
+	const std::string newLine     = wantKey + "=" + (szValue != nullptr ? szValue : "");
+
+	bool inSection    = false;
+	bool sectionFound = false;
+	int insertAt      = -1; // >=0: insert newLine here; -2: updated an existing line in place
+
+	for (size_t i = 0; i < lines.size(); ++i)
+	{
+		const std::string t = platform_ini_detail::Trim(lines[i]);
+
+		if (!t.empty() && t.front() == '[' && t.back() == ']')
+		{
+			if (inSection)
+			{
+				// Leaving our section (another section starts here) without
+				// having found the key - insert just before it.
+				insertAt = static_cast<int>(i);
+				break;
+			}
+			const std::string sec = platform_ini_detail::Trim(t.substr(1, t.size() - 2));
+			inSection             = platform_ini_detail::IEquals(sec, wantSection);
+			sectionFound          = sectionFound || inSection;
+			continue;
+		}
+
+		if (!inSection)
+			continue;
+
+		const size_t eq = t.find('=');
+		if (eq == std::string::npos)
+			continue;
+
+		const std::string k = platform_ini_detail::Trim(t.substr(0, eq));
+		if (platform_ini_detail::IEquals(k, wantKey))
+		{
+			lines[i]  = newLine;
+			insertAt  = -2;
+			break;
+		}
+	}
+
+	if (insertAt == -1 && inSection)
+		insertAt = static_cast<int>(lines.size()); // our section ran to end-of-file
+
+	if (insertAt >= 0)
+	{
+		lines.insert(lines.begin() + insertAt, newLine);
+	}
+	else if (!sectionFound)
+	{
+		if (!lines.empty() && !lines.back().empty())
+			lines.push_back("");
+		lines.push_back("[" + wantSection + "]");
+		lines.push_back(newLine);
+	}
+
+	std::ofstream out(szFile, std::ios::trunc);
+	if (!out.is_open())
+		return false;
+	for (const std::string& l : lines)
+		out << l << "\n";
+	return true;
 }
 
 #endif // !_WIN32

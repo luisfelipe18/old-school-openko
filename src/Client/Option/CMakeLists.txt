@@ -1,32 +1,52 @@
-find_package(MFC REQUIRED)
+if(WIN32)
+  find_package(MFC REQUIRED)
 
-# MFC (static)
-set(CMAKE_MFC_FLAG 1)
+  # MFC (static)
+  set(CMAKE_MFC_FLAG 1)
 
-add_executable(Option
-  Option.cpp
-  Option.h
-  OptionDlg.cpp
-  OptionDlg.h
-  resource.h
-  StdAfx.h)
+  add_executable(Option
+    Option.cpp
+    Option.h
+    OptionDlg.cpp
+    OptionDlg.h
+    resource.h
+    StdAfx.h)
+
+  set_target_properties(Option PROPERTIES WIN32_EXECUTABLE TRUE)
+  target_sources(Option PRIVATE Option.rc)
+
+  # Setup PCH
+  target_precompile_headers(Option PRIVATE StdAfx.h)
+else()
+  # POSIX port (docs/PORT_POSIX_PLAN.md): MFC has no POSIX equivalent, so
+  # this is a from-scratch reimplementation on Dear ImGui over the SDL3 +
+  # OpenGL stack the WarFare client already uses. OptionCore holds the
+  # platform-neutral Option.ini/Server.Ini logic so it's unit-testable
+  # without a display (see tests/Client/Option).
+  find_package(OpenGL REQUIRED)
+
+  add_executable(Option
+    OptionCore.cpp
+    OptionCore.h
+    OptionMainSDL.cpp)
+
+  target_link_libraries(Option PRIVATE
+    Platform
+    SDL3::SDL3
+    imgui
+    OpenGL::GL
+    spdlog::spdlog
+  )
+endif()
 
 set_target_properties(Option PROPERTIES
   CXX_SCAN_FOR_MODULES OFF
 )
 
-if(WIN32)
-  set_target_properties(Option PROPERTIES WIN32_EXECUTABLE TRUE)
-  target_sources(Option PRIVATE Option.rc)
-endif()
-
 # Enable warnings as errors
 if(OPENKO_COMPILE_WARNINGS_AS_ERROR)
   set_property(TARGET Option PROPERTY COMPILE_WARNING_AS_ERROR ON)
 endif()
-
-# Setup PCH
-target_precompile_headers(Option PRIVATE StdAfx.h)
 
 # Setup warning levels
 target_compile_options(Option PRIVATE

@@ -15,6 +15,7 @@
       "binaryDir": "${sourceDir}/build/${presetName}",
       "cacheVariables": {
         "OPENKO_CLIENT_POSIX_EXPERIMENTAL": "ON",
+        "OPENKO_CLIENT_TOOLS_POSIX_EXPERIMENTAL": "ON",
         "OPENKO_FETCH_CLIENT_ASSETS": "OFF"
       }
     },

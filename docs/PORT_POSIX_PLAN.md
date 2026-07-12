@@ -833,6 +833,79 @@ la validación end-to-end en un Mac real queda como paso del usuario.)*
       tests de humo (carga de assets + conexión a servidor local).
 * [ ] Actualizar README y wiki (setup macOS/Linux del cliente).
 
+### Fase 10 — Port de las herramientas cliente (Option, KscViewer, Launcher) a POSIX (esfuerzo: ~2 sp, fuera del alcance original)
+
+**Objetivo:** las tres apps auxiliares que acompañaban al cliente en Windows
+(`src/Client/Option`, `src/Client/KscViewer`, `src/Client/Launcher`) dependen
+de MFC — framework de GUI exclusivo de Visual Studio/Win32, sin build en
+macOS/Linux — así que nunca compilaron en POSIX (`OPENKO_BUILD_CLIENT_TOOLS`
+se fuerza a `OFF` fuera de Windows en el CMake raíz). No formaban parte del
+alcance original de este plan (que es "port del cliente WarFare"), pero son
+las mismas llamadas a controles de UI estándar (sliders, combos, checkboxes,
+diálogos de archivo) una y otra vez — se pueden reimplementar sobre un
+toolkit portable sin rehacer nada desde cero.
+
+**Decisión de toolkit: Dear ImGui sobre SDL3 + OpenGL 3.3 core**, en vez de
+Qt/GTK. Justificación: SDL3 y el contexto GL 3.3 core ya son dependencias
+vivas y probadas por el port del cliente (T6.5); Dear ImGui es MIT, sin
+runtime pesado, se vendoriza con el mismo patrón `FetchContent` que
+`spdlog`/`SDL3` (`cmake/FindImGui.cmake`, pineado a `v1.92.8`); y para
+diálogos de configuración/utilidad (no HUD in-game) el modo inmediato encaja
+mejor que una jerarquía de widgets retenida. Qt fue descartado por su huella
+de dependencia (mucho más grande que todo el resto del árbol de deps
+combinado) y complejidad de licencia (LGPL/comercial); GTK por su API en C
+y peor integración en macOS.
+
+Cada herramienta se reimplementa en dos capas, replicando el patrón ya
+usado para separar lógica de render en el cliente: un `*Core.h/.cpp`
+platform-neutral (sin SDL/ImGui) con la lógica real — parsing de formatos,
+lectura/escritura de `.ini`, protocolo de red — testeable sin display; y un
+`*MainSDL.cpp` que solo dibuja los widgets y llama a esa lógica. Activado
+tras `-DOPENKO_CLIENT_TOOLS_POSIX_EXPERIMENTAL=ON` (nueva opción, mismo
+patrón que `OPENKO_CLIENT_POSIX_EXPERIMENTAL`; ya integrada en
+`posix-client-base` de `CMakePresets.json`, así que los presets existentes
+la traen activada).
+
+* [x] **Option.** Diálogo de configuración (`Option.ini`): calidad de
+      textura por LOD (personaje/objeto/terreno), sombras, resolución,
+      profundidad de color, distancia de vista, cantidad de efectos,
+      sonido (bgm/efectos/duplicados/distancia), cursor por software, modo
+      ventana, versión de `Server.Ini`. *(Hecho: `OptionCore.h/.cpp` replica
+      byte a byte las secciones/claves y valores por defecto de
+      `OptionDlg.cpp` (Windows/MFC) — un `Option.ini` escrito por cualquiera
+      de los dos es intercambiable — usando `Platform/PlatformIni.h`, al que
+      se le agregó `WritePrivateProfileString` (solo existían los lectores;
+      hace update-in-place o append preservando el resto del archivo,
+      necesario porque `Option.ini` también lo lee `WarFare`). La detección
+      de resoluciones usa `SDL_GetDisplays`/`SDL_GetFullscreenDisplayModes`
+      en vez de `EnumDisplaySettings`, con el mismo filtro/orden/fallback a
+      la lista hardcodeada. `OptionMainSDL.cpp` dibuja el mismo conjunto de
+      controles agrupados por sección; "Apply and Execute" lanza el binario
+      `KnightOnLine` autocontenido en vez de `Launcher.exe` (que aún no
+      existe en POSIX). Flag `--smoke N` ejercita el round-trip de
+      `Option.ini` sin necesitar contexto GL (útil en CI/headless). 12 tests
+      nuevos (`tests/Platform/PlatformIni_test.cpp` para el nuevo writer,
+      `tests/Option/OptionCore_test.cpp` para la lógica) + verificación
+      visual real: capturado con Xvfb + Mesa llvmpipe (mismo método que
+      validó el backend GL del cliente en T6.6), los 6 grupos de controles
+      renderizan y funcionan.)*
+* [ ] **KscViewer.** Visor de `.ksc` (imágenes de splash/loading cifradas,
+      formato JPEG propietario) con soporte para exportar a `.jpg` plano.
+      Reutiliza el decriptado ya portado en `N3JpegFile`/`JpegFile`
+      (libjpeg ya es dependencia POSIX). Pendiente.
+* [ ] **Launcher.** El más grande de los tres: version-check contra
+      VersionManager, descarga de parches por FTP, extracción de ZIP
+      (`ZipArchive`, hoy Windows-only), y lanzamiento del cliente. Se
+      planea un alcance reducido para la primera pasada POSIX — conectar,
+      mostrar version-check y lista de servidores, y lanzar `KnightOnLine`
+      directamente — dejando el flujo de auto-parcheo (necesita un cliente
+      FTP y una librería ZIP portables, ninguno trivial) como extensión
+      posterior explícitamente separada. Pendiente.
+
+**Aceptación (parcial):** `Option` compila, pasa sus tests, y se verificó
+visualmente en Linux headless (Xvfb). `KscViewer`/`Launcher` quedan para
+continuar esta fase.
+
 ---
 
 ## 4. Orden, dependencias e hitos
