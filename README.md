@@ -129,6 +129,11 @@ precedence order:
    `~/.local/share/openko/GameData` (Linux). The first entry that
    contains `Data/` or `Server.Ini` wins.
 
+The same `--data`/`OPENKO_GAME_DATA`/auto-discovery rules apply to the
+POSIX client tool ports (`Option`, ...; see below) via
+`Platform/GameDataDir.h`, so pointing one at your install points all of
+them at it.
+
 ##### Boot mode
 
 The client boots straight into the login scene by default (the classic

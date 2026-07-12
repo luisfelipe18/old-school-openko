@@ -6,6 +6,7 @@
 
 #include "OptionCore.h"
 
+#include <Platform/GameDataDir.h>
 #include <Platform/PlatformPaths.h>
 
 #include <imgui.h>
@@ -32,20 +33,28 @@ namespace fs = std::filesystem;
 
 namespace
 {
-// Locates the directory holding Option.ini/Server.Ini: the working
-// directory (matches the Windows tool, always launched from its install
-// directory) if it looks right, otherwise the executable's own directory.
-fs::path ResolveGameDir()
+// Locates the directory holding Option.ini/Server.Ini via the same
+// precedence WarFare uses (Platform/GameDataDir.h, docs/PORT_POSIX_PLAN.md
+// F8/F10): --data <path> > OPENKO_GAME_DATA env var > CWD if it looks like
+// a data dir > the executable's own directory (and the surrounding .app
+// bundle's usual GameData/Resources slots on macOS) > well-known user
+// directories. Falls back to CWD when nothing matches, same as before -
+// Option still works standalone (with defaults) if no install is found.
+fs::path ResolveGameDir(const std::string& dataDirOverride)
 {
+	fs::path dataDir = FindGameDataDir(dataDirOverride);
+	if (!dataDir.empty())
+	{
+		spdlog::info("Option: game data directory: {}", dataDir.string());
+		return dataDir;
+	}
+
+	spdlog::warn("Option: no game data directory found (pass --data <path>, set "
+				 "OPENKO_GAME_DATA, or run from the directory containing Server.Ini) - "
+				 "showing defaults");
+
 	std::error_code ec;
-	const fs::path cwd = fs::current_path(ec);
-	if (!ec && (fs::exists(cwd / "Server.Ini", ec) || fs::exists(cwd / "Option.ini", ec)))
-		return cwd;
-
-	const fs::path exeDir = GetExecutableDir();
-	if (!exeDir.empty())
-		return exeDir;
-
+	fs::path cwd = fs::current_path(ec);
 	return ec ? fs::path(".") : cwd;
 }
 
@@ -188,13 +197,16 @@ int RunSmokeTest(const fs::path& gameDir)
 int main(int argc, char** argv)
 {
 	int smokeFrames = -1;
+	std::string dataDirOverride;
 	for (int i = 1; i < argc; ++i)
 	{
 		if (std::strcmp(argv[i], "--smoke") == 0 && i + 1 < argc)
 			smokeFrames = std::atoi(argv[i + 1]);
+		else if (std::strcmp(argv[i], "--data") == 0 && i + 1 < argc)
+			dataDirOverride = argv[i + 1];
 	}
 
-	const fs::path gameDir = ResolveGameDir();
+	const fs::path gameDir = ResolveGameDir(dataDirOverride);
 
 	if (smokeFrames >= 0)
 		return RunSmokeTest(gameDir);

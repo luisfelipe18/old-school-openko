@@ -27,6 +27,7 @@
 #include <N3Base/N3UIEdit.h>
 #include <N3Base/RHI/RHIDeviceNull.h>
 
+#include <Platform/GameDataDir.h>
 #include <Platform/PlatformPaths.h>
 
 #include <SDL3/SDL.h>
@@ -274,68 +275,9 @@ int main(int argc, char* argv[])
 	// Precedence: --data <path> > OPENKO_GAME_DATA env var > CWD if it looks
 	// like a data dir > the executable's own directory > well-known user
 	// locations (~/GameData, ~/Library/Application Support/OpenKO/GameData).
-	auto LooksLikeDataDir = [](const std::filesystem::path& p) {
-		std::error_code ec;
-		return std::filesystem::exists(p / "Data", ec)
-			|| std::filesystem::exists(p / "Server.Ini", ec)
-			|| std::filesystem::exists(p / "Server.ini", ec);
-	};
-
-	std::filesystem::path dataDir;
-	if (!dataDirOverride.empty())
-	{
-		dataDir = dataDirOverride;
-	}
-	else if (const char* envDir = std::getenv("OPENKO_GAME_DATA");
-			 envDir != nullptr && envDir[0] != '\0')
-	{
-		dataDir = envDir;
-	}
-	else
-	{
-		std::vector<std::filesystem::path> candidates;
-		candidates.push_back(std::filesystem::path(CN3Base::PathGet())); // CWD (default)
-		if (auto exeDir = GetExecutableDir(); !exeDir.empty())
-		{
-			// The build system stages assets/Client/ under GameData/ next
-			// to the binary (Linux) or inside Contents/Resources/ (macOS
-			// bundle), so those slots take priority over the raw exe dir.
-			candidates.push_back(exeDir / "GameData");
-			candidates.push_back(exeDir);
-#if defined(__APPLE__)
-			// macOS bundle-relative locations. GameData/ inside Resources/
-			// is the self-contained default the CMake POST_BUILD produces.
-			candidates.push_back(exeDir / ".." / "Resources" / "GameData");
-			candidates.push_back(exeDir / ".." / "Resources");
-			// A data dir next to the .app is another common install layout.
-			candidates.push_back(exeDir / ".." / ".." / ".." / "GameData");
-			candidates.push_back(exeDir / ".." / ".." / "..");
-#endif
-		}
-		if (const char* home = std::getenv("HOME"); home != nullptr && home[0] != '\0')
-		{
-			candidates.push_back(std::filesystem::path(home) / "GameData");
-#if defined(__APPLE__)
-			candidates.push_back(
-				std::filesystem::path(home) / "Library" / "Application Support" / "OpenKO"
-				/ "GameData");
-#else
-			candidates.push_back(
-				std::filesystem::path(home) / ".local" / "share" / "openko" / "GameData");
-#endif
-		}
-
-		for (const auto& c : candidates)
-		{
-			std::error_code ec;
-			auto canonical = std::filesystem::weakly_canonical(c, ec);
-			if (!ec && LooksLikeDataDir(canonical))
-			{
-				dataDir = canonical;
-				break;
-			}
-		}
-	}
+	// Shared with the other POSIX client tools (Platform/GameDataDir.h,
+	// docs/PORT_POSIX_PLAN.md F10) so they all find the same install.
+	std::filesystem::path dataDir = FindGameDataDir(dataDirOverride);
 
 	if (!dataDir.empty())
 	{

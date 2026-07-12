@@ -1,5 +1,6 @@
 add_library(Platform STATIC
   D3D9Types.h
+  GameDataDir.h
   PlatformCrypto.cpp
   PlatformCrypto.h
   PlatformEncoding.cpp

@@ -37,6 +37,15 @@ else()
     OpenGL::GL
     spdlog::spdlog
   )
+
+  if(APPLE)
+    # Apple deprecated the desktop OpenGL API in 10.14; the SDK marks every
+    # gl* call with a [[deprecated]]-style attribute that -Werror promotes
+    # to a hard error. OpenGL is still fully functional (just unmaintained)
+    # and is what the WarFare client's GL backend also targets, so silence
+    # the warning rather than the API itself.
+    target_compile_definitions(Option PRIVATE GL_SILENCE_DEPRECATION)
+  endif()
 endif()
 
 set_target_properties(Option PROPERTIES
