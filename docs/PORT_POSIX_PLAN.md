@@ -367,27 +367,37 @@ superficie de API pequeña y repetitiva.
       round-trip), cuenta draws/presents y permite cargar assets sin GPU;
       instalado por el main SDL, que ya ejecuta la secuencia de frame
       Begin/Clear/End/Present por el RHI en cada tick (visible en el smoke).
-* [ ] Migrar módulo a módulo — **~1.139 de ~1.560 llamadas migradas (73%)**.
-      Migración masiva clasificada por archivo (solo archivos cuyo conjunto
-      de métodos ⊆ RHI): 45 archivos de N3Base + WarFare, incluyendo la
-      familia de mallas completa (que resultó dibujar solo con draws UP
-      desde memoria de sistema — sin buffers GPU), personajes/skins/joints,
-      cámara/luces/escena/shapes, cielo completo y todos los FX. El
-      subconjunto POSIX de `N3Base_client` ahora compila **geometría,
-      personajes, cielo y efectos** además del núcleo. Quedan (usan métodos
-      fuera de la RHI): `N3Eng` (gestión de device — es el backend),
-      `N3Texture`/`DFont` (CreateTexture/GDI → F6/F7), `N3TerrainPatch`/
-      `N3GERain`/`N3GESnow`/`N3UIImage` (CreateVertexBuffer),
-      `N3Cloak`/`N3EngTool` (SetVertexShader), `N3Terrain`
-      (ValidateDevice), `UIHotKeyDlg` (SetScissorRect) — la mayoría cae al
-      añadir buffers RHI junto con el backend GL.
+* [x] Migrar módulo a módulo — **completada en alcance cliente** (el conteo
+      intermedio "73%, ~420 llamadas restantes" quedó obsoleto y no se
+      actualizó tras la migración masiva; corregido en la auditoría de
+      cierre). Migración masiva clasificada por archivo: 45+ archivos de
+      N3Base + WarFare, incluyendo la familia de mallas completa (que
+      resultó dibujar solo con draws UP desde memoria de sistema — sin
+      buffers GPU), personajes/skins/joints, cámara/luces/escena/shapes,
+      cielo completo, clima, terreno, agua y todos los FX y UIs.
+      *(Cierre (auditoría fresca de `s_lpD3DDev`): el build POSIX de
+      `N3Base_client` y `WarFare.Core` incluye hoy TODOS los grupos de
+      fuentes (escenas, mundo, terreno, clima, FX, la UI completa) — la
+      única exclusión es `BitMapFile.cpp`, cuyo único consumidor cliente
+      es la captura de pantalla GDI de `GameProcedure` (gated `_WIN32`).
+      Los usos directos de D3D9 que quedan son por diseño, no deuda:
+      (a) `N3Eng.cpp` — creación/reset del device en Windows: ES el
+      backend D3D9; (b) `N3EngTool.cpp`, `Pick.cpp` y los bloques
+      `_N3TOOL` de `N3Texture` — exclusivos del target `N3Base_tool` de
+      las herramientas de desarrollo MSVC, fuera del alcance del port;
+      (c) `DFont.h`/`GetRawD3D()` bajo `_WIN32` — rama GDI. Las demás
+      referencias solo pasan el puntero (null en POSIX) a
+      `InitDeviceObjects`, que lo ignora en la rama FreeType, o son
+      código comentado. Verificado en runtime: test-scene GL 60 frames +
+      dump de frame OK, y el juego completo corre in-game en macOS
+      (Hito D).)*
 
-**Aceptación (parcial):** la abstracción está validada en ambos sentidos —
-en Windows compila con el forwarder D3D9 instalado por `CN3Eng` (verifica
-la CI de Windows; falta la validación visual side-by-side), y en POSIX la
-tajada migrada corre de verdad: `N3Base.Tests` carga un `.n3vmesh` real por
-el loader del motor y lo dibuja por el Null device. El hito "Windows 100%
-sobre RHI" se alcanza al completar la migración por módulos.
+**Aceptación:** la abstracción está validada en ambos sentidos — en
+Windows todo el código de render llama por el forwarder D3D9 que instala
+`CN3Eng` (100% sobre RHI, salvo el propio bootstrap del device y las
+herramientas `_N3TOOL`), y en POSIX el juego completo corre de verdad
+sobre `RHIDeviceGL`/`RHIDeviceNull` (Hito D alcanzado in-game). Pendiente
+solo la validación visual side-by-side Windows, cubierta por F9.
 
 ### Fase 6 — Recursos RHI + Backend OpenGL (esfuerzo: ~4-5 sp, subdividida)
 
@@ -1019,6 +1029,75 @@ la traen activada).
 Linux headless (Xvfb + `xdotool`) — `Launcher` además contra un servidor de
 protocolo real, y `WarFare` compilado con el nuevo hookup de `Option`.
 `KscViewer` queda para continuar esta fase.
+
+### Fase 11 — Plan de cierre hacia Hito E ("distribuible")
+
+Con los hitos A–D alcanzados y la migración RHI completada en alcance
+cliente (auditoría en F5), esto es lo que queda, en orden recomendado.
+Las fases 1 y 2 son el grueso; 3–5 son flecos paralelizables.
+
+**1. F6b — Backend SDL_GPU (Metal en macOS, Vulkan en Linux) — el trabajo
+grande restante (~2 sp).** Hoy macOS corre sobre OpenGL deprecado; SDL_GPU
+es la salida definitiva. Desglose concreto:
+
+* [ ] **T6b.0 — Toolchain de shaders (decisión + andamiaje).** Dos
+      opciones: (a) `SDL_shadercross` integrado al build (HLSL→SPIR-V/MSL/
+      DXIL; arrastra DXC y SPIRV-Cross — dependencias pesadas), o
+      (b) precompilación offline commiteada: el über-shader HLSL fuente en
+      el repo + artefactos `.spv`/`.metallib`/`.dxil` generados por un
+      script reproducible (cero dependencias nuevas en el build normal).
+      **Recomendación: (b)** — es un único shader que cambia poco; el
+      script corre solo cuando se toca el shader.
+* [ ] **T6b.1 — Über-shader HLSL.** Portar el GLSL actual de
+      `RHIDeviceGL` (emulación fixed-function: transform WVP, 2 stages de
+      textura con ops D3D9, fog lineal, luces direccionales/puntuales,
+      alpha-test, XYZRHW passthrough) a un HLSL único con el mismo layout
+      de constantes; verificable offline compilándolo a SPIR-V.
+* [ ] **T6b.2 — `RHIDeviceSDLGPU`.** Device + swapchain + render passes;
+      caché de pipelines claveada por `RHIStateKey` (ya existe con tests);
+      `IRHIVertexBuffer`/`IRHIIndexBuffer`/`IRHITexture` sobre buffers y
+      texturas SDL_GPU (upload por transfer buffer); draws UP (el camino
+      caliente del motor) e indexados; viewport/scissor con la convención
+      de Y correcta; readback de un píxel/frame para los tests de humo
+      (paridad con `ReadCenterPixel`/`--dump-frame` del backend GL).
+* [ ] **T6b.3 — Paridad y default.** `--renderer sdlgpu` + `Renderer=
+      SDLGPU` en `Option.ini`; comparación de frames del test-scene GL vs
+      SDL_GPU (tolerancia por diferencias de rasterización); validación
+      in-game (login→mundo) en Mac real; una vez estable, default en macOS
+      con GL como fallback.
+
+**2. F9 — Cierre de estabilización (paralelo, continuo).**
+
+* [ ] ASan/UBSan sobre el flujo login→mundo completo con assets reales
+      (la suite de tests y el smoke ya están limpios; falta el in-game).
+* [ ] Confirmar los 2 detalles visuales reportados: la línea vertical
+      casi imperceptible (pendiente de diagnóstico) y el descuadre del
+      HUD (posiblemente resuelto por el fix de resolución/fullscreen —
+      pedir confirmación al usuario).
+* [ ] CI: jobs de macOS/Linux que compilen el cliente completo y corran
+      la suite de tests + smoke en cada PR.
+* [ ] README/wiki: instrucciones de setup macOS/Linux (presets de CMake,
+      assets/Client, Rosetta/DYLD notes si aplican).
+
+**3. F10 — Flecos de herramientas.**
+
+* [ ] KscViewer (ImGui): descifrar `.ksc` (reutiliza `N3JpegFile`),
+      mostrar y exportar `.jpg`.
+* [ ] (Opcional) Descarga de parches del Launcher: recomendado HTTP(S) +
+      miniz en vez del FTP fiel al original; mantener la UI de progreso
+      ya portada.
+
+**4. F1 — Fleco de configuración.**
+
+* [ ] `Option.ini` por-usuario (XDG config / Application Support) con
+      fallback de lectura al directorio de datos, sin romper la
+      convención Windows.
+
+**5. Hito E — Distribuible.**
+
+* [ ] macOS: `.app` firmada ad-hoc (`codesign --deep -s -`) + DMG/zip;
+      Linux: tarball con rpath `$ORIGIN` (ya configurado) o AppImage.
+* [ ] CI verde en ambos + smoke de arranque del binario empaquetado.
 
 ---
 
