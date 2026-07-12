@@ -62,9 +62,11 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <memory>
 #include <string>
 #include <system_error>
+#include <unordered_map>
 #include <vector>
 
 namespace fs = std::filesystem;
@@ -656,6 +658,24 @@ struct ExplorerState
 	int selected = -1;         // index into index.Entries(), or -1
 	int loadedForSelection = -2; // which selection the preview reflects
 
+	// M7 polish.
+	bool gridView = false;              // asset list vs. thumbnail grid
+	std::vector<std::size_t> shown;     // this frame's filtered indices (list + kbd nav)
+	bool focusSearchRequest = false;    // set by the palette / shortcut
+	bool openPaletteRequest = false;    // set by Ctrl/Cmd+P
+	char paletteQuery[256] = {};
+	// Thumbnail cache: entry index -> a display GL texture. Bounded; textures are
+	// loaded lazily for visible grid cells only.
+	struct Thumb
+	{
+		std::unique_ptr<CN3Texture> n3tex; // engine textures (owns the GL object)
+		unsigned glTexture = 0;
+		bool ownGL = false;                // true for the .ksc RGB upload
+		std::uint64_t lastUsedFrame = 0;
+	};
+	std::unordered_map<int, Thumb> thumbs;
+	std::uint64_t frameCounter = 0;
+
 	// Preview render target (M1). Sized to the viewport panel; recreated when it
 	// changes. viewportSize is measured during the UI pass and consumed at the
 	// top of the next frame so the target stays stable within a frame.
@@ -966,8 +986,11 @@ bool ExportEngineTextureToBmp(ExplorerState& state, const fs::path& dst)
 }
 
 
+void ClearThumbnailCache(ExplorerState& state); // defined below
+
 void RescanDataDir(ExplorerState& state, const fs::path& dir)
 {
+	ClearThumbnailCache(state); // entry indices change on rescan
 	state.dataDir = dir;
 	state.selected = -1;
 	// Point the engine's asset root at the data dir (as the WarFare client does),
@@ -982,6 +1005,117 @@ void RescanDataDir(ExplorerState& state, const fs::path& dir)
 		: std::to_string(n) + " assets indexed under " + dir.string();
 }
 
+// Selects the entry whose relative path equals `rel`, if present.
+void SelectByRelativePath(ExplorerState& state, const std::string& rel)
+{
+	for (std::size_t i = 0; i < state.index.Entries().size(); ++i)
+	{
+		if (state.index.Entries()[i].relativePath == rel)
+		{
+			state.selected = static_cast<int>(i);
+			return;
+		}
+	}
+}
+
+// Drag & drop (M7): a dropped directory becomes the data root; a dropped file is
+// opened - selected in place if it's already under the current root, otherwise
+// its parent becomes the root and the file is selected.
+void HandleDroppedPath(ExplorerState& state, const std::string& path)
+{
+	std::error_code ec;
+	const fs::path p(path);
+	if (fs::is_directory(p, ec))
+	{
+		RescanDataDir(state, p);
+		return;
+	}
+	if (!fs::is_regular_file(p, ec))
+		return;
+
+	const fs::path rel = fs::relative(p, state.dataDir, ec);
+	const bool underRoot = !ec && !rel.empty() && rel.native().rfind("..", 0) != 0;
+	if (underRoot)
+		SelectByRelativePath(state, rel.generic_string());
+	else
+	{
+		RescanDataDir(state, p.parent_path());
+		SelectByRelativePath(state, p.filename().generic_string());
+	}
+}
+
+// Returns a display GL texture for a texture-category entry, loading and caching
+// it lazily. Non-texture entries return 0. The cache is bounded (§ trim below).
+unsigned AcquireThumbnail(ExplorerState& state, int entryIdx)
+{
+	const AssetEntry& e = state.index.Entries()[static_cast<std::size_t>(entryIdx)];
+	if (e.category != AssetCategory::Texture)
+		return 0;
+
+	auto it = state.thumbs.find(entryIdx);
+	if (it != state.thumbs.end())
+	{
+		it->second.lastUsedFrame = state.frameCounter;
+		return it->second.glTexture;
+	}
+
+	ExplorerState::Thumb thumb;
+	thumb.lastUsedFrame = state.frameCounter;
+	if (e.type == AssetType::EncryptedTexture)
+	{
+		ksc_core::DecodedImage img = ksc_core::LoadImage(state.AbsPathOf(e));
+		if (img.IsValid())
+		{
+			thumb.glTexture = UploadRgbTexture(img.rgb, img.width, img.height);
+			thumb.ownGL     = true;
+		}
+	}
+	else
+	{
+		auto n3 = std::make_unique<CN3Texture>();
+		if (n3->LoadFromFile(e.relativePath) && n3->Get() != nullptr)
+		{
+			thumb.glTexture = static_cast<RHITextureGL*>(n3->Get())->GLTexture();
+			thumb.n3tex     = std::move(n3);
+		}
+	}
+
+	const unsigned tex = thumb.glTexture;
+	state.thumbs.emplace(entryIdx, std::move(thumb));
+	return tex;
+}
+
+// Keeps the thumbnail cache bounded by evicting the least-recently-used entries.
+void TrimThumbnailCache(ExplorerState& state, std::size_t maxEntries)
+{
+	while (state.thumbs.size() > maxEntries)
+	{
+		auto oldest = state.thumbs.begin();
+		for (auto it = state.thumbs.begin(); it != state.thumbs.end(); ++it)
+			if (it->second.lastUsedFrame < oldest->second.lastUsedFrame)
+				oldest = it;
+		if (oldest->second.ownGL && oldest->second.glTexture != 0)
+		{
+			GLuint t = oldest->second.glTexture;
+			glDeleteTextures(1, &t);
+		}
+		state.thumbs.erase(oldest);
+	}
+}
+
+void ClearThumbnailCache(ExplorerState& state)
+{
+	for (auto& [idx, thumb] : state.thumbs)
+	{
+		if (thumb.ownGL && thumb.glTexture != 0)
+		{
+			GLuint t = thumb.glTexture;
+			glDeleteTextures(1, &t);
+		}
+	}
+	state.thumbs.clear();
+}
+
 void DrawToolbar(ExplorerState& state)
 {
 	if (ImGui::Button("Rescan"))
@@ -990,8 +1124,17 @@ void DrawToolbar(ExplorerState& state)
 	ImGui::TextDisabled("|");
 	ImGui::SameLine();
 
+	if (state.focusSearchRequest)
+	{
+		ImGui::SetKeyboardFocusHere();
+		state.focusSearchRequest = false;
+	}
 	ImGui::SetNextItemWidth(280);
-	ImGui::InputTextWithHint("##search", "Search assets...", state.search, sizeof(state.search));
+	ImGui::InputTextWithHint("##search", "Search assets...  (Ctrl/Cmd+P: palette)", state.search,
+		sizeof(state.search));
+	ImGui::SameLine();
+	if (ImGui::Button(state.gridView ? "List" : "Grid"))
+		state.gridView = !state.gridView;
 	ImGui::SameLine();
 	ImGui::TextDisabled("|");
 	ImGui::SameLine();
@@ -1026,6 +1169,26 @@ void DrawToolbar(ExplorerState& state)
 	}
 }
 
+// Moves the selection to the previous/next entry within the filtered list.
+void StepSelection(ExplorerState& state, int delta)
+{
+	const std::vector<std::size_t>& shown = state.shown;
+	if (shown.empty())
+		return;
+
+	int pos = -1;
+	for (int i = 0; i < static_cast<int>(shown.size()); ++i)
+		if (static_cast<int>(shown[static_cast<std::size_t>(i)]) == state.selected)
+		{
+			pos = i;
+			break;
+		}
+	pos = std::clamp(pos + delta, 0, static_cast<int>(shown.size()) - 1);
+	if (pos < 0)
+		pos = 0;
+	state.selected = static_cast<int>(shown[static_cast<std::size_t>(pos)]);
+}
+
 void DrawAssetList(ExplorerState& state, const ImVec2& size)
 {
 	if (!ImGui::BeginChild("##assetlist", size, ImGuiChildFlags_Borders))
@@ -1034,27 +1197,72 @@ void DrawAssetList(ExplorerState& state, const ImVec2& size)
 		return;
 	}
 
-	const std::vector<std::size_t> shown = state.index.Filter(state.search, state.categoryMask);
+	state.shown = state.index.Filter(state.search, state.categoryMask);
+	const std::vector<std::size_t>& shown = state.shown;
 	ImGui::Text("%zu / %zu assets", shown.size(), state.index.Entries().size());
 	ImGui::Separator();
 
-	// A clipper keeps a multi-thousand-entry list smooth.
-	ImGuiListClipper clipper;
-	clipper.Begin(static_cast<int>(shown.size()));
-	while (clipper.Step())
+	if (state.gridView)
 	{
-		for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; ++row)
+		// Thumbnail grid: texture cells show the image; other types a category tile.
+		const float cell = 96.0f;
+		const float pad  = ImGui::GetStyle().ItemSpacing.x;
+		const int cols   = std::max(1, static_cast<int>((ImGui::GetContentRegionAvail().x + pad)
+									 / (cell + pad)));
+		for (int i = 0; i < static_cast<int>(shown.size()); ++i)
 		{
-			const std::size_t entryIdx = shown[static_cast<std::size_t>(row)];
+			const std::size_t entryIdx = shown[static_cast<std::size_t>(i)];
 			const AssetEntry& e = state.index.Entries()[entryIdx];
-
-			char label[512];
-			std::snprintf(label, sizeof(label), "[%s] %s",
-				AssetCategoryLabel(e.category), e.relativePath.c_str());
-
 			const bool selected = (state.selected == static_cast<int>(entryIdx));
-			if (ImGui::Selectable(label, selected))
+
+			ImGui::PushID(i);
+			ImGui::BeginGroup();
+			const unsigned thumb =
+				(e.category == AssetCategory::Texture) ? AcquireThumbnail(state, static_cast<int>(entryIdx)) : 0;
+			if (selected)
+				ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
+			bool clicked = false;
+			if (thumb != 0)
+				clicked = ImGui::ImageButton("##t", static_cast<ImTextureID>(thumb),
+					ImVec2(cell, cell), ImVec2(0, 0), ImVec2(1, 1));
+			else
+				clicked = ImGui::Button(AssetCategoryLabel(e.category), ImVec2(cell, cell));
+			if (selected)
+				ImGui::PopStyleColor();
+			if (clicked)
 				state.selected = static_cast<int>(entryIdx);
+			// Name label, ellipsized to the cell width.
+			ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + cell);
+			ImGui::TextWrapped("%s", e.fileName.c_str());
+			ImGui::PopTextWrapPos();
+			ImGui::EndGroup();
+			if (ImGui::IsItemHovered())
+				ImGui::SetTooltip("%s", e.relativePath.c_str());
+			ImGui::PopID();
+
+			if ((i % cols) != (cols - 1) && i != static_cast<int>(shown.size()) - 1)
+				ImGui::SameLine();
+		}
+	}
+	else
+	{
+		ImGuiListClipper clipper;
+		clipper.Begin(static_cast<int>(shown.size()));
+		while (clipper.Step())
+		{
+			for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; ++row)
+			{
+				const std::size_t entryIdx = shown[static_cast<std::size_t>(row)];
+				const AssetEntry& e = state.index.Entries()[entryIdx];
+
+				char label[512];
+				std::snprintf(label, sizeof(label), "[%s] %s",
+					AssetCategoryLabel(e.category), e.relativePath.c_str());
+
+				const bool selected = (state.selected == static_cast<int>(entryIdx));
+				if (ImGui::Selectable(label, selected))
+					state.selected = static_cast<int>(entryIdx);
+			}
 		}
 	}
 	ImGui::EndChild();
@@ -1613,6 +1821,164 @@ void SyncPreview(ExplorerState& state)
 		LoadTerrainPreview(state.terrain, e.relativePath, e.fileName);
 }
 
+// --- M7: command palette, view actions, shortcuts ---------------------------
+
+// Re-frames / resets whichever preview is active.
+void ResetActiveView(ExplorerState& state)
+{
+	if (state.tex.loaded)
+	{
+		state.tex.zoom = 0.0f;
+		state.tex.pan  = ImVec2(0, 0);
+	}
+	else if (state.shape.loaded && state.shape.shape != nullptr)
+		state.shape.camera.FrameBounds(state.shape.shape->Min(), state.shape.shape->Max());
+	else if (state.character.loaded && state.character.chr != nullptr)
+		state.character.camera.FrameBounds(state.character.chr->Min(), state.character.chr->Max());
+	else if (state.fx.loaded)
+		state.fx.camera.FrameBounds(__Vector3(-4, -1, -4), __Vector3(4, 7, 4));
+	else if (state.terrain.loaded && state.terrain.terrain != nullptr)
+	{
+		const float w = state.terrain.widthMeters;
+		const float g = state.terrain.terrain->GetHeight(w * 0.5f, w * 0.5f);
+		state.terrain.camera.SetPosition(__Vector3(w * 0.5f, g + w * 0.12f, w * 0.5f - w * 0.12f));
+		state.terrain.camera.SetLook(0.0f, -0.6f);
+	}
+}
+
+// Toggles wireframe on whichever 3D preview is active.
+void ToggleActiveWireframe(ExplorerState& state)
+{
+	if (state.shape.loaded)
+		state.shape.wireframe = !state.shape.wireframe;
+	else if (state.character.loaded)
+		state.character.wireframe = !state.character.wireframe;
+	else if (state.terrain.loaded)
+		state.terrain.wireframe = !state.terrain.wireframe;
+}
+
+// Toggles play/pause on whichever animated preview is active.
+void ToggleActivePlay(ExplorerState& state)
+{
+	if (state.character.loaded)
+		state.character.player.TogglePlay();
+	else if (state.fx.loaded)
+		state.fx.playing = !state.fx.playing;
+}
+
+bool ContainsNoCase(const std::string& hay, const std::string& needleLower)
+{
+	if (needleLower.empty())
+		return true;
+	std::string h = hay;
+	std::transform(h.begin(), h.end(), h.begin(),
+		[](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+	return h.find(needleLower) != std::string::npos;
+}
+
+// Ctrl/Cmd+P command palette: fuzzy-run an action or jump to an asset (M7).
+void DrawCommandPalette(ExplorerState& state)
+{
+	if (state.openPaletteRequest)
+	{
+		ImGui::OpenPopup("##palette");
+		state.openPaletteRequest = false;
+		state.paletteQuery[0] = '\0';
+	}
+
+	const ImGuiViewport* vp = ImGui::GetMainViewport();
+	ImGui::SetNextWindowPos(ImVec2(vp->GetCenter().x, vp->Pos.y + vp->Size.y * 0.28f),
+		ImGuiCond_Appearing, ImVec2(0.5f, 0.0f));
+	ImGui::SetNextWindowSize(ImVec2(600, 440), ImGuiCond_Appearing);
+	if (!ImGui::BeginPopup("##palette"))
+		return;
+
+	if (ImGui::IsWindowAppearing())
+		ImGui::SetKeyboardFocusHere();
+	ImGui::SetNextItemWidth(-FLT_MIN);
+	const bool entered = ImGui::InputTextWithHint("##pq", "Run a command or jump to an asset...",
+		state.paletteQuery, sizeof(state.paletteQuery), ImGuiInputTextFlags_EnterReturnsTrue);
+	ImGui::Separator();
+
+	std::string q(state.paletteQuery);
+	std::transform(q.begin(), q.end(), q.begin(),
+		[](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+
+	// Fixed actions (label, callback tag). We track the first shown item so Enter
+	// can execute it.
+	bool executedFirst = false;
+	bool haveFirst = false;
+	auto runAndClose = [&](const std::function<void()>& fn) {
+		fn();
+		ImGui::CloseCurrentPopup();
+	};
+	auto action = [&](const char* label, const std::function<void()>& fn) {
+		if (!ContainsNoCase(label, q))
+			return;
+		const bool isFirst = !haveFirst;
+		haveFirst = true;
+		if (ImGui::Selectable(label) || (entered && isFirst && !executedFirst))
+		{
+			executedFirst = executedFirst || (entered && isFirst);
+			runAndClose(fn);
+		}
+	};
+
+	action("Rescan data directory", [&] { RescanDataDir(state, state.dataDir); });
+	action("Toggle grid / list view", [&] { state.gridView = !state.gridView; });
+	action("Focus search", [&] { state.focusSearchRequest = true; });
+	action("Reset view", [&] { ResetActiveView(state); });
+	action("Toggle wireframe", [&] { ToggleActiveWireframe(state); });
+	action("Play / pause animation", [&] { ToggleActivePlay(state); });
+
+	// Matching assets (capped).
+	if (!executedFirst)
+	{
+		int shownCount = 0;
+		for (std::size_t i = 0; i < state.index.Entries().size() && shownCount < 40; ++i)
+		{
+			const AssetEntry& e = state.index.Entries()[i];
+			if (!ContainsNoCase(e.relativePath, q))
+				continue;
+			++shownCount;
+			char label[600];
+			std::snprintf(label, sizeof(label), "[%s] %s", AssetCategoryLabel(e.category),
+				e.relativePath.c_str());
+			const bool isFirst = !haveFirst;
+			haveFirst = true;
+			if (ImGui::Selectable(label) || (entered && isFirst && !executedFirst))
+			{
+				executedFirst = executedFirst || (entered && isFirst);
+				state.selected = static_cast<int>(i);
+				ImGui::CloseCurrentPopup();
+			}
+		}
+	}
+
+	ImGui::EndPopup();
+}
+
+// Keyboard: Ctrl/Cmd+P palette; arrows navigate the list; F reframes; space
+// toggles play (M7). Movement keys for the terrain fly-cam are handled in its
+// viewport; these fire only when no text field is capturing input.
+void HandleShortcuts(ExplorerState& state)
+{
+	ImGuiIO& io = ImGui::GetIO();
+	if ((io.KeyCtrl || io.KeySuper) && ImGui::IsKeyPressed(ImGuiKey_P))
+		state.openPaletteRequest = true;
+
+	if (io.WantTextInput)
+		return;
+	if (ImGui::IsKeyPressed(ImGuiKey_DownArrow))
+		StepSelection(state, +1);
+	if (ImGui::IsKeyPressed(ImGuiKey_UpArrow))
+		StepSelection(state, -1);
+	if (ImGui::IsKeyPressed(ImGuiKey_F))
+		ResetActiveView(state);
+	if (ImGui::IsKeyPressed(ImGuiKey_Space))
+		ToggleActivePlay(state);
+}
+
 // Offscreen render smoke (docs/ASSET_EXPLORER_PLAN.md, M1): brings up the GL
 // backend, renders the test triangle into a render target and reads back the
 // center pixel, asserting it is the drawn geometry rather than the clear color.
@@ -1784,6 +2150,7 @@ int main(int argc, char** argv)
 	while (bRunning)
 	{
 		SDL_Event event;
+		std::string droppedPath;
 		while (SDL_PollEvent(&event))
 		{
 			ImGui_ImplSDL3_ProcessEvent(&event);
@@ -1791,7 +2158,11 @@ int main(int argc, char** argv)
 				|| (event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED
 					&& event.window.windowID == SDL_GetWindowID(pWindow)))
 				bRunning = false;
+			else if (event.type == SDL_EVENT_DROP_FILE && event.drop.data != nullptr)
+				droppedPath = event.drop.data; // last dropped path wins
 		}
+		if (!droppedPath.empty())
+			HandleDroppedPath(state, droppedPath);
 
 		// Bring the preview in line with the current selection (loads a texture,
 		// shape or character, or clears it), advance the animation timeline, then
@@ -1836,7 +2207,14 @@ int main(int argc, char** argv)
 		ImGui::Separator();
 		ImGui::TextDisabled("%s", state.status.empty() ? "Ready" : state.status.c_str());
 
+		// M7: command palette + keyboard shortcuts, then bound the thumb cache.
+		DrawCommandPalette(state);
+		HandleShortcuts(state);
+
 		ImGui::End();
+
+		++state.frameCounter;
+		TrimThumbnailCache(state, 192);
 
 		ImGui::Render();
 		glViewport(0, 0, windowW, windowH);
@@ -1857,6 +2235,7 @@ int main(int argc, char** argv)
 	ReleaseCharacterPreview(state.character);
 	ReleaseFXPreview(state.fx);
 	ReleaseTerrainPreview(state.terrain);
+	ClearThumbnailCache(state);
 	delete state.previewRT;
 	CN3Base::RHIDeviceSet(nullptr);
 	delete pRHI;

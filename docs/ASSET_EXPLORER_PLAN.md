@@ -303,7 +303,7 @@ none needed; builds under the existing `linux-clang-*` / `macos-arm64-*`.
 | **M4** ✅ | Character + animation | `CN3Chr` posed through the engine camera (so `s_CameraData` LOD/culling works), `AnimationPlayer` timeline (clip dropdown / play-pause / scrub / speed / loop), LOD 0-3 selector, wireframe; joints/parts/plugs/anims inspector. `AnimationPlayer` unit-tested | replaces N3CE |
 | **M5** ✅ | FX bundles | `CN3FXBundle` triggered and ticked in the orbit viewport with play/pause/restart/loop; inspector shows name/move-type/lifetime/part-type breakdown/state. Engine asset root (`PathSet`) now set so shape/character/FX textures resolve (per-part enable deferred) | replaces N3FXE |
 | **M6** ✅ | Maps | `CN3Terrain` roamed with a `FlyCamera` (WASD/QE move, drag look) driving the engine camera so patches stream; wireframe + speed; inspector shows map width/LOD/tiles. `FlyCamera` unit-tested. Placed objects / sky / water / minimap deferred | replaces N3ME (view-only) |
-| **M7** | Polish | Thumbnails, command palette, drag-drop, layout presets, SDLGPU RT path | the "modern app" feel |
+| **M7** ✅ | Polish | Lazy, bounded texture **thumbnail grid** (list/grid toggle); **command palette** (Ctrl/Cmd+P) to run actions or jump to any asset; **drag & drop** a file/folder to open it; keyboard nav (arrows select, F reframes, Space play/pause). Layout presets + the SDL_GPU RT path remain deferred | the "modern app" feel |
 
 M0-M3 deliver a genuinely useful tool (textures + static models); M4 is the
 headline feature; M5-M7 round it out. Recommend building in this order and
