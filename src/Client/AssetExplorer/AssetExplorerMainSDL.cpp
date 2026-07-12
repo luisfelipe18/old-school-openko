@@ -11,7 +11,11 @@
 #include "AnimationPlayer.h"
 #include "AssetIndex.h"
 #include "AssetType.h"
+#include "FlyCamera.h"
 #include "OrbitCamera.h"
+
+// CN3Terrain lives in the WarFare client, not N3Base.
+#include <N3Terrain.h>
 
 // Engine + RHI: the tool renders previews through the same GL backend the
 // client uses, into an offscreen render target it then samples into the UI
@@ -590,6 +594,56 @@ void LoadFXPreview(FXPreview& fp, const std::string& relPath, const std::string&
 	fp.loaded  = true;
 }
 
+// --- Terrain preview (M6) ---------------------------------------------------
+
+using assetexplorer::FlyCamera;
+
+// A loaded CN3Terrain roamed with a fly camera. Placed objects / sky / water are
+// deferred; this previews the terrain heightfield and its textures.
+struct TerrainPreview
+{
+	bool loaded = false;
+	std::string error;
+
+	std::unique_ptr<CN3Terrain> terrain;
+	FlyCamera camera;
+	float widthMeters = 0.0f;
+	float moveSpeed   = 60.0f; // meters/second, scaled to the map on load
+	bool wireframe = false;
+};
+
+void ReleaseTerrainPreview(TerrainPreview& tp)
+{
+	tp.terrain.reset();
+	tp = TerrainPreview{};
+}
+
+void LoadTerrainPreview(TerrainPreview& tp, const std::string& relPath, const std::string& name)
+{
+	ReleaseTerrainPreview(tp);
+
+	auto terrain = std::make_unique<CN3Terrain>();
+	if (!terrain->LoadFromFile(relPath) || terrain->GetWidthByMeter() <= 0.0f)
+	{
+		tp.error = "Failed to load " + name;
+		return;
+	}
+
+	const float w = terrain->GetWidthByMeter();
+	tp.widthMeters = w;
+	tp.moveSpeed   = std::max(w * 0.06f, 20.0f);
+
+	// Start above the map centre, looking down and forward into it.
+	const float cx = w * 0.5f;
+	const float cz = w * 0.5f;
+	const float ground = terrain->GetHeight(cx, cz);
+	tp.camera.SetPosition(__Vector3(cx, ground + w * 0.12f, cz - w * 0.12f));
+	tp.camera.SetLook(0.0f, -0.6f);
+
+	tp.terrain = std::move(terrain);
+	tp.loaded  = true;
+}
+
 // All UI/session state for the explorer.
 struct ExplorerState
 {
@@ -616,7 +670,8 @@ struct ExplorerState
 	ShapePreview shape;        // populated when a shape asset is selected (M3)
 	CharacterPreview character; // populated when a character is selected (M4)
 	FXPreview fx;              // populated when an FX bundle is selected (M5)
-	CN3Camera engineCamera;    // drives s_CameraData for character/FX LOD/culling
+	TerrainPreview terrain;   // populated when a terrain/map is selected (M6)
+	CN3Camera engineCamera;    // drives s_CameraData for character/FX/terrain
 
 	fs::path AbsPathOf(const AssetEntry& e) const
 	{
@@ -743,6 +798,64 @@ void RenderFXToRT(ExplorerState& state, float dtSeconds)
 	state.rhi->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
 	state.rhi->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
 	fp.fx->Render();
+
+	state.rhi->EndRenderTarget();
+}
+
+// Renders the loaded terrain into the target with the fly camera (M6). The
+// engine streams patches around the camera's XZ position, so the camera drives
+// s_CameraData (via CN3Camera) and the terrain is ticked before rendering.
+void RenderTerrainToRT(ExplorerState& state)
+{
+	TerrainPreview& tp = state.terrain;
+	if (state.rhi == nullptr || !tp.loaded || tp.terrain == nullptr)
+		return;
+	if (state.viewportW <= 0 || state.viewportH <= 0)
+		return;
+
+	if (state.previewRT == nullptr || state.rtWidth != state.viewportW
+		|| state.rtHeight != state.viewportH)
+	{
+		delete state.previewRT;
+		RHIRenderTargetDesc desc;
+		desc.width  = static_cast<UINT>(state.viewportW);
+		desc.height = static_cast<UINT>(state.viewportH);
+		desc.depth  = true;
+		state.previewRT = state.rhi->CreateRenderTarget(desc);
+		state.rtWidth   = state.viewportW;
+		state.rtHeight  = state.viewportH;
+	}
+	if (state.previewRT == nullptr)
+		return;
+
+	const float aspect = static_cast<float>(state.rtWidth) / static_cast<float>(state.rtHeight);
+	const __Vector3 eye = tp.camera.Position();
+	const __Vector3 at  = eye + tp.camera.Forward();
+
+	state.rhi->BeginRenderTarget(state.previewRT);
+	state.rhi->Clear(D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, 0xFF1A2230, 1.0f, 0);
+
+	CN3Camera& cam = state.engineCamera;
+	cam.m_bFogUse   = FALSE;
+	cam.m_Data.fFOV = 0.9f;
+	cam.m_Data.fNP  = 1.0f;
+	// The far plane also drives the terrain LOD (iLOD = 3*fFP/512), so keep it
+	// generous enough to load a decent patch window around the camera.
+	cam.m_Data.fFP  = std::clamp(tp.widthMeters * 0.5f, 512.0f, 4096.0f);
+	cam.LookAt(eye, at, __Vector3(0.0f, 1.0f, 0.0f));
+	cam.Tick();
+	cam.Apply();
+	// CN3Camera::Tick reads aspect from the viewport, which BeginRenderTarget set;
+	// override defensively in case the projection needs the exact RT aspect.
+	cam.m_Data.mtxProjection.PerspectiveFovLH(cam.m_Data.fFOV, aspect, cam.m_Data.fNP,
+		cam.m_Data.fFP);
+	state.rhi->SetTransform(D3DTS_PROJECTION, cam.m_Data.mtxProjection.toD3D());
+
+	state.rhi->SetRenderState(D3DRS_LIGHTING, FALSE);
+	state.rhi->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+	tp.terrain->SetFillMode(tp.wireframe ? D3DFILL_WIREFRAME : D3DFILL_SOLID);
+	tp.terrain->Tick();   // stream patches around the camera
+	tp.terrain->Render(); // sets its own multi-texture / cull / z state
 
 	state.rhi->EndRenderTarget();
 }
@@ -1142,6 +1255,46 @@ void DrawFXViewport(ExplorerState& state)
 		DrawOrbitImage(state.previewRT, fp.camera, "##fxcanvas", ImGui::GetContentRegionAvail());
 }
 
+// Terrain viewport: fly-camera roam (WASD/QE + drag look) over the map (M6).
+void DrawTerrainViewport(ExplorerState& state)
+{
+	TerrainPreview& tp = state.terrain;
+
+	ImGui::Checkbox("Wireframe", &tp.wireframe);
+	ImGui::SameLine();
+	ImGui::SetNextItemWidth(160);
+	ImGui::SliderFloat("Speed", &tp.moveSpeed, 5.0f, 400.0f, "%.0f m/s");
+	ImGui::SameLine();
+	ImGui::TextDisabled("WASD/QE: move  |  drag: look");
+
+	const ImVec2 canvas = ImGui::GetContentRegionAvail();
+	if (state.previewRT == nullptr || state.previewRT->ColorHandle() == nullptr)
+		return;
+
+	const ImVec2 cursor = ImGui::GetCursorScreenPos();
+	ImGui::Image(reinterpret_cast<ImTextureID>(state.previewRT->ColorHandle()), canvas,
+		ImVec2(0, 1), ImVec2(1, 0));
+
+	ImGui::SetCursorScreenPos(cursor);
+	ImGui::InvisibleButton("##terraincanvas", canvas);
+	const bool active = ImGui::IsItemActive();
+	if (active && ImGui::IsMouseDragging(ImGuiMouseButton_Left))
+	{
+		const ImVec2 d = ImGui::GetIO().MouseDelta;
+		tp.camera.Look(d.x * 0.005f, -d.y * 0.005f);
+	}
+	if (ImGui::IsItemHovered() || active)
+	{
+		const float d = tp.moveSpeed * ImGui::GetIO().DeltaTime;
+		if (ImGui::IsKeyDown(ImGuiKey_W)) tp.camera.MoveForward(d);
+		if (ImGui::IsKeyDown(ImGuiKey_S)) tp.camera.MoveForward(-d);
+		if (ImGui::IsKeyDown(ImGuiKey_D)) tp.camera.MoveRight(d);
+		if (ImGui::IsKeyDown(ImGuiKey_A)) tp.camera.MoveRight(-d);
+		if (ImGui::IsKeyDown(ImGuiKey_E)) tp.camera.MoveUp(d);
+		if (ImGui::IsKeyDown(ImGuiKey_Q)) tp.camera.MoveUp(-d);
+	}
+}
+
 void DrawViewport(ExplorerState& state, const ImVec2& size)
 {
 	if (!ImGui::BeginChild("##viewport", size, ImGuiChildFlags_Borders))
@@ -1174,6 +1327,10 @@ void DrawViewport(ExplorerState& state, const ImVec2& size)
 	{
 		DrawFXViewport(state);
 	}
+	else if (state.terrain.loaded)
+	{
+		DrawTerrainViewport(state);
+	}
 	else if (state.shape.loaded && state.previewRT != nullptr
 		&& state.previewRT->ColorHandle() != nullptr)
 	{
@@ -1203,6 +1360,10 @@ void DrawViewport(ExplorerState& state, const ImVec2& size)
 	else if (!state.fx.error.empty())
 	{
 		centeredText(state.fx.error.c_str());
+	}
+	else if (!state.terrain.error.empty())
+	{
+		centeredText(state.terrain.error.c_str());
 	}
 	else if (!state.shape.error.empty())
 	{
@@ -1387,6 +1548,32 @@ void DrawInspector(ExplorerState& state, const ImVec2& size)
 		ImGui::Separator();
 		ImGui::TextColored(ImVec4(0.9f, 0.5f, 0.4f, 1.0f), "%s", fp.error.c_str());
 	}
+
+	// Terrain-specific metadata.
+	const TerrainPreview& trp = state.terrain;
+	if (trp.loaded)
+	{
+		ImGui::Spacing();
+		ImGui::Separator();
+		ImGui::Spacing();
+		ImGui::Text("Map width");
+		ImGui::TextDisabled("%.0f m", trp.widthMeters);
+		ImGui::Spacing();
+		ImGui::Text("LOD level");
+		ImGui::TextDisabled("%d", trp.terrain != nullptr ? trp.terrain->GetLODLevel() : 0);
+		ImGui::Spacing();
+		ImGui::Text("Tiles");
+		ImGui::TextDisabled("%s", (trp.terrain != nullptr && trp.terrain->m_bAvailableTile)
+			? "available" : "none");
+		ImGui::Spacing();
+		ImGui::TextDisabled("Placed objects, sky and water are not shown yet.");
+	}
+	else if (!trp.error.empty())
+	{
+		ImGui::Spacing();
+		ImGui::Separator();
+		ImGui::TextColored(ImVec4(0.9f, 0.5f, 0.4f, 1.0f), "%s", trp.error.c_str());
+	}
 	ImGui::EndChild();
 }
 
@@ -1403,6 +1590,7 @@ void SyncPreview(ExplorerState& state)
 		ReleaseShapePreview(state.shape);
 		ReleaseCharacterPreview(state.character);
 		ReleaseFXPreview(state.fx);
+		ReleaseTerrainPreview(state.terrain);
 	};
 
 	if (state.selected < 0 || state.selected >= static_cast<int>(state.index.Entries().size()))
@@ -1421,6 +1609,8 @@ void SyncPreview(ExplorerState& state)
 		LoadCharacterPreview(state.character, e.relativePath, e.fileName);
 	else if (e.type == AssetType::Effect)
 		LoadFXPreview(state.fx, e.relativePath, e.fileName);
+	else if (e.type == AssetType::Terrain)
+		LoadTerrainPreview(state.terrain, e.relativePath, e.fileName);
 }
 
 // Offscreen render smoke (docs/ASSET_EXPLORER_PLAN.md, M1): brings up the GL
@@ -1614,6 +1804,7 @@ int main(int argc, char** argv)
 		RenderShapeToRT(state);
 		RenderCharacterToRT(state);
 		RenderFXToRT(state, dt);
+		RenderTerrainToRT(state);
 
 		ImGui_ImplOpenGL3_NewFrame();
 		ImGui_ImplSDL3_NewFrame();
@@ -1665,6 +1856,7 @@ int main(int argc, char** argv)
 	ReleaseShapePreview(state.shape);
 	ReleaseCharacterPreview(state.character);
 	ReleaseFXPreview(state.fx);
+	ReleaseTerrainPreview(state.terrain);
 	delete state.previewRT;
 	CN3Base::RHIDeviceSet(nullptr);
 	delete pRHI;

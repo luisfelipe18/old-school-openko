@@ -4,10 +4,12 @@ if(NOT WIN32)
     AssetIndex_test.cpp
     OrbitCamera_test.cpp
     AnimationPlayer_test.cpp
+    FlyCamera_test.cpp
     "${CMAKE_SOURCE_DIR}/src/Client/AssetExplorer/AssetType.cpp"
     "${CMAKE_SOURCE_DIR}/src/Client/AssetExplorer/AssetIndex.cpp"
     "${CMAKE_SOURCE_DIR}/src/Client/AssetExplorer/OrbitCamera.cpp"
-    "${CMAKE_SOURCE_DIR}/src/Client/AssetExplorer/AnimationPlayer.cpp")
+    "${CMAKE_SOURCE_DIR}/src/Client/AssetExplorer/AnimationPlayer.cpp"
+    "${CMAKE_SOURCE_DIR}/src/Client/AssetExplorer/FlyCamera.cpp")
 
   set_target_properties(AssetExplorer.Tests PROPERTIES
     CXX_SCAN_FOR_MODULES OFF
