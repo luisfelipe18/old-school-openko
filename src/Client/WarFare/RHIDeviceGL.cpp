@@ -674,6 +674,139 @@ HRESULT RHIDeviceGL::Present()
 	return RHIDeviceNull::Present(); // keep the present counter for diagnostics
 }
 
+namespace
+{
+// Concrete GL render target: an FBO with a color texture and (optionally) a
+// depth renderbuffer. The color texture name doubles as the ImGui texture id.
+class RHIRenderTargetGL : public IRHIRenderTarget
+{
+public:
+	RHIRenderTargetGL(UINT width, UINT height, gl::Uint fbo, gl::Uint color, gl::Uint depthRb)
+		: m_width(width), m_height(height), m_fbo(fbo), m_color(color), m_depthRb(depthRb)
+	{
+	}
+
+	~RHIRenderTargetGL() override
+	{
+		if (m_color != 0)
+			gl::DeleteTextures(1, &m_color);
+		if (m_depthRb != 0)
+			gl::DeleteRenderbuffers(1, &m_depthRb);
+		if (m_fbo != 0)
+			gl::DeleteFramebuffers(1, &m_fbo);
+	}
+
+	UINT Width() const override  { return m_width; }
+	UINT Height() const override { return m_height; }
+
+	void* ColorHandle() const override
+	{
+		return reinterpret_cast<void*>(static_cast<uintptr_t>(m_color));
+	}
+
+	gl::Uint FBO() const { return m_fbo; }
+
+private:
+	UINT m_width;
+	UINT m_height;
+	gl::Uint m_fbo;
+	gl::Uint m_color;
+	gl::Uint m_depthRb;
+};
+} // namespace
+
+IRHIRenderTarget* RHIDeviceGL::CreateRenderTarget(const RHIRenderTargetDesc& desc)
+{
+	if (!m_bValid || desc.width == 0 || desc.height == 0)
+		return nullptr;
+
+	const auto w = static_cast<gl::Sizei>(desc.width);
+	const auto h = static_cast<gl::Sizei>(desc.height);
+
+	// Remember the binding to restore it - creating an FBO must not disturb the
+	// caller's current target (window or another RT).
+	gl::Int prevFBO = 0;
+	gl::GetIntegerv(gl::FRAMEBUFFER_BINDING, &prevFBO);
+
+	gl::Uint color = 0;
+	gl::GenTextures(1, &color);
+	gl::BindTexture(gl::TEXTURE_2D, color);
+	gl::TexImage2D(gl::TEXTURE_2D, 0, gl::RGBA8, w, h, 0, gl::RGBA, gl::UNSIGNED_BYTE, nullptr);
+	gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::LINEAR);
+	gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR);
+	gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::CLAMP_TO_EDGE);
+	gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::CLAMP_TO_EDGE);
+	gl::BindTexture(gl::TEXTURE_2D, 0);
+
+	gl::Uint depthRb = 0;
+	if (desc.depth)
+	{
+		gl::GenRenderbuffers(1, &depthRb);
+		gl::BindRenderbuffer(gl::RENDERBUFFER, depthRb);
+		gl::RenderbufferStorage(gl::RENDERBUFFER, gl::DEPTH_COMPONENT24, w, h);
+		gl::BindRenderbuffer(gl::RENDERBUFFER, 0);
+	}
+
+	gl::Uint fbo = 0;
+	gl::GenFramebuffers(1, &fbo);
+	gl::BindFramebuffer(gl::FRAMEBUFFER, fbo);
+	gl::FramebufferTexture2D(gl::FRAMEBUFFER, gl::COLOR_ATTACHMENT0, gl::TEXTURE_2D, color, 0);
+	if (depthRb != 0)
+		gl::FramebufferRenderbuffer(gl::FRAMEBUFFER, gl::DEPTH_ATTACHMENT, gl::RENDERBUFFER, depthRb);
+
+	const gl::Enum status = gl::CheckFramebufferStatus(gl::FRAMEBUFFER);
+	gl::BindFramebuffer(gl::FRAMEBUFFER, static_cast<gl::Uint>(prevFBO));
+
+	if (status != gl::FRAMEBUFFER_COMPLETE)
+	{
+		spdlog::error("RHIDeviceGL: render target incomplete (status 0x{:X})", status);
+		if (color != 0)
+			gl::DeleteTextures(1, &color);
+		if (depthRb != 0)
+			gl::DeleteRenderbuffers(1, &depthRb);
+		if (fbo != 0)
+			gl::DeleteFramebuffers(1, &fbo);
+		return nullptr;
+	}
+
+	return new RHIRenderTargetGL(desc.width, desc.height, fbo, color, depthRb);
+}
+
+void RHIDeviceGL::BeginRenderTarget(IRHIRenderTarget* pTarget)
+{
+	auto* pGL = static_cast<RHIRenderTargetGL*>(pTarget);
+	if (!m_bValid || pGL == nullptr || m_bRenderTargetBound)
+		return;
+
+	gl::Int prevFBO = 0;
+	gl::GetIntegerv(gl::FRAMEBUFFER_BINDING, &prevFBO);
+	m_uSavedFBO       = static_cast<gl::Uint>(prevFBO);
+	m_iSavedWinPixelW = m_iWinPixelW;
+	m_iSavedWinPixelH = m_iWinPixelH;
+
+	gl::BindFramebuffer(gl::FRAMEBUFFER, pGL->FBO());
+
+	// ApplyViewport reads m_iWinPixelW/H for both the pre-transformed path and
+	// the Y-flip; point them at the target so engine draws land correctly.
+	m_iWinPixelW = static_cast<int>(pGL->Width());
+	m_iWinPixelH = static_cast<int>(pGL->Height());
+	gl::Viewport(0, 0, m_iWinPixelW, m_iWinPixelH);
+
+	m_bRenderTargetBound = true;
+}
+
+void RHIDeviceGL::EndRenderTarget()
+{
+	if (!m_bRenderTargetBound)
+		return;
+
+	gl::BindFramebuffer(gl::FRAMEBUFFER, m_uSavedFBO);
+	m_iWinPixelW = m_iSavedWinPixelW;
+	m_iWinPixelH = m_iSavedWinPixelH;
+	gl::Viewport(0, 0, m_iWinPixelW, m_iWinPixelH);
+	m_bRenderTargetBound = false;
+}
+
 bool RHIDeviceGL::ReadCenterPixel(uint8_t rgbaOut[4])
 {
 	if (!m_bValid)
@@ -681,6 +814,22 @@ bool RHIDeviceGL::ReadCenterPixel(uint8_t rgbaOut[4])
 
 	gl::ReadPixels(m_iWinPixelW / 2, m_iWinPixelH / 2, 1, 1, gl::RGBA, gl::UNSIGNED_BYTE, rgbaOut);
 	return gl::GetError() == 0;
+}
+
+bool RHIDeviceGL::ReadRenderTargetPixel(IRHIRenderTarget* pTarget, int x, int y, uint8_t rgbaOut[4])
+{
+	auto* pGL = static_cast<RHIRenderTargetGL*>(pTarget);
+	if (!m_bValid || pGL == nullptr)
+		return false;
+
+	gl::Int prevFBO = 0;
+	gl::GetIntegerv(gl::FRAMEBUFFER_BINDING, &prevFBO);
+
+	gl::BindFramebuffer(gl::FRAMEBUFFER, pGL->FBO());
+	gl::ReadPixels(x, y, 1, 1, gl::RGBA, gl::UNSIGNED_BYTE, rgbaOut);
+	const bool ok = gl::GetError() == 0;
+	gl::BindFramebuffer(gl::FRAMEBUFFER, static_cast<gl::Uint>(prevFBO));
+	return ok;
 }
 
 bool RHIDeviceGL::DumpFramePPM(const char* szPath)

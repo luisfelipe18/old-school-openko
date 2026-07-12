@@ -11,6 +11,14 @@
 #include "AssetIndex.h"
 #include "AssetType.h"
 
+// Engine + RHI: the tool renders previews through the same GL backend the
+// client uses, into an offscreen render target it then samples into the UI
+// (docs/ASSET_EXPLORER_PLAN.md, M1).
+#include <RHIDeviceGL.h>
+
+#include <N3Base/My_3DStruct.h>
+#include <N3Base/N3Base.h>
+
 #include <Platform/GameDataDir.h>
 #include <Platform/IconDecoder.h>
 #include <Platform/PlatformPaths.h>
@@ -127,7 +135,70 @@ struct ExplorerState
 	char search[256] = {};
 	unsigned categoryMask = 0; // 0 == all
 	int selected = -1;         // index into index.Entries(), or -1
+
+	// Preview render target (M1). Sized to the viewport panel; recreated when it
+	// changes. viewportSize is measured during the UI pass and consumed at the
+	// top of the next frame so the target stays stable within a frame.
+	IRHIDevice* rhi = nullptr;
+	IRHIRenderTarget* previewRT = nullptr;
+	int rtWidth  = 0;
+	int rtHeight = 0;
+	int viewportW = 0;
+	int viewportH = 0;
 };
+
+// A single spinning-free RGB triangle in render-target pixel space, proving the
+// engine renders into the offscreen target and the tool samples it back. Real
+// asset scenes replace this in M3+.
+void RenderPreview(ExplorerState& state)
+{
+	if (state.rhi == nullptr || state.viewportW <= 0 || state.viewportH <= 0)
+		return;
+
+	// (Re)create the target when the panel size changes.
+	if (state.previewRT == nullptr || state.rtWidth != state.viewportW
+		|| state.rtHeight != state.viewportH)
+	{
+		delete state.previewRT;
+		RHIRenderTargetDesc desc;
+		desc.width  = static_cast<UINT>(state.viewportW);
+		desc.height = static_cast<UINT>(state.viewportH);
+		desc.depth  = true;
+		state.previewRT = state.rhi->CreateRenderTarget(desc);
+		state.rtWidth   = state.viewportW;
+		state.rtHeight  = state.viewportH;
+	}
+	if (state.previewRT == nullptr)
+		return;
+
+	struct VtxRHW
+	{
+		float x, y, z, rhw;
+		uint32_t color; // 0xAARRGGBB (D3D DIFFUSE)
+	};
+	const float w = static_cast<float>(state.rtWidth);
+	const float h = static_cast<float>(state.rtHeight);
+	const float cx = w * 0.5f;
+	const float cy = h * 0.5f;
+	const float r  = 0.35f * ((w < h) ? w : h);
+	const VtxRHW verts[3] = {
+		{cx,          cy - r, 0.0f, 1.0f, 0xFFE24A4A},
+		{cx + r,      cy + r, 0.0f, 1.0f, 0xFF4AE26A},
+		{cx - r,      cy + r, 0.0f, 1.0f, 0xFF4A78E2},
+	};
+
+	state.rhi->BeginRenderTarget(state.previewRT);
+	state.rhi->Clear(D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, 0xFF14161B, 1.0f, 0);
+	state.rhi->SetRenderState(D3DRS_LIGHTING, FALSE);
+	state.rhi->SetRenderState(D3DRS_ZENABLE, FALSE);
+	state.rhi->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+	state.rhi->SetTexture(0, nullptr);
+	state.rhi->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
+	state.rhi->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_DIFFUSE);
+	state.rhi->SetFVF(FVF_TRANSFORMEDCOLOR);
+	state.rhi->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 1, verts, sizeof(VtxRHW));
+	state.rhi->EndRenderTarget();
+}
 
 void RescanDataDir(ExplorerState& state, const fs::path& dir)
 {
@@ -217,7 +288,7 @@ void DrawAssetList(ExplorerState& state, const ImVec2& size)
 	ImGui::EndChild();
 }
 
-void DrawViewport(const ImVec2& size)
+void DrawViewport(ExplorerState& state, const ImVec2& size)
 {
 	if (!ImGui::BeginChild("##viewport", size, ImGuiChildFlags_Borders))
 	{
@@ -225,14 +296,26 @@ void DrawViewport(const ImVec2& size)
 		return;
 	}
 	const ImVec2 avail = ImGui::GetContentRegionAvail();
-	const char* msg = "Preview viewport";
-	const char* sub = "3D/2D preview arrives with the RHI render target (M1+).";
-	const ImVec2 sz1 = ImGui::CalcTextSize(msg);
-	const ImVec2 sz2 = ImGui::CalcTextSize(sub);
-	ImGui::SetCursorPos(ImVec2((avail.x - sz1.x) * 0.5f, avail.y * 0.5f - sz1.y));
-	ImGui::TextDisabled("%s", msg);
-	ImGui::SetCursorPosX((avail.x - sz2.x) * 0.5f);
-	ImGui::TextDisabled("%s", sub);
+
+	// Record the panel size for next frame's render (kept a frame behind so the
+	// target isn't resized mid-frame while its texture is referenced here).
+	state.viewportW = static_cast<int>(avail.x > 1.0f ? avail.x : 1.0f);
+	state.viewportH = static_cast<int>(avail.y > 1.0f ? avail.y : 1.0f);
+
+	if (state.previewRT != nullptr && state.previewRT->ColorHandle() != nullptr)
+	{
+		// GL renders bottom-up into the target texture; flip V so it displays
+		// upright under ImGui's top-left UV convention.
+		const ImTextureID tex = reinterpret_cast<ImTextureID>(state.previewRT->ColorHandle());
+		ImGui::Image(tex, avail, ImVec2(0, 1), ImVec2(1, 0));
+	}
+	else
+	{
+		const char* msg = "Preview viewport (no render target)";
+		const ImVec2 sz = ImGui::CalcTextSize(msg);
+		ImGui::SetCursorPos(ImVec2((avail.x - sz.x) * 0.5f, avail.y * 0.5f));
+		ImGui::TextDisabled("%s", msg);
+	}
 	ImGui::EndChild();
 }
 
@@ -269,6 +352,56 @@ void DrawInspector(ExplorerState& state, const ImVec2& size)
 	ImGui::EndChild();
 }
 
+// Offscreen render smoke (docs/ASSET_EXPLORER_PLAN.md, M1): brings up the GL
+// backend, renders the test triangle into a render target and reads back the
+// center pixel, asserting it is the drawn geometry rather than the clear color.
+// Needs a GL context (run under Xvfb in CI). Returns 0 on success.
+int RunRenderSmokeTest()
+{
+	if (!SDL_Init(SDL_INIT_VIDEO))
+	{
+		spdlog::error("AssetExplorer: SDL_Init failed: {}", SDL_GetError());
+		return 1;
+	}
+	RHIDeviceGL::SetGLWindowAttributes();
+	SDL_Window* pWindow = SDL_CreateWindow("AssetExplorer smoke", 320, 240,
+		SDL_WINDOW_OPENGL | SDL_WINDOW_HIDDEN);
+	if (pWindow == nullptr)
+	{
+		spdlog::error("AssetExplorer: SDL_CreateWindow failed: {}", SDL_GetError());
+		SDL_Quit();
+		return 1;
+	}
+	auto* pRHI = new RHIDeviceGL(pWindow, /*bVSync=*/false);
+	int rc = 1;
+	if (pRHI->IsValid())
+	{
+		CN3Base::RHIDeviceSet(pRHI);
+		ExplorerState state;
+		state.rhi = pRHI;
+		state.viewportW = 256;
+		state.viewportH = 256;
+		RenderPreview(state);
+
+		uint8_t rgba[4] = {};
+		const bool read = state.previewRT != nullptr
+			&& pRHI->ReadRenderTargetPixel(state.previewRT, 128, 128, rgba);
+		// The clear color is 0x14161B (dark); the triangle covers the center, so
+		// a correct render reads back something clearly brighter.
+		const int lum = rgba[0] + rgba[1] + rgba[2];
+		std::printf("AssetExplorer render smoke: center rgba=(%d,%d,%d,%d) read=%d\n",
+			rgba[0], rgba[1], rgba[2], rgba[3], read ? 1 : 0);
+		rc = (read && lum > 96) ? 0 : 3;
+
+		delete state.previewRT;
+		CN3Base::RHIDeviceSet(nullptr);
+	}
+	delete pRHI;
+	SDL_DestroyWindow(pWindow);
+	SDL_Quit();
+	return rc;
+}
+
 int RunSmokeTest(const std::string& dir)
 {
 	AssetIndex index;
@@ -287,16 +420,21 @@ int main(int argc, char** argv)
 {
 	std::string smokeDir;
 	std::string dataOverride;
+	bool renderSmoke = false;
 	for (int i = 1; i < argc; ++i)
 	{
 		if (std::strcmp(argv[i], "--smoke") == 0 && i + 1 < argc)
 			smokeDir = argv[++i];
+		else if (std::strcmp(argv[i], "--smoke-render") == 0)
+			renderSmoke = true;
 		else if (std::strcmp(argv[i], "--data") == 0 && i + 1 < argc)
 			dataOverride = argv[++i];
 		else if (argv[i][0] != '-')
 			dataOverride = argv[i];
 	}
 
+	if (renderSmoke)
+		return RunRenderSmokeTest();
 	if (!smokeDir.empty())
 		return RunSmokeTest(smokeDir);
 
@@ -306,11 +444,9 @@ int main(int argc, char** argv)
 		return 1;
 	}
 
-	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
-	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
-	SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
-	SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_FORWARD_COMPATIBLE_FLAG);
-	SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+	// The engine's GL backend owns the context (matches the WarFare client). It
+	// sets the GL window attributes, so do that before creating the window.
+	RHIDeviceGL::SetGLWindowAttributes();
 
 	SDL_Window* pWindow = SDL_CreateWindow("Knight OnLine - Asset Explorer", 1280, 800,
 		SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIDDEN);
@@ -321,16 +457,18 @@ int main(int argc, char** argv)
 		return 1;
 	}
 
-	SDL_GLContext glContext = SDL_GL_CreateContext(pWindow);
-	if (glContext == nullptr)
+	auto* pRHI = new RHIDeviceGL(pWindow, /*bVSync=*/true);
+	if (!pRHI->IsValid())
 	{
-		spdlog::error("AssetExplorer: SDL_GL_CreateContext failed: {}", SDL_GetError());
+		spdlog::error("AssetExplorer: GL backend init failed");
+		delete pRHI;
 		SDL_DestroyWindow(pWindow);
 		SDL_Quit();
 		return 1;
 	}
-	SDL_GL_MakeCurrent(pWindow, glContext);
-	SDL_GL_SetSwapInterval(1);
+	CN3Base::RHIDeviceSet(pRHI);
+	SDL_GLContext glContext = static_cast<SDL_GLContext>(pRHI->GLContext());
+
 	ApplyWindowIcon(pWindow);
 	SDL_ShowWindow(pWindow);
 
@@ -338,10 +476,13 @@ int main(int argc, char** argv)
 	ImGui::CreateContext();
 	ImGui::GetIO().IniFilename = nullptr;
 	ApplyModernStyle();
+	// Share the engine's GL context: ImGui records draw data and replays it into
+	// the window framebuffer after the engine has rendered previews into RTs.
 	ImGui_ImplSDL3_InitForOpenGL(pWindow, glContext);
 	ImGui_ImplOpenGL3_Init("#version 330");
 
 	ExplorerState state;
+	state.rhi = pRHI;
 	{
 		const fs::path dir = FindGameDataDir(dataOverride);
 		if (dir.empty())
@@ -371,6 +512,11 @@ int main(int argc, char** argv)
 				bRunning = false;
 		}
 
+		// Render this frame's preview into the offscreen target using the panel
+		// size measured last frame, so the target texture is ready before the UI
+		// references it below.
+		RenderPreview(state);
+
 		ImGui_ImplOpenGL3_NewFrame();
 		ImGui_ImplSDL3_NewFrame();
 		ImGui::NewFrame();
@@ -393,7 +539,7 @@ int main(int argc, char** argv)
 		const float bodyH       = -ImGui::GetFrameHeightWithSpacing();
 		DrawAssetList(state, ImVec2(listW, bodyH));
 		ImGui::SameLine();
-		DrawViewport(ImVec2(-(inspectorW + ImGui::GetStyle().ItemSpacing.x), bodyH));
+		DrawViewport(state, ImVec2(-(inspectorW + ImGui::GetStyle().ItemSpacing.x), bodyH));
 		ImGui::SameLine();
 		DrawInspector(state, ImVec2(0, bodyH));
 
@@ -415,7 +561,12 @@ int main(int argc, char** argv)
 	ImGui_ImplSDL3_Shutdown();
 	ImGui::DestroyContext();
 
-	SDL_GL_DestroyContext(glContext);
+	// Delete GL resources while the context is still current, then tear down the
+	// backend (its destructor destroys the GL context).
+	delete state.previewRT;
+	CN3Base::RHIDeviceSet(nullptr);
+	delete pRHI;
+
 	SDL_DestroyWindow(pWindow);
 	SDL_Quit();
 

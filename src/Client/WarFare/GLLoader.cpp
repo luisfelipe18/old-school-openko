@@ -75,6 +75,17 @@ void (*DrawArrays)(Enum, Int, Sizei)                              = nullptr;
 void (*DrawElements)(Enum, Sizei, Enum, const void*)              = nullptr;
 void (*DrawElementsBaseVertex)(Enum, Sizei, Enum, const void*, Int) = nullptr;
 
+void (*GenFramebuffers)(Sizei, Uint*)                            = nullptr;
+void (*DeleteFramebuffers)(Sizei, const Uint*)                   = nullptr;
+void (*BindFramebuffer)(Enum, Uint)                              = nullptr;
+void (*FramebufferTexture2D)(Enum, Enum, Enum, Uint, Int)        = nullptr;
+Enum (*CheckFramebufferStatus)(Enum)                             = nullptr;
+void (*GenRenderbuffers)(Sizei, Uint*)                           = nullptr;
+void (*DeleteRenderbuffers)(Sizei, const Uint*)                  = nullptr;
+void (*BindRenderbuffer)(Enum, Uint)                             = nullptr;
+void (*RenderbufferStorage)(Enum, Enum, Sizei, Sizei)            = nullptr;
+void (*FramebufferRenderbuffer)(Enum, Enum, Enum, Uint)          = nullptr;
+
 namespace
 {
 // reinterpret_cast between function-pointer types is well-defined for calling
@@ -164,6 +175,18 @@ bool Load(ProcLoader loader)
 	ok &= Resolve(DrawArrays, loader, "glDrawArrays");
 	ok &= Resolve(DrawElements, loader, "glDrawElements");
 	ok &= Resolve(DrawElementsBaseVertex, loader, "glDrawElementsBaseVertex");
+
+	// Framebuffer objects are core since GL 3.0, so they resolve unsuffixed.
+	ok &= Resolve(GenFramebuffers, loader, "glGenFramebuffers");
+	ok &= Resolve(DeleteFramebuffers, loader, "glDeleteFramebuffers");
+	ok &= Resolve(BindFramebuffer, loader, "glBindFramebuffer");
+	ok &= Resolve(FramebufferTexture2D, loader, "glFramebufferTexture2D");
+	ok &= Resolve(CheckFramebufferStatus, loader, "glCheckFramebufferStatus");
+	ok &= Resolve(GenRenderbuffers, loader, "glGenRenderbuffers");
+	ok &= Resolve(DeleteRenderbuffers, loader, "glDeleteRenderbuffers");
+	ok &= Resolve(BindRenderbuffer, loader, "glBindRenderbuffer");
+	ok &= Resolve(RenderbufferStorage, loader, "glRenderbufferStorage");
+	ok &= Resolve(FramebufferRenderbuffer, loader, "glFramebufferRenderbuffer");
 
 	return ok;
 }

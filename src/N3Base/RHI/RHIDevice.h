@@ -21,6 +21,31 @@
 #include "RHIBuffers.h"
 #include "RHITextures.h"
 
+// Offscreen render target (docs/ASSET_EXPLORER_PLAN.md, M1). An opaque
+// backend-owned color(+depth) surface the engine can render into so a tool can
+// then sample the result into its own UI (ImGui::Image). Optional capability:
+// backends that can't render offscreen return nullptr from CreateRenderTarget
+// and the Begin/End calls are no-ops, so callers must null-check the handle.
+struct RHIRenderTargetDesc
+{
+	UINT width  = 0;
+	UINT height = 0;
+	bool depth  = true; // attach a depth buffer (needed for 3D previews)
+};
+
+struct IRHIRenderTarget
+{
+	virtual ~IRHIRenderTarget() = default;
+
+	virtual UINT Width() const  = 0;
+	virtual UINT Height() const = 0;
+
+	// Backend-native handle to the color texture, suitable for the UI layer:
+	// the GL texture name (as void*/uintptr) for the GL backend, an
+	// SDL_GPUTexture* for the SDL_GPU backend. nullptr if unavailable.
+	virtual void* ColorHandle() const = 0;
+};
+
 struct IRHIDevice
 {
 	virtual ~IRHIDevice() = default;
@@ -80,6 +105,19 @@ struct IRHIDevice
 	virtual HRESULT DrawIndexedPrimitiveUP(D3DPRIMITIVETYPE primitiveType, UINT minVertexIndex,
 		UINT numVertices, UINT primitiveCount, const void* pIndexData, D3DFORMAT indexFormat,
 		const void* pVertexData, UINT vertexStride)                                         = 0;
+
+	// --- Offscreen render targets (optional capability, M1) --------------------
+	// Default implementations make this a no-op on backends that don't support
+	// it (D3D9/SDL_GPU/Null today), so only backends that override it - and the
+	// tools that opt in - are affected. Create returns an owned handle the
+	// caller must delete; Begin/End bracket engine draws that should land in the
+	// target instead of the swapchain, and restore the previous target on End.
+	virtual IRHIRenderTarget* CreateRenderTarget(const RHIRenderTargetDesc& /*desc*/)
+	{
+		return nullptr;
+	}
+	virtual void BeginRenderTarget(IRHIRenderTarget* /*pTarget*/) {}
+	virtual void EndRenderTarget() {}
 };
 
 #ifndef D3D_OK

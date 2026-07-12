@@ -132,6 +132,15 @@ constexpr Enum STATIC_DRAW          = 0x88E4;
 constexpr Enum STREAM_DRAW          = 0x88E0;
 constexpr Enum DYNAMIC_DRAW         = 0x88E8;
 
+// Framebuffer objects (offscreen render targets, M1)
+constexpr Enum FRAMEBUFFER          = 0x8D40;
+constexpr Enum RENDERBUFFER         = 0x8D41;
+constexpr Enum COLOR_ATTACHMENT0    = 0x8CE0;
+constexpr Enum DEPTH_ATTACHMENT     = 0x8D00;
+constexpr Enum DEPTH_COMPONENT24    = 0x81A6;
+constexpr Enum FRAMEBUFFER_COMPLETE = 0x8CD5;
+constexpr Enum FRAMEBUFFER_BINDING  = 0x8CA6;
+
 // Shaders
 constexpr Enum FRAGMENT_SHADER = 0x8B30;
 constexpr Enum VERTEX_SHADER   = 0x8B31;
@@ -221,6 +230,18 @@ extern void (*DrawArrays)(Enum mode, Int first, Sizei count);
 extern void (*DrawElements)(Enum mode, Sizei count, Enum type, const void* indices);
 extern void (*DrawElementsBaseVertex)(
 	Enum mode, Sizei count, Enum type, const void* indices, Int basevertex);
+
+// Framebuffer objects (offscreen render targets, M1)
+extern void (*GenFramebuffers)(Sizei n, Uint* framebuffers);
+extern void (*DeleteFramebuffers)(Sizei n, const Uint* framebuffers);
+extern void (*BindFramebuffer)(Enum target, Uint framebuffer);
+extern void (*FramebufferTexture2D)(Enum target, Enum attachment, Enum textarget, Uint texture, Int level);
+extern Enum (*CheckFramebufferStatus)(Enum target);
+extern void (*GenRenderbuffers)(Sizei n, Uint* renderbuffers);
+extern void (*DeleteRenderbuffers)(Sizei n, const Uint* renderbuffers);
+extern void (*BindRenderbuffer)(Enum target, Uint renderbuffer);
+extern void (*RenderbufferStorage)(Enum target, Enum internalformat, Sizei width, Sizei height);
+extern void (*FramebufferRenderbuffer)(Enum target, Enum attachment, Enum renderbuffertarget, Uint renderbuffer);
 
 // SDL_GL_GetProcAddress has this shape (SDL_FunctionPointer == void(*)()).
 using Proc       = void (*)();

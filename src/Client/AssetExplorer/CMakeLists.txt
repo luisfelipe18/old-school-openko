@@ -12,7 +12,16 @@ if(NOT WIN32)
     AssetIndex.h
     AssetExplorerMainSDL.cpp)
 
+  # WarFare.Core carries the engine asset loaders and the GL RHI backend
+  # (RHIDeviceGL) the preview viewport renders through; N3Base_client comes
+  # transitively. The tool needs the WarFare source dir on its include path to
+  # reach RHIDeviceGL.h.
+  target_include_directories(AssetExplorer PRIVATE
+    "${CMAKE_SOURCE_DIR}/src"
+    "${CMAKE_SOURCE_DIR}/src/Client/WarFare")
+
   target_link_libraries(AssetExplorer PRIVATE
+    WarFare.Core
     Platform
     SDL3::SDL3
     imgui

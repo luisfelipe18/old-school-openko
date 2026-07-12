@@ -104,8 +104,21 @@ public:
 		return m_bS3TC;
 	}
 
+	/// The SDL_GLContext this backend created and made current. Lets a tool
+	/// share one context between the engine renderer and its ImGui overlay
+	/// (docs/ASSET_EXPLORER_PLAN.md, M1).
+	void* GLContext() const
+	{
+		return m_pGLContext;
+	}
+
 	/// Reads the RGBA of the framebuffer's center pixel (diagnostics/smoke).
 	bool ReadCenterPixel(uint8_t rgbaOut[4]);
+
+	/// Reads one pixel back from an offscreen render target (diagnostics/smoke;
+	/// also the basis for thumbnail readback later). Binds the target's FBO,
+	/// reads, and restores the previous binding. (x, y) is bottom-left origin.
+	bool ReadRenderTargetPixel(IRHIRenderTarget* pTarget, int x, int y, uint8_t rgbaOut[4]);
 
 	/// Dumps the current back buffer to a binary PPM (diagnostics: lets CI and
 	/// the Mac bring-up inspect real frames without window-system capture).
@@ -114,6 +127,11 @@ public:
 	// --- Frame ---------------------------------------------------------------
 	HRESULT Clear(DWORD flags, D3DCOLOR color, float z, DWORD stencil) override;
 	HRESULT Present() override;
+
+	// --- Offscreen render targets (M1) -----------------------------------------
+	IRHIRenderTarget* CreateRenderTarget(const RHIRenderTargetDesc& desc) override;
+	void BeginRenderTarget(IRHIRenderTarget* pTarget) override;
+	void EndRenderTarget() override;
 
 	// --- Resources -------------------------------------------------------------
 	HRESULT CreateTexture(UINT width, UINT height, UINT levels, DWORD usage, D3DFORMAT format,
@@ -169,6 +187,14 @@ private:
 	IRHITexture* m_apTextures[MAX_GL_STAGES] = {};
 	UINT m_nStreamOffset = 0;
 	UINT m_nStreamStride = 0;
+
+	// Offscreen render-target state saved across BeginRenderTarget/EndRenderTarget.
+	// ApplyViewport keys off m_iWinPixelW/H, so a bound target temporarily
+	// overrides them with the target's size and restores on End.
+	gl::Uint m_uSavedFBO = 0;
+	int m_iSavedWinPixelW = 0;
+	int m_iSavedWinPixelH = 0;
+	bool m_bRenderTargetBound = false;
 
 	// Uniform locations, cached at link time.
 	struct Locations

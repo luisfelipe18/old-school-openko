@@ -296,8 +296,8 @@ none needed; builds under the existing `linux-clang-*` / `macos-arm64-*`.
 
 | # | Milestone | Deliverable | Unlocks |
 | --- | --- | --- | --- |
-| **M0** | Scaffolding | Empty ImGui window + `AssetType`/`AssetIndex` core + tests; tree lists & filters the data dir; **no preview yet** | the shell |
-| **M1** | RHI offscreen RT | `CreateRenderTarget/Begin/End` in GL backend + Null stub; a triangle rendered into `ImGui::Image` | all 3D |
+| **M0** ✅ | Scaffolding | Empty ImGui window + `AssetType`/`AssetIndex` core + tests; tree lists & filters the data dir; **no preview yet** | the shell |
+| **M1** ✅ | RHI offscreen RT | `CreateRenderTarget/Begin/End` on `IRHIDevice` (default no-op) + GL backend impl; a triangle rendered through the engine into the viewport's `ImGui::Image`; `--smoke-render` readback guard | all 3D |
 | **M2** | Texture panel | Full `CN3Texture` + `.ksc` 2D preview, inspector, export | replaces N3TexViewer |
 | **M3** | Shape viewport | `CN3Shape` orbit preview, wireframe/bbox, texture cross-links | replaces N3Viewer |
 | **M4** | Character + animation | `CN3Chr` with anim timeline, LOD, plugs, skeleton | replaces N3CE |
