@@ -390,15 +390,18 @@ int main(int argc, char** argv)
 		ImGui::Checkbox("Use software cursor", &ui.option.bWindowCursor);
 
 		ImGui::SeparatorText("Texture quality");
+		// The "##suffix" keeps the visible label "Low" while giving each
+		// radio a unique ImGui ID (three same-label widgets otherwise
+		// collide and trip ImGui's ID-conflict debug check).
 		ImGui::RadioButton("Character: High", &ui.texLodChr, 0);
 		ImGui::SameLine();
-		ImGui::RadioButton("Low", &ui.texLodChr, 1);
+		ImGui::RadioButton("Low##chr", &ui.texLodChr, 1);
 		ImGui::RadioButton("Object: High", &ui.texLodShape, 0);
 		ImGui::SameLine();
-		ImGui::RadioButton("Low", &ui.texLodShape, 1);
+		ImGui::RadioButton("Low##shape", &ui.texLodShape, 1);
 		ImGui::RadioButton("Terrain: High", &ui.texLodTerrain, 0);
 		ImGui::SameLine();
-		ImGui::RadioButton("Low", &ui.texLodTerrain, 1);
+		ImGui::RadioButton("Low##terrain", &ui.texLodTerrain, 1);
 
 		ImGui::SeparatorText("Effects");
 		ImGui::Checkbox("Shadows", &ui.useShadow);

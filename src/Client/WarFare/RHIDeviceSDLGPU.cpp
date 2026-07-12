@@ -232,8 +232,11 @@ RHIDeviceSDLGPU::RHIDeviceSDLGPU(SDL_Window* pWindow, bool bVSync) : m_pWindow(p
 		SetViewport(&viewport);
 	}
 
-	spdlog::info("RHIDeviceSDLGPU: driver '{}', {} shaders", SDL_GetGPUDeviceDriver(m_pDevice),
-		(vsInfo.format == SDL_GPU_SHADERFORMAT_SPIRV) ? "SPIR-V" : "MSL");
+	spdlog::info("RHIDeviceSDLGPU: driver '{}', {} shaders, BC textures {}, depth format {}",
+		SDL_GetGPUDeviceDriver(m_pDevice),
+		(vsInfo.format == SDL_GPU_SHADERFORMAT_SPIRV) ? "SPIR-V" : "MSL",
+		(CN3Base::s_dwTextureCaps & TEX_CAPS_DXT1) ? "supported" : "NOT supported",
+		m_iDepthFormat);
 
 	m_bValid = true;
 }
@@ -937,11 +940,17 @@ void RHIDeviceSDLGPU::UploadFrameResources(void* pCopyCmdBufRaw)
 		m_pStreamBuffer                  = SDL_CreateGPUBuffer(m_pDevice, &bufInfo);
 	}
 	if (m_pStreamTransfer == nullptr || (arenaSize > 0 && m_pStreamBuffer == nullptr))
+	{
+		spdlog::error("RHIDeviceSDLGPU: stream buffer creation failed: {}", SDL_GetError());
 		return;
+	}
 
 	uint8_t* pMap = static_cast<uint8_t*>(SDL_MapGPUTransferBuffer(m_pDevice, m_pStreamTransfer, true));
 	if (pMap == nullptr)
+	{
+		spdlog::error("RHIDeviceSDLGPU: SDL_MapGPUTransferBuffer failed: {}", SDL_GetError());
 		return;
+	}
 
 	uint32_t cursor = 0;
 	if (arenaSize > 0)
@@ -1090,6 +1099,11 @@ HRESULT RHIDeviceSDLGPU::Present()
 	// --- Replay ---
 	SDL_GPURenderPass* pPass = nullptr;
 
+	// Diagnostics: counts that discriminate "textures never uploaded" from
+	// "uniforms wrong" style failures without spamming - logged for the
+	// first frames and then once every ~10 seconds.
+	int nDraws = 0, nTexturedDraws = 0, nFallbackBinds = 0;
+
 	// First pass of the frame defaults to a full clear so an uninitialized
 	// offscreen target never leaks through (the engine clears every frame
 	// anyway; this only matters for clear-less diagnostic frames).
@@ -1191,10 +1205,17 @@ HRESULT RHIDeviceSDLGPU::Present()
 		vertexBinding.offset               = draw.uVertexBytesOffset;
 		SDL_BindGPUVertexBuffers(pPass, 0, &vertexBinding, 1);
 
+		++nDraws;
 		SDL_GPUTextureSamplerBinding samplerBindings[MAX_STAGES] = {};
 		for (int stage = 0; stage < MAX_STAGES; ++stage)
 		{
-			auto* pTexture = reinterpret_cast<RHITextureSDLGPU*>(draw.apTextures[stage]);
+			RHITextureSDLGPU* pTexture = draw.apTextures[stage];
+			if (pTexture != nullptr)
+			{
+				++nTexturedDraws;
+				if (pTexture->m_pGPUTexture == nullptr)
+					++nFallbackBinds; // recorded a texture that never reached the GPU
+			}
 			samplerBindings[stage].texture =
 				(pTexture != nullptr && pTexture->m_pGPUTexture != nullptr)
 					? pTexture->m_pGPUTexture
@@ -1246,6 +1267,32 @@ HRESULT RHIDeviceSDLGPU::Present()
 	SDL_BlitGPUTexture(pCmd, &blit);
 
 	SDL_SubmitGPUCommandBuffer(pCmd);
+
+	// Sparse frame diagnostics: the first 3 drawing frames and one line
+	// every 600 frames afterwards.
+	if (nDraws > 0)
+	{
+		static int s_nLoggedFrames = 0;
+		++s_nLoggedFrames;
+		if (s_nLoggedFrames <= 3 || (s_nLoggedFrames % 600) == 0)
+		{
+			spdlog::info("RHIDeviceSDLGPU: frame {}: {} draws, {} texture binds "
+						 "({} without GPU texture), {} arena bytes, {} textures uploaded",
+				s_nLoggedFrames, nDraws, nTexturedDraws, nFallbackBinds, m_FrameArena.size(),
+				m_FrameTextures.size());
+		}
+		if (nFallbackBinds > 0)
+		{
+			static bool s_bWarned = false;
+			if (!s_bWarned)
+			{
+				s_bWarned = true;
+				spdlog::warn("RHIDeviceSDLGPU: {} draw(s) referenced textures that never got a "
+							 "GPU object - they sample opaque white",
+					nFallbackBinds);
+			}
+		}
+	}
 
 	m_Commands.clear();
 	m_FrameArena.clear();

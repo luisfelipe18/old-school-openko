@@ -26,6 +26,7 @@ if(NOT WIN32)
     GLTranslate_test.cpp
     ScancodeMap_test.cpp
     SDLGPUTranslate_test.cpp
+    RHIDeviceSDLGPU_gpu_test.cpp
     TextResource_test.cpp)
 
   set_target_properties(WarFareClient.Tests PROPERTIES
