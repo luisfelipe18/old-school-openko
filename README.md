@@ -33,20 +33,42 @@ The following setups are tested by our GitHub workflows and are known to build:
  - macOS 15 **(only the server projects at this time)**
    - Apple Clang 15
 
-#### Experimental: POSIX (macOS/Linux) client port
+#### POSIX (macOS/Linux) client port
 
-The client is being ported to macOS/Linux; the roadmap lives in
-[docs/PORT_POSIX_PLAN.md](docs/PORT_POSIX_PLAN.md). Configuring the client on these
-platforms is opt-in via `-DOPENKO_CLIENT_POSIX_EXPERIMENTAL=ON`, with ready-made
-presets in `CMakePresets.json` (e.g. `cmake --preset macos-arm64-debug` or
-`cmake --preset linux-clang-debug`). Only a subset of the client targets currently
-builds on these platforms; the `Client POSIX experimental` CI jobs track that subset.
+The full client, plus the ported client tools (`Option`, `Launcher`), builds and
+runs on macOS/Linux; the roadmap and status live in
+[docs/PORT_POSIX_PLAN.md](docs/PORT_POSIX_PLAN.md). Configuration is opt-in via
+`-DOPENKO_CLIENT_POSIX_EXPERIMENTAL=ON` / `-DOPENKO_CLIENT_TOOLS_POSIX_EXPERIMENTAL=ON`,
+both preset in `CMakePresets.json`. The whole thing builds in three commands:
+
+```
+cmake --preset macos-arm64-release        # or linux-clang-release, *-debug, ...
+cmake --build --preset macos-arm64-release
+ctest --preset macos-arm64-debug          # test suites (debug presets)
+```
+
+`cmake --build` without `--target` builds everything configured: the game
+(`KnightOnLine`), the tools, and every test suite. The server projects need a
+system ODBC library (`apt: unixodbc-dev` / `brew: unixodbc`) and are skipped
+with a notice when it's missing. The `Client POSIX` CI jobs build all of this
+on Linux and macOS in Debug and Release on every push.
 
 Suggested packages:
 * macOS: `brew install cmake ninja sdl3 freetype`
 * Ubuntu/Debian: `apt install build-essential clang cmake ninja-build libfreetype-dev`
   (SDL3 is fetched and built from source automatically when not installed system-wide;
   FreeType uses the system package first, then falls back to the source build)
+
+##### Render backends
+
+The client renders through an RHI with three POSIX backends, selected by
+`Renderer=` under `[Screen]` in `Option.ini` or the `--renderer` CLI flag:
+
+* `SDLGPU` - SDL_GPU: **Metal** on macOS, **Vulkan** on Linux. The default on
+  macOS (where OpenGL is deprecated); falls back to GL automatically when no
+  Metal/Vulkan driver exists.
+* `GL` - OpenGL 3.3 core. The default on Linux.
+* `Null` - headless, for CI smoke runs.
 
 ##### Sanitizer build (docs/PORT_POSIX_PLAN.md, F9)
 

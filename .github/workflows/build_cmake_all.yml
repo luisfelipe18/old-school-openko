@@ -9,6 +9,7 @@ on:
   push:
     branches:
     - master
+    - feature/port-posix
 
     # This specifically builds when anything relating to a build changes.
     # Everything else can be ignored.
@@ -24,6 +25,7 @@ on:
   pull_request:
     branches:
     - master
+    - feature/port-posix
 
     # This specifically builds when anything relating to a build changes.
     # Everything else can be ignored.
@@ -149,26 +151,21 @@ jobs:
         run: |
           ctest -C "${{ matrix.BUILD_CONFIGURATION }}" --verbose
 
-  # Experimental POSIX client port (see docs/PORT_POSIX_PLAN.md).
-  # Only the portable subset of client targets is expected to build here;
-  # the target list below grows as the port progresses.
+  # POSIX client port (see docs/PORT_POSIX_PLAN.md): the full client plus
+  # the ported tools (Option, Launcher) build and their test suites run on
+  # Linux and macOS, in both configurations. Headless smokes exercise the
+  # SDL entry points end-to-end on the dummy video driver (Null backend;
+  # the GPU integration tests skip cleanly without a display).
   build_client_posix:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: ubuntu-latest
-            name: "Linux - clang"
-            cc: clang
-            cxx: clang++
-          - os: macos-latest
-            name: "macOS - AppleClang"
-            cc: clang
-            cxx: clang++
+        os: [ubuntu-latest, macos-latest]
+        BUILD_CONFIGURATION: [Debug, Release]
 
     runs-on: ${{ matrix.os }}
 
-    name: "Client POSIX experimental - ${{ matrix.name }}"
+    name: "Client POSIX - ${{ matrix.BUILD_CONFIGURATION }} (${{ matrix.os }})"
 
     steps:
       - uses: actions/checkout@v4
@@ -179,25 +176,22 @@ jobs:
 
       - name: Configure CMake
         env:
-          CC: ${{ matrix.cc }}
-          CXX: ${{ matrix.cxx }}
+          CC: clang
+          CXX: clang++
         run: |
           cmake -S . \
             -B build-client-posix \
             -G "Ninja" \
-            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_BUILD_TYPE=${{ matrix.BUILD_CONFIGURATION }} \
             -DOPENKO_CLIENT_POSIX_EXPERIMENTAL=ON \
+            -DOPENKO_CLIENT_TOOLS_POSIX_EXPERIMENTAL=ON \
             -DOPENKO_BUILD_SERVERS=FALSE \
             -DOPENKO_FETCH_CLIENT_ASSETS=FALSE
 
-      - name: Build portable client targets
+      - name: Build everything
         run: |
           cmake \
             --build build-client-posix \
-            --target shared FileIO MathUtils Platform N3Base_client JpegFile \
-                     WarFare.Core WarFare \
-                     FileIO.Tests MathUtils.Tests Platform.Tests \
-                     N3Base.Tests WarFareNet.Tests WarFareClient.Tests \
             --parallel
 
       - name: Run tests
@@ -205,12 +199,14 @@ jobs:
         run: |
           ctest --output-on-failure
 
-      # Headless end-to-end check of the SDL entry point: window creation,
+      # Headless end-to-end checks of the SDL entry points: window creation,
       # event pump, input sampling and clean shutdown on the dummy driver.
-      - name: Smoke-run the SDL client
-        working-directory: build-client-posix/bin/Release
+      - name: Smoke-run the SDL client and tools
+        working-directory: build-client-posix/bin/${{ matrix.BUILD_CONFIGURATION }}
         run: |
           SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy ./KnightOnLine --smoke 30
+          SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy ./Option --smoke 1
+          SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy ./Launcher --smoke
 
   build_macos:
     runs-on: macos-latest
