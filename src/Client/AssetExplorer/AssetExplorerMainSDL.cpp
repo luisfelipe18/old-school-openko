@@ -1061,18 +1061,20 @@ void ClearThumbnailCache(ExplorerState& state); // defined below
 void RescanDataDir(ExplorerState& state, const fs::path& dir)
 {
 	ClearThumbnailCache(state); // entry indices change on rescan
-	state.dataDir = dir;
+	state.dataDir = fs::absolute(dir);
 	state.selected = -1;
-	// Point the engine's asset root at the data dir (as the WarFare client does),
-	// so assets referenced by relative path inside shapes/characters/FX bundles -
-	// most importantly their textures - resolve. Engine loads then use paths
-	// relative to this root; only filesystem-level reads (.ksc, exports) use the
-	// absolute path.
-	CN3Base::PathSet(dir.string());
-	const std::size_t n = state.index.Scan(dir);
+	// Match the WarFare client: chdir into the data dir AND PathSet it. Many
+	// engine loaders open files by a path relative to the data root prefixed with
+	// s_szPath (PathSet), but some - notably the terrain's .gtt tile textures -
+	// open relative paths directly, which resolve against the process CWD. Set
+	// both so every asset (and its nested references) resolves.
+	std::error_code chdirEc;
+	fs::current_path(state.dataDir, chdirEc);
+	CN3Base::PathSet(state.dataDir.string());
+	const std::size_t n = state.index.Scan(state.dataDir);
 	state.status = n == 0
-		? "No assets found under " + dir.string()
-		: std::to_string(n) + " assets indexed under " + dir.string();
+		? "No assets found under " + state.dataDir.string()
+		: std::to_string(n) + " assets indexed under " + state.dataDir.string();
 }
 
 // Selects the entry whose relative path equals `rel`, if present.
