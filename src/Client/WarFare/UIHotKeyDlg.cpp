@@ -1066,6 +1066,12 @@ void CUIHotKeyDlg::RenderCooldown(const __IconItemSkill* pSkill, float fCooldown
 	const int segments           = 64;
 	const int segmentCountToDraw = static_cast<int>((segments * progress));
 
+	// Nothing (visible) to draw yet - also keeps the angle math below away
+	// from a 0/0 division that produced NaN vertices on the first cooldown
+	// frames.
+	if (segmentCountToDraw < 1)
+		return;
+
 	std::vector<__VertexTransformedColor> vertices;
 	vertices.reserve(segments);
 
