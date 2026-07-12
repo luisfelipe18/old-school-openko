@@ -837,6 +837,13 @@ void CN3Terrain::DispositionPatch()
 void CN3Terrain::SetLightMap(int dir)
 {
 #ifndef _N3TOOL
+	// The light map is looked up from the current player's zone. Standalone
+	// hosts (e.g. the asset tools) tick terrain without a player; guard the
+	// dereference so they load terrain without light maps instead of crashing.
+	// In the game s_pPlayer is always valid here, so behaviour is unchanged.
+	if (CGameBase::s_pPlayer == nullptr)
+		return;
+
 	__TABLE_ZONE* pZoneData = CGameBase::s_pTbl_Zones.Find(CGameBase::s_pPlayer->m_InfoExt.iZoneCur);
 	if (pZoneData == nullptr)
 		return;

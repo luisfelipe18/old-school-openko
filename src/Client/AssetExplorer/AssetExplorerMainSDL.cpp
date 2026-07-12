@@ -31,6 +31,7 @@
 #include <N3Base/N3FXDef.h>
 #include <N3Base/N3FXPartBase.h>
 #include <N3Base/N3PMesh.h>
+#include <N3Base/N3PMeshInstance.h>
 #include <N3Base/N3Shape.h>
 #include <N3Base/N3Texture.h>
 
@@ -340,13 +341,14 @@ bool WriteBmp24(const fs::path& dst, const std::vector<uint8_t>& rgba, int w, in
 
 using assetexplorer::OrbitCamera;
 
-// A loaded CN3Shape plus its orbit camera and display stats.
+// A loaded CN3Shape (or a raw mesh) plus its orbit camera and display stats.
 struct ShapePreview
 {
 	bool loaded = false;
 	std::string error;
 
 	std::unique_ptr<CN3Shape> shape;
+	std::unique_ptr<CN3PMeshInstance> meshInst; // for raw .n3pmesh / .n3vmesh
 	OrbitCamera camera;
 
 	int partCount = 0;
@@ -435,6 +437,27 @@ void LoadShapePreview(ShapePreview& sp, const std::string& relPath, const std::s
 	sp.camera.FrameBounds(shape->Min(), shape->Max());
 	sp.shape  = std::move(shape);
 	sp.loaded = true;
+}
+
+// Loads a raw progressive/vector mesh (.n3pmesh / .n3vmesh) - geometry only, no
+// textures - and previews it untextured in the shape viewport.
+void LoadMeshPreview(ShapePreview& sp, const std::string& relPath, const std::string& name)
+{
+	ReleaseShapePreview(sp);
+
+	auto inst = std::make_unique<CN3PMeshInstance>();
+	if (!inst->Create(relPath) || inst->GetMesh() == nullptr)
+	{
+		sp.error = "Failed to load " + name;
+		return;
+	}
+	const CN3PMesh* mesh = inst->GetMesh();
+	sp.partCount = 1;
+	sp.triCount  = mesh->GetMaxNumIndices() / 3;
+	sp.texCount  = 0;
+	sp.camera.FrameBounds(mesh->Min(), mesh->Max());
+	sp.meshInst = std::move(inst);
+	sp.loaded   = true;
 }
 
 using assetexplorer::AnimationPlayer;
@@ -620,7 +643,8 @@ void ReleaseTerrainPreview(TerrainPreview& tp)
 	tp = TerrainPreview{};
 }
 
-void LoadTerrainPreview(TerrainPreview& tp, const std::string& relPath, const std::string& name)
+void LoadTerrainPreview(TerrainPreview& tp, const std::string& relPath, const std::string& name,
+	const fs::path& dataDir)
 {
 	ReleaseTerrainPreview(tp);
 
@@ -631,16 +655,29 @@ void LoadTerrainPreview(TerrainPreview& tp, const std::string& relPath, const st
 		return;
 	}
 
+	// Load the colour-map companion (.tct, same base name). Even when the file is
+	// absent LoadColorMap still sizes the colour-map array, so the renderer never
+	// indexes an empty vector (which would crash). Light maps are skipped in the
+	// tool (no player/zone context); the terrain shows its tile textures.
+	fs::path colormap(relPath);
+	colormap.replace_extension(".tct");
+	terrain->LoadColorMap((dataDir / colormap).string());
+	if (terrain->m_ColorMapTex.empty())
+	{
+		tp.error = "Map has no colour map; preview needs a .tct next to the .gtd";
+		return;
+	}
+
 	const float w = terrain->GetWidthByMeter();
 	tp.widthMeters = w;
-	tp.moveSpeed   = std::max(w * 0.06f, 20.0f);
+	tp.moveSpeed   = std::clamp(w * 0.04f, 30.0f, 200.0f);
 
-	// Start above the map centre, looking down and forward into it.
+	// Start ~80 m above the map centre, looking down and forward into it.
 	const float cx = w * 0.5f;
 	const float cz = w * 0.5f;
 	const float ground = terrain->GetHeight(cx, cz);
-	tp.camera.SetPosition(__Vector3(cx, ground + w * 0.12f, cz - w * 0.12f));
-	tp.camera.SetLook(0.0f, -0.6f);
+	tp.camera.SetPosition(__Vector3(cx, ground + 80.0f, cz - 120.0f));
+	tp.camera.SetLook(0.0f, -0.5f);
 
 	tp.terrain = std::move(terrain);
 	tp.loaded  = true;
@@ -859,9 +896,10 @@ void RenderTerrainToRT(ExplorerState& state)
 	cam.m_bFogUse   = FALSE;
 	cam.m_Data.fFOV = 0.9f;
 	cam.m_Data.fNP  = 1.0f;
-	// The far plane also drives the terrain LOD (iLOD = 3*fFP/512), so keep it
-	// generous enough to load a decent patch window around the camera.
-	cam.m_Data.fFP  = std::clamp(tp.widthMeters * 0.5f, 512.0f, 4096.0f);
+	// The far plane also drives the terrain LOD (iLOD = 3*fFP/512). Match the
+	// game's 512 (iLOD 3) - a larger value forces hundreds of patches to max
+	// tessellation every frame and grinds to a halt.
+	cam.m_Data.fFP  = 512.0f;
 	cam.LookAt(eye, at, __Vector3(0.0f, 1.0f, 0.0f));
 	cam.Tick();
 	cam.Apply();
@@ -925,9 +963,26 @@ void RenderShapeToRT(ExplorerState& state)
 	state.rhi->SetRenderState(D3DRS_FILLMODE,
 		state.shape.wireframe ? D3DFILL_WIREFRAME : D3DFILL_SOLID);
 	if (state.shape.demoCube)
+	{
 		DrawDemoCube(state.rhi);
-	else
+	}
+	else if (state.shape.meshInst != nullptr)
+	{
+		// Raw mesh: no per-part world matrix or textures, so supply identity +
+		// an untextured (diffuse) stage and draw the geometry directly.
+		__Matrix44 world;
+		world.Identity();
+		state.rhi->SetTransform(D3DTS_WORLD, world.toD3D());
+		state.rhi->SetTexture(0, nullptr);
+		state.rhi->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
+		state.rhi->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_DIFFUSE);
+		state.rhi->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+		state.shape.meshInst->Render();
+	}
+	else if (state.shape.shape != nullptr)
+	{
 		state.shape.shape->Render();
+	}
 	state.rhi->SetRenderState(D3DRS_FILLMODE, D3DFILL_SOLID);
 	state.rhi->EndRenderTarget();
 }
@@ -1549,6 +1604,9 @@ void DrawViewport(ExplorerState& state, const ImVec2& size)
 		{
 			if (state.shape.shape != nullptr)
 				state.shape.camera.FrameBounds(state.shape.shape->Min(), state.shape.shape->Max());
+			else if (state.shape.meshInst != nullptr && state.shape.meshInst->GetMesh() != nullptr)
+				state.shape.camera.FrameBounds(state.shape.meshInst->GetMesh()->Min(),
+					state.shape.meshInst->GetMesh()->Max());
 			else
 				state.shape.camera.FrameBounds(__Vector3(-1, -1, -1), __Vector3(1, 1, 1));
 		}
@@ -1580,9 +1638,13 @@ void DrawViewport(ExplorerState& state, const ImVec2& size)
 	else if (haveSel)
 	{
 		const AssetEntry& e = state.index.Entries()[static_cast<std::size_t>(state.selected)];
-		char msg[128];
-		std::snprintf(msg, sizeof(msg), "Preview for %s arrives in a later milestone.",
-			AssetTypeName(e.type));
+		char msg[192];
+		if (e.type == AssetType::CharacterPart || e.type == AssetType::Animation)
+			std::snprintf(msg, sizeof(msg),
+				"%s is a character sub-part; open the parent .n3chr to see it.",
+				AssetTypeName(e.type));
+		else
+			std::snprintf(msg, sizeof(msg), "No preview available for %s.", AssetTypeName(e.type));
 		centeredText(msg);
 	}
 	else
@@ -1813,12 +1875,14 @@ void SyncPreview(ExplorerState& state)
 		LoadTexturePreview(state.tex, e.type, e.relativePath, state.AbsPathOf(e));
 	else if (e.type == AssetType::Shape)
 		LoadShapePreview(state.shape, e.relativePath, e.fileName);
+	else if (e.type == AssetType::Mesh)
+		LoadMeshPreview(state.shape, e.relativePath, e.fileName);
 	else if (e.type == AssetType::Character)
 		LoadCharacterPreview(state.character, e.relativePath, e.fileName);
 	else if (e.type == AssetType::Effect)
 		LoadFXPreview(state.fx, e.relativePath, e.fileName);
 	else if (e.type == AssetType::Terrain)
-		LoadTerrainPreview(state.terrain, e.relativePath, e.fileName);
+		LoadTerrainPreview(state.terrain, e.relativePath, e.fileName, state.dataDir);
 }
 
 // --- M7: command palette, view actions, shortcuts ---------------------------
@@ -1833,6 +1897,10 @@ void ResetActiveView(ExplorerState& state)
 	}
 	else if (state.shape.loaded && state.shape.shape != nullptr)
 		state.shape.camera.FrameBounds(state.shape.shape->Min(), state.shape.shape->Max());
+	else if (state.shape.loaded && state.shape.meshInst != nullptr
+		&& state.shape.meshInst->GetMesh() != nullptr)
+		state.shape.camera.FrameBounds(state.shape.meshInst->GetMesh()->Min(),
+			state.shape.meshInst->GetMesh()->Max());
 	else if (state.character.loaded && state.character.chr != nullptr)
 		state.character.camera.FrameBounds(state.character.chr->Min(), state.character.chr->Max());
 	else if (state.fx.loaded)
@@ -1841,8 +1909,8 @@ void ResetActiveView(ExplorerState& state)
 	{
 		const float w = state.terrain.widthMeters;
 		const float g = state.terrain.terrain->GetHeight(w * 0.5f, w * 0.5f);
-		state.terrain.camera.SetPosition(__Vector3(w * 0.5f, g + w * 0.12f, w * 0.5f - w * 0.12f));
-		state.terrain.camera.SetLook(0.0f, -0.6f);
+		state.terrain.camera.SetPosition(__Vector3(w * 0.5f, g + 80.0f, w * 0.5f - 120.0f));
+		state.terrain.camera.SetLook(0.0f, -0.5f);
 	}
 }
 
