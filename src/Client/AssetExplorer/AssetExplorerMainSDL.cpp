@@ -23,6 +23,9 @@
 #include <N3Base/N3Base.h>
 #include <N3Base/N3Camera.h>
 #include <N3Base/N3Chr.h>
+#include <N3Base/N3FXBundle.h>
+#include <N3Base/N3FXDef.h>
+#include <N3Base/N3FXPartBase.h>
 #include <N3Base/N3PMesh.h>
 #include <N3Base/N3Shape.h>
 #include <N3Base/N3Texture.h>
@@ -229,18 +232,20 @@ unsigned UploadRgbTexture(const std::vector<uint8_t>& rgb, int w, int h)
 	return tex;
 }
 
-// Loads the texture at absolute path `abs` of the given asset type into `tp`.
-void LoadTexturePreview(TexturePreview& tp, AssetType type, const fs::path& abs,
-	std::uintmax_t /*fileSize*/)
+// Loads the texture into `tp`. `relPath` is relative to the engine asset root
+// (CN3Base::PathSet); `absPath` is the same file's absolute path for the
+// filesystem-based .ksc decoder.
+void LoadTexturePreview(TexturePreview& tp, AssetType type, const std::string& relPath,
+	const fs::path& absPath)
 {
 	ReleaseTexturePreview(tp);
 
 	if (type == AssetType::EncryptedTexture)
 	{
-		ksc_core::DecodedImage img = ksc_core::LoadImage(abs);
+		ksc_core::DecodedImage img = ksc_core::LoadImage(absPath);
 		if (!img.IsValid())
 		{
-			tp.error = "Failed to decode " + abs.filename().string();
+			tp.error = "Failed to decode " + absPath.filename().string();
 			return;
 		}
 		tp.glTexture    = UploadRgbTexture(img.rgb, img.width, img.height);
@@ -257,11 +262,10 @@ void LoadTexturePreview(TexturePreview& tp, AssetType type, const fs::path& abs,
 
 	// Engine formats (.dxt / .tga). CN3Texture auto-detects by content and
 	// uploads through the RHI; the GL backend's texture object is what we show.
-	// s_szPath is left empty so the absolute path resolves to itself.
 	auto n3 = std::make_unique<CN3Texture>();
-	if (!n3->LoadFromFile(abs.string()) || n3->Get() == nullptr)
+	if (!n3->LoadFromFile(relPath) || n3->Get() == nullptr)
 	{
-		tp.error = "Failed to load " + abs.filename().string();
+		tp.error = "Failed to load " + absPath.filename().string();
 		return;
 	}
 	auto* glTex   = static_cast<RHITextureGL*>(n3->Get());
@@ -394,14 +398,14 @@ void ReleaseShapePreview(ShapePreview& sp)
 	sp = ShapePreview{};
 }
 
-void LoadShapePreview(ShapePreview& sp, const fs::path& abs)
+void LoadShapePreview(ShapePreview& sp, const std::string& relPath, const std::string& name)
 {
 	ReleaseShapePreview(sp);
 
 	auto shape = std::make_unique<CN3Shape>();
-	if (!shape->LoadFromFile(abs.string()) || shape->PartCount() == 0)
+	if (!shape->LoadFromFile(relPath) || shape->PartCount() == 0)
 	{
-		sp.error = "Failed to load " + abs.filename().string();
+		sp.error = "Failed to load " + name;
 		return;
 	}
 	shape->Tick(0.0f);      // resolve part matrices / texture animation index
@@ -477,7 +481,7 @@ void SelectAnimation(CharacterPreview& cp, int iAni)
 	}
 }
 
-void LoadCharacterPreview(CharacterPreview& cp, const fs::path& abs)
+void LoadCharacterPreview(CharacterPreview& cp, const std::string& relPath, const std::string& name)
 {
 	ReleaseCharacterPreview(cp);
 
@@ -486,9 +490,9 @@ void LoadCharacterPreview(CharacterPreview& cp, const fs::path& abs)
 	CN3Chr::LODDeltaSet(0);
 
 	auto chr = std::make_unique<CN3Chr>();
-	if (!chr->LoadFromFile(abs.string()) || chr->PartCount() == 0)
+	if (!chr->LoadFromFile(relPath) || chr->PartCount() == 0)
 	{
-		cp.error = "Failed to load " + abs.filename().string();
+		cp.error = "Failed to load " + name;
 		return;
 	}
 	chr->Tick(0.0f);
@@ -521,6 +525,71 @@ void LoadCharacterPreview(CharacterPreview& cp, const fs::path& abs)
 	cp.loaded = true;
 }
 
+// --- FX bundle preview (M5) -------------------------------------------------
+
+// A loaded CN3FXBundle played on a loop in an orbit viewport.
+struct FXPreview
+{
+	bool loaded = false;
+	std::string error;
+
+	std::unique_ptr<CN3FXBundle> fx;
+	OrbitCamera camera;
+	bool playing = true;
+	bool looping = true;
+
+	std::string name;
+	int moveType = 0;
+	float life0  = 0.0f;
+	int partCount = 0;
+	std::array<int, 4> partTypeCounts{}; // particle/board/mesh/bottomboard
+};
+
+void ReleaseFXPreview(FXPreview& fp)
+{
+	if (fp.fx != nullptr)
+		fp.fx->Stop(true);
+	fp.fx.reset();
+	fp = FXPreview{};
+}
+
+void LoadFXPreview(FXPreview& fp, const std::string& relPath, const std::string& name)
+{
+	ReleaseFXPreview(fp);
+
+	auto fx = std::make_unique<CN3FXBundle>();
+	if (!fx->LoadFromFile(relPath))
+	{
+		fp.error = "Failed to load " + name;
+		return;
+	}
+
+	fx->m_vPos.Set(0.0f, 0.0f, 0.0f);
+	fp.name     = fx->m_strName.empty() ? name : fx->m_strName;
+	fp.moveType = fx->m_iMoveType;
+	fp.life0    = fx->m_fLife0;
+
+	int parts = 0;
+	for (int i = 0; i < MAX_FX_PART; ++i)
+	{
+		CN3FXPartBase* part = fx->GetPart(i);
+		if (part == nullptr)
+			continue;
+		++parts;
+		const int t = part->m_iType;
+		if (t >= FX_PART_TYPE_PARTICLE && t <= FX_PART_TYPE_BOTTOMBOARD)
+			++fp.partTypeCounts[static_cast<std::size_t>(t - 1)];
+	}
+	fp.partCount = parts;
+
+	// Effects have no authored bounding box; frame a fixed volume around the
+	// origin that suits most skill/ambient effects. The user can zoom from there.
+	fp.camera.FrameBounds(__Vector3(-4.0f, -1.0f, -4.0f), __Vector3(4.0f, 7.0f, 4.0f));
+	fx->Trigger();
+	fp.fx      = std::move(fx);
+	fp.loaded  = true;
+}
+
 // All UI/session state for the explorer.
 struct ExplorerState
 {
@@ -546,7 +615,8 @@ struct ExplorerState
 	TexturePreview tex;        // populated when a texture asset is selected (M2)
 	ShapePreview shape;        // populated when a shape asset is selected (M3)
 	CharacterPreview character; // populated when a character is selected (M4)
-	CN3Camera engineCamera;    // drives s_CameraData for character LOD/culling
+	FXPreview fx;              // populated when an FX bundle is selected (M5)
+	CN3Camera engineCamera;    // drives s_CameraData for character/FX LOD/culling
 
 	fs::path AbsPathOf(const AssetEntry& e) const
 	{
@@ -610,6 +680,70 @@ void RenderCharacterToRT(ExplorerState& state)
 	cp.chr->Render();
 
 	state.rhi->SetRenderState(D3DRS_FILLMODE, D3DFILL_SOLID);
+	state.rhi->EndRenderTarget();
+}
+
+// Renders (and ticks, when playing) the FX bundle into the target (M5). FX parts
+// are camera-facing billboards/particles, so - like characters - the engine
+// camera is driven to populate s_CameraData. Timing comes from s_fSecPerFrm,
+// which the tool sets from the frame delta. Mirrors CN3FXMgr's render state.
+void RenderFXToRT(ExplorerState& state, float dtSeconds)
+{
+	FXPreview& fp = state.fx;
+	if (state.rhi == nullptr || !fp.loaded || fp.fx == nullptr)
+		return;
+	if (state.viewportW <= 0 || state.viewportH <= 0)
+		return;
+
+	if (state.previewRT == nullptr || state.rtWidth != state.viewportW
+		|| state.rtHeight != state.viewportH)
+	{
+		delete state.previewRT;
+		RHIRenderTargetDesc desc;
+		desc.width  = static_cast<UINT>(state.viewportW);
+		desc.height = static_cast<UINT>(state.viewportH);
+		desc.depth  = true;
+		state.previewRT = state.rhi->CreateRenderTarget(desc);
+		state.rtWidth   = state.viewportW;
+		state.rtHeight  = state.viewportH;
+	}
+	if (state.previewRT == nullptr)
+		return;
+
+	// FX advance uses the engine's per-frame delta.
+	CN3Base::s_fSecPerFrm = std::clamp(dtSeconds, 0.001f, 0.1f);
+	CN3Base::s_fFrmPerSec = 1.0f / CN3Base::s_fSecPerFrm;
+
+	state.rhi->BeginRenderTarget(state.previewRT);
+	state.rhi->Clear(D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, 0xFF14161B, 1.0f, 0);
+
+	const __Vector3 eye = fp.camera.Eye();
+	const __Vector3 at  = fp.camera.Target();
+	CN3Camera& cam = state.engineCamera;
+	cam.m_bFogUse   = FALSE;
+	cam.m_Data.fFOV = 0.9f;
+	cam.m_Data.fNP  = fp.camera.NearPlane();
+	cam.m_Data.fFP  = std::max(fp.camera.FarPlane(), 512.0f);
+	cam.LookAt(eye, at, __Vector3(0.0f, 1.0f, 0.0f));
+	cam.Tick();
+	cam.Apply();
+
+	if (fp.playing)
+	{
+		fp.fx->Tick();
+		if (fp.fx->GetState() == FX_BUNDLE_STATE_DEAD && fp.looping)
+			fp.fx->Trigger();
+	}
+
+	// Same state CN3FXMgr uses: unlit, additive/alpha parts (parts set their own
+	// blend), no depth writes so overlapping particles don't self-occlude.
+	state.rhi->SetRenderState(D3DRS_LIGHTING, FALSE);
+	state.rhi->SetRenderState(D3DRS_ZENABLE, TRUE);
+	state.rhi->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+	state.rhi->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+	state.rhi->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+	fp.fx->Render();
+
 	state.rhi->EndRenderTarget();
 }
 
@@ -723,6 +857,12 @@ void RescanDataDir(ExplorerState& state, const fs::path& dir)
 {
 	state.dataDir = dir;
 	state.selected = -1;
+	// Point the engine's asset root at the data dir (as the WarFare client does),
+	// so assets referenced by relative path inside shapes/characters/FX bundles -
+	// most importantly their textures - resolve. Engine loads then use paths
+	// relative to this root; only filesystem-level reads (.ksc, exports) use the
+	// absolute path.
+	CN3Base::PathSet(dir.string());
 	const std::size_t n = state.index.Scan(dir);
 	state.status = n == 0
 		? "No assets found under " + dir.string()
@@ -976,6 +1116,32 @@ void DrawCharacterViewport(ExplorerState& state)
 		cp.player.Scrub(frame);
 }
 
+// FX viewport: play/restart/loop transport over the orbit image (M5).
+void DrawFXViewport(ExplorerState& state)
+{
+	FXPreview& fp = state.fx;
+
+	if (ImGui::Button(fp.playing ? "Pause" : "Play"))
+		fp.playing = !fp.playing;
+	ImGui::SameLine();
+	if (ImGui::Button("Restart") && fp.fx != nullptr)
+	{
+		fp.fx->Stop(true);
+		fp.fx->Trigger();
+		fp.playing = true;
+	}
+	ImGui::SameLine();
+	ImGui::Checkbox("Loop", &fp.looping);
+	ImGui::SameLine();
+	if (ImGui::Button("Reset view"))
+		fp.camera.FrameBounds(__Vector3(-4.0f, -1.0f, -4.0f), __Vector3(4.0f, 7.0f, 4.0f));
+	ImGui::SameLine();
+	ImGui::TextDisabled("drag: orbit  |  wheel: zoom");
+
+	if (state.previewRT != nullptr && state.previewRT->ColorHandle() != nullptr)
+		DrawOrbitImage(state.previewRT, fp.camera, "##fxcanvas", ImGui::GetContentRegionAvail());
+}
+
 void DrawViewport(ExplorerState& state, const ImVec2& size)
 {
 	if (!ImGui::BeginChild("##viewport", size, ImGuiChildFlags_Borders))
@@ -1004,6 +1170,10 @@ void DrawViewport(ExplorerState& state, const ImVec2& size)
 	{
 		DrawCharacterViewport(state);
 	}
+	else if (state.fx.loaded)
+	{
+		DrawFXViewport(state);
+	}
 	else if (state.shape.loaded && state.previewRT != nullptr
 		&& state.previewRT->ColorHandle() != nullptr)
 	{
@@ -1029,6 +1199,10 @@ void DrawViewport(ExplorerState& state, const ImVec2& size)
 	else if (!state.character.error.empty())
 	{
 		centeredText(state.character.error.c_str());
+	}
+	else if (!state.fx.error.empty())
+	{
+		centeredText(state.fx.error.c_str());
 	}
 	else if (!state.shape.error.empty())
 	{
@@ -1180,6 +1354,39 @@ void DrawInspector(ExplorerState& state, const ImVec2& size)
 		ImGui::Separator();
 		ImGui::TextColored(ImVec4(0.9f, 0.5f, 0.4f, 1.0f), "%s", cp.error.c_str());
 	}
+
+	// FX-specific metadata.
+	const FXPreview& fp = state.fx;
+	if (fp.loaded)
+	{
+		ImGui::Spacing();
+		ImGui::Separator();
+		ImGui::Spacing();
+		ImGui::Text("Bundle");
+		ImGui::TextDisabled("%s", fp.name.c_str());
+		ImGui::Spacing();
+		ImGui::Text("Move type");
+		ImGui::TextDisabled("%d", fp.moveType);
+		ImGui::Spacing();
+		ImGui::Text("Lifetime");
+		ImGui::TextDisabled("%.2fs", fp.life0);
+		ImGui::Spacing();
+		ImGui::Text("Parts");
+		ImGui::TextDisabled("%d  (%dp %db %dm %dbb)", fp.partCount, fp.partTypeCounts[0],
+			fp.partTypeCounts[1], fp.partTypeCounts[2], fp.partTypeCounts[3]);
+		ImGui::Spacing();
+		ImGui::Text("State");
+		const char* st = fp.fx == nullptr ? "-"
+			: (fp.fx->GetState() == FX_BUNDLE_STATE_LIVE ? "live"
+				: (fp.fx->GetState() == FX_BUNDLE_STATE_DYING ? "dying" : "dead"));
+		ImGui::TextDisabled("%s", st);
+	}
+	else if (!fp.error.empty())
+	{
+		ImGui::Spacing();
+		ImGui::Separator();
+		ImGui::TextColored(ImVec4(0.9f, 0.5f, 0.4f, 1.0f), "%s", fp.error.c_str());
+	}
 	ImGui::EndChild();
 }
 
@@ -1195,6 +1402,7 @@ void SyncPreview(ExplorerState& state)
 		ReleaseTexturePreview(state.tex);
 		ReleaseShapePreview(state.shape);
 		ReleaseCharacterPreview(state.character);
+		ReleaseFXPreview(state.fx);
 	};
 
 	if (state.selected < 0 || state.selected >= static_cast<int>(state.index.Entries().size()))
@@ -1206,11 +1414,13 @@ void SyncPreview(ExplorerState& state)
 	const AssetEntry& e = state.index.Entries()[static_cast<std::size_t>(state.selected)];
 	clearAll();
 	if (e.category == AssetCategory::Texture)
-		LoadTexturePreview(state.tex, e.type, state.AbsPathOf(e), e.sizeBytes);
+		LoadTexturePreview(state.tex, e.type, e.relativePath, state.AbsPathOf(e));
 	else if (e.type == AssetType::Shape)
-		LoadShapePreview(state.shape, state.AbsPathOf(e));
+		LoadShapePreview(state.shape, e.relativePath, e.fileName);
 	else if (e.type == AssetType::Character)
-		LoadCharacterPreview(state.character, state.AbsPathOf(e));
+		LoadCharacterPreview(state.character, e.relativePath, e.fileName);
+	else if (e.type == AssetType::Effect)
+		LoadFXPreview(state.fx, e.relativePath, e.fileName);
 }
 
 // Offscreen render smoke (docs/ASSET_EXPLORER_PLAN.md, M1): brings up the GL
@@ -1398,10 +1608,12 @@ int main(int argc, char** argv)
 		// render the 3D preview into the target using the panel size measured last
 		// frame, before the UI references it.
 		SyncPreview(state);
+		const float dt = ImGui::GetIO().DeltaTime;
 		if (state.character.loaded)
-			state.character.player.Update(ImGui::GetIO().DeltaTime);
+			state.character.player.Update(dt);
 		RenderShapeToRT(state);
 		RenderCharacterToRT(state);
+		RenderFXToRT(state, dt);
 
 		ImGui_ImplOpenGL3_NewFrame();
 		ImGui_ImplSDL3_NewFrame();
@@ -1452,6 +1664,7 @@ int main(int argc, char** argv)
 	ReleaseTexturePreview(state.tex);
 	ReleaseShapePreview(state.shape);
 	ReleaseCharacterPreview(state.character);
+	ReleaseFXPreview(state.fx);
 	delete state.previewRT;
 	CN3Base::RHIDeviceSet(nullptr);
 	delete pRHI;

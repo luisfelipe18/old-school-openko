@@ -301,7 +301,7 @@ none needed; builds under the existing `linux-clang-*` / `macos-arm64-*`.
 | **M2** ✅ | Texture panel | `CN3Texture` (`.dxt`/`.tga`) + `.ksc` 2D preview with checkerboard backdrop and fit/zoom/pan, inspector (dims/format/mips/alpha), export (`.ksc`→JPEG, engine→BMP via RT readback) | replaces N3TexViewer |
 | **M3** ✅ | Shape viewport | `CN3Shape` rendered through the engine into the RT with an orbit camera (drag-orbit / wheel-dolly / reset-frame), wireframe toggle (adds `glPolygonMode` to the GL backend), parts/tris/textures inspector; `--demo` cube + 3D render smoke | replaces N3Viewer |
 | **M4** ✅ | Character + animation | `CN3Chr` posed through the engine camera (so `s_CameraData` LOD/culling works), `AnimationPlayer` timeline (clip dropdown / play-pause / scrub / speed / loop), LOD 0-3 selector, wireframe; joints/parts/plugs/anims inspector. `AnimationPlayer` unit-tested | replaces N3CE |
-| **M5** | FX bundles | `CN3FXBundle` playback controls | replaces N3FXE |
+| **M5** ✅ | FX bundles | `CN3FXBundle` triggered and ticked in the orbit viewport with play/pause/restart/loop; inspector shows name/move-type/lifetime/part-type breakdown/state. Engine asset root (`PathSet`) now set so shape/character/FX textures resolve (per-part enable deferred) | replaces N3FXE |
 | **M6** | Maps | `CN3Terrain` + placed shapes, fly camera, minimap | replaces N3ME (view-only) |
 | **M7** | Polish | Thumbnails, command palette, drag-drop, layout presets, SDLGPU RT path | the "modern app" feel |
 
