@@ -1,0 +1,130 @@
+name: "Release packages"
+
+# Builds distributable client + server packages for Linux, macOS and Windows
+# (docs/PORT_POSIX_PLAN.md, Hito E) and, on a version tag, publishes them to a
+# GitHub Release.
+#
+#   Linux   -> OpenKO-Client-<ver>-Linux-<arch>.tar.gz  + OpenKO-Server-...tar.gz
+#   macOS   -> OpenKO-Client-<ver>-Darwin-<arch>.dmg    + OpenKO-Server-...tar.gz
+#   Windows -> OpenKO-Client-<ver>-Windows-<arch>.zip   + OpenKO-Server-...zip
+#
+# Trigger: push a tag like `v0.1.0`, or run manually (workflow_dispatch) to get
+# the artifacts without publishing a release.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+concurrency:
+  group: "release-${{ github.ref }}"
+  cancel-in-progress: false
+
+permissions:
+  contents: write   # needed to create the GitHub Release
+
+env:
+  # The POSIX client + tool ports are still behind experimental flags (default
+  # off); enable them so the client builds on Linux/macOS. On Windows these are
+  # no-ops (the client builds natively there).
+  CMAKE_FLAGS: >-
+    -DCMAKE_BUILD_TYPE=Release
+    -DOPENKO_FETCH_CLIENT_ASSETS=FALSE
+    -DOPENKO_CLIENT_POSIX_EXPERIMENTAL=ON
+    -DOPENKO_CLIENT_TOOLS_POSIX_EXPERIMENTAL=ON
+
+jobs:
+  linux:
+    name: "Package (Linux)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install unixODBC (server ODBC runtime/headers)
+        run: sudo apt-get update && sudo apt-get install -y unixodbc-dev
+      - uses: lukka/get-cmake@latest
+      - name: Configure
+        run: cmake -S . -B build -G Ninja ${{ env.CMAKE_FLAGS }}
+      - name: Build
+        run: cmake --build build --parallel
+      - name: Package (client + server tarballs)
+        working-directory: build
+        run: cpack -G TGZ
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-packages
+          path: build/OpenKO-*.tar.gz
+          if-no-files-found: error
+
+  macos:
+    name: "Package (macOS)"
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install unixODBC (server ODBC)
+        run: brew install unixodbc
+      - uses: lukka/get-cmake@latest
+      - name: Configure
+        run: cmake -S . -B build -G Ninja ${{ env.CMAKE_FLAGS }}
+      - name: Build
+        run: cmake --build build --parallel
+      - name: Package client (.dmg)
+        working-directory: build
+        run: cpack -G DragNDrop -D CPACK_COMPONENTS_ALL=Client
+      - name: Package server (.tar.gz)
+        working-directory: build
+        run: cpack -G TGZ -D CPACK_COMPONENTS_ALL=Server
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-packages
+          path: |
+            build/OpenKO-Client-*.dmg
+            build/OpenKO-Server-*.tar.gz
+          if-no-files-found: error
+
+  windows:
+    name: "Package (Windows)"
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ilammy/msvc-dev-cmd@v1
+      - uses: lukka/get-cmake@latest
+      - name: Configure
+        run: cmake -S . -B build -G Ninja ${{ env.CMAKE_FLAGS }}
+      - name: Build
+        run: cmake --build build --parallel
+      - name: Package (client + server zips)
+        working-directory: build
+        run: cpack -G ZIP
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-packages
+          path: build/OpenKO-*.zip
+          if-no-files-found: error
+
+  release:
+    name: "Publish GitHub Release"
+    needs: [linux, macos, windows]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: List artifacts
+        run: ls -R dist
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/**/*
+          draft: true
+          generate_release_notes: true
+          body: |
+            OpenKO ${{ github.ref_name }} — client + server packages for Linux, macOS and Windows.
+
+            The client packages bundle WarFare (KnightOnLine), Launcher, Option and
+            KscViewer together. They do NOT include the proprietary Knight OnLine
+            game data — see PACKAGING_README in each archive for how to add it.
+            The macOS .app is unsigned; Gatekeeper will warn until you sign +
+            notarize it with your own Apple Developer account (steps in the README).

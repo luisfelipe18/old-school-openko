@@ -637,34 +637,37 @@ if(NOT WIN32)
   install(TARGETS WarFare
     RUNTIME  DESTINATION "${OPENKO_CLIENT_INSTALL_DIR}"
     BUNDLE   DESTINATION "${OPENKO_CLIENT_INSTALL_DIR}")
-  if(NOT APPLE)
-    install(FILES ${WARFARE_CLIENT_RESOURCES} DESTINATION "${OPENKO_CLIENT_INSTALL_DIR}")
+
+  # The cursors and the run/setup note ship on every platform.
+  install(FILES ${WARFARE_CLIENT_RESOURCES}
+    DESTINATION "${OPENKO_CLIENT_INSTALL_DIR}")
+  install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/PACKAGING_README.md"
+    DESTINATION "${OPENKO_CLIENT_INSTALL_DIR}" OPTIONAL)
+
+  if(UNIX AND NOT APPLE)
+    # Linux: a freedesktop menu entry, plus the vendored shared libraries the
+    # client links but a target machine lacks (docs/PORT_POSIX_PLAN.md, Hito E):
+    # openal-soft, and libjpeg v9 (a different soname from the system's turbo
+    # libjpeg.so.8). The $ORIGIN install rpath (set above) finds them. Install
+    # both the versioned real file (TARGET_FILE, e.g. libopenal.so.1.25.0) and
+    # the soname symlink the binary links against (TARGET_SONAME_FILE, e.g.
+    # libopenal.so.1) so the symlink resolves inside the package. ("libjpeg" is
+    # an INTERFACE wrapper - cmake/FindJpeg.cmake; the real shared target on
+    # POSIX is "jpeg"; for it the two files are the same, installed once.)
     install(FILES "${CMAKE_CURRENT_BINARY_DIR}/openko-client.desktop"
       DESTINATION share/applications OPTIONAL)
-
-    # Distributable packaging (docs/PORT_POSIX_PLAN.md, Hito E): a couple of the
-    # linked libraries are vendored (FetchContent) and are NOT present on a
-    # target machine - openal-soft, and libjpeg v9 (a different soname from the
-    # system's turbo libjpeg.so.8). Ship them next to the binary; the $ORIGIN
-    # install rpath set above finds them without LD_LIBRARY_PATH. System libs
-    # (freetype, libpng, ...) are expected to be present and are documented in
-    # the packaging README.
-    # "libjpeg" is an INTERFACE wrapper (cmake/FindJpeg.cmake); the real shared
-    # target on POSIX is "jpeg". Install both the versioned real file
-    # (TARGET_FILE, e.g. libopenal.so.1.25.0) and the soname symlink the binary
-    # actually links against (TARGET_SONAME_FILE, e.g. libopenal.so.1) so the
-    # symlink resolves inside the package. (For libjpeg the two are the same
-    # file, installed once.)
     install(FILES
       "$<TARGET_FILE:OpenAL>"
       "$<TARGET_SONAME_FILE:OpenAL>"
       "$<TARGET_FILE:jpeg>"
       "$<TARGET_SONAME_FILE:jpeg>"
       DESTINATION "${OPENKO_CLIENT_INSTALL_DIR}")
-
-    # A short "how to run / where to put your game data" note in the package.
-    install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/PACKAGING_README.md"
-      DESTINATION "${OPENKO_CLIENT_INSTALL_DIR}" OPTIONAL)
+  elseif(WIN32)
+    # Windows: drop every runtime DLL the client depends on next to the .exe
+    # (SDL3, mpg123, ... - whatever is built shared; statically-linked deps such
+    # as openal-soft here contribute nothing). TARGET_RUNTIME_DLLS resolves them.
+    install(FILES $<TARGET_RUNTIME_DLLS:WarFare>
+      DESTINATION "${OPENKO_CLIENT_INSTALL_DIR}")
   else()
     # macOS: pull every non-system dylib the binary links (openal, libjpeg, ...)
     # into the .app's Contents/Frameworks and rewrite the load commands so the

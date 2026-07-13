@@ -367,7 +367,7 @@ endif()
 # proprietary Knight OnLine content the user supplies. `include(CPack)` must
 # come after every install() rule, hence its place at the very end of the file.
 # ---------------------------------------------------------------------------
-if(NOT WIN32 AND (OPENKO_BUILD_CLIENT OR OPENKO_BUILD_SERVERS))
+if(OPENKO_BUILD_CLIENT OR OPENKO_BUILD_SERVERS)
   set(CPACK_PACKAGE_NAME               "OpenKO")
   set(CPACK_PACKAGE_VENDOR             "OpenKO contributors")
   set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "OpenKO (Knight OnLine) client + servers for macOS/Linux")
@@ -394,6 +394,9 @@ if(NOT WIN32 AND (OPENKO_BUILD_CLIENT OR OPENKO_BUILD_SERVERS))
     # DMG for the client (self-contained .app via fixup_bundle); the server
     # daemons ride a plain tar.gz even on macOS - run `cpack -G TGZ` for them.
     set(CPACK_GENERATOR "DragNDrop")
+  elseif(WIN32)
+    # A flat .zip per component (exe + DLLs + resources).
+    set(CPACK_GENERATOR "ZIP")
   else()
     # Relocatable tar.gz per component, rooted at the install prefix.
     set(CPACK_GENERATOR "TGZ")
