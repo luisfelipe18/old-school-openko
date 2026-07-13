@@ -621,6 +621,8 @@ CN3CPlugBase* CPlayerMySelf::PlugSet(
 	//		CN3CPlug_Cloak *pPlugCloak = (CN3CPlug_Cloak*)pPlug;
 	//	}
 
+	pPlug->m_iGlowLevel = ItemUpgradeGlowLevel(pItemExt); // 인벤토리 모델..
+
 	this->SetSoundPlug(pItemBasic);
 	return CPlayerBase::PlugSet(ePos, szFN, pItemBasic, pItemExt);
 }
@@ -713,6 +715,14 @@ CN3CPart* CPlayerMySelf::PartSet(e_PartPosition ePos, const std::string& szFN, _
 
 	m_pItemPartBasics[ePos] = pItemBasic; // 아이템 적용
 	m_pItemPartExts[ePos]   = pItemExt;
+
+	int iGlowLevel = ItemUpgradeGlowLevel(pItemExt);
+	if (pPart)
+		pPart->m_iGlowLevel = iGlowLevel;
+
+	CN3CPart* pPartInv = m_ChrInv.Part(ePos);
+	if (pPartInv)
+		pPartInv->m_iGlowLevel = iGlowLevel;
 
 	return pPart;
 }
