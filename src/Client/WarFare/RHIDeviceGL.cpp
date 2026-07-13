@@ -446,6 +446,21 @@ RHIDeviceGL::RHIDeviceGL(SDL_Window* pWindow, bool bVSync) : m_pWindow(pWindow)
 	gl::Viewport(0, 0, m_iWinPixelW, m_iWinPixelH);
 	gl::PixelStorei(gl::UNPACK_ALIGNMENT, 1);
 
+	// F9 diagnostics (docs/PORT_POSIX_PLAN.md): the reported "faint vertical
+	// line / HUD slightly off the top-left corner" would surface as a mismatch
+	// between the option resolution, the window's logical (points) size and its
+	// framebuffer (pixels) size. The engine assumes all three are equal (no
+	// Hi-DPI); log them so a Retina Mac that disagrees is obvious in the client
+	// log without needing a debugger.
+	int wPoints = 0, hPoints = 0;
+	SDL_GetWindowSize(pWindow, &wPoints, &hPoints);
+	spdlog::info(
+		"RHIDeviceGL geometry: option={}x{} window(points)={}x{} framebuffer(pixels)={}x{} "
+		"displayScale={:.3f} pixelDensity={:.3f}",
+		CN3Base::s_Options.iViewWidth, CN3Base::s_Options.iViewHeight, wPoints, hPoints,
+		m_iWinPixelW, m_iWinPixelH, SDL_GetWindowDisplayScale(pWindow),
+		SDL_GetWindowPixelDensity(pWindow));
+
 	const gl::Ubyte* pRenderer = gl::GetString(gl::RENDERER);
 	const gl::Ubyte* pVersion  = gl::GetString(gl::VERSION);
 	spdlog::info("RHIDeviceGL: OpenGL {} on {}",
