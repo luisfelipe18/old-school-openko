@@ -11,6 +11,7 @@
 #include "LocalInput.h"
 #include "APISocket.h"
 #include "text_resources.h"
+#include "NetworkEncoding.h"
 
 #include <N3Base/N3UIList.h>
 #include <N3Base/N3UIButton.h>
@@ -314,13 +315,22 @@ void CUITradeSellBBS::MsgRecv_RefreshData(Packet& pkt)
 		Info.sID = pkt.read<int16_t>();
 		iLen     = pkt.read<int16_t>();
 		if (iLen > 0)
+		{
 			pkt.readString(Info.szID, iLen);
+			Info.szID = NetToLocal(Info.szID);
+		}
 		iLen = pkt.read<int16_t>();
 		if (iLen > 0)
+		{
 			pkt.readString(Info.szTitle, iLen);
+			Info.szTitle = NetToLocal(Info.szTitle);
+		}
 		iLen = pkt.read<int16_t>();
 		if (iLen > 0)
+		{
 			pkt.readString(Info.szExplanation, iLen);
+			Info.szExplanation = NetToLocal(Info.szExplanation);
+		}
 		Info.iPrice = pkt.read<uint32_t>(); //아이템에 제시한 가격
 		Info.sIndex = pkt.read<int16_t>();  //등록된 인덱스
 
@@ -387,8 +397,8 @@ void CUITradeSellBBS::MsgSend_Register()
 	std::string szExplanation;
 	int iPrice       = 0;
 
-	szTitle          = CGameProcedure::s_pProcMain->m_pUITradeBBSEdit->GetTradeTitle();
-	szExplanation    = CGameProcedure::s_pProcMain->m_pUITradeBBSEdit->GetTradeExplanation();
+	szTitle          = LocalToNet(CGameProcedure::s_pProcMain->m_pUITradeBBSEdit->GetTradeTitle());
+	szExplanation    = LocalToNet(CGameProcedure::s_pProcMain->m_pUITradeBBSEdit->GetTradeExplanation());
 	iPrice           = CGameProcedure::s_pProcMain->m_pUITradeBBSEdit->GetPrice();
 
 	sLen             = 15;
@@ -717,40 +727,40 @@ void CUITradeSellBBS::RenderSelectContent()
 
 	DWORD dwZ = 0, dwFog = 0, dwAlpha = 0, dwCOP = 0, dwCA1 = 0;
 	DWORD dwSrcBlend = 0, dwDestBlend = 0, dwVertexShader = 0, dwAOP = 0, dwAA1 = 0;
-	CN3Base::s_lpD3DDev->GetRenderState(D3DRS_ZENABLE, &dwZ);
-	CN3Base::s_lpD3DDev->GetRenderState(D3DRS_FOGENABLE, &dwFog);
-	CN3Base::s_lpD3DDev->GetRenderState(D3DRS_ALPHABLENDENABLE, &dwAlpha);
-	CN3Base::s_lpD3DDev->GetRenderState(D3DRS_SRCBLEND, &dwSrcBlend);
-	CN3Base::s_lpD3DDev->GetRenderState(D3DRS_DESTBLEND, &dwDestBlend);
-	CN3Base::s_lpD3DDev->GetTextureStageState(0, D3DTSS_COLOROP, &dwCOP);
-	CN3Base::s_lpD3DDev->GetTextureStageState(0, D3DTSS_COLORARG1, &dwCA1);
-	CN3Base::s_lpD3DDev->GetTextureStageState(0, D3DTSS_ALPHAOP, &dwAOP);
-	CN3Base::s_lpD3DDev->GetTextureStageState(0, D3DTSS_ALPHAARG1, &dwAA1);
-	CN3Base::s_lpD3DDev->GetFVF(&dwVertexShader);
+	CN3Base::RHIDevice()->GetRenderState(D3DRS_ZENABLE, &dwZ);
+	CN3Base::RHIDevice()->GetRenderState(D3DRS_FOGENABLE, &dwFog);
+	CN3Base::RHIDevice()->GetRenderState(D3DRS_ALPHABLENDENABLE, &dwAlpha);
+	CN3Base::RHIDevice()->GetRenderState(D3DRS_SRCBLEND, &dwSrcBlend);
+	CN3Base::RHIDevice()->GetRenderState(D3DRS_DESTBLEND, &dwDestBlend);
+	CN3Base::RHIDevice()->GetTextureStageState(0, D3DTSS_COLOROP, &dwCOP);
+	CN3Base::RHIDevice()->GetTextureStageState(0, D3DTSS_COLORARG1, &dwCA1);
+	CN3Base::RHIDevice()->GetTextureStageState(0, D3DTSS_ALPHAOP, &dwAOP);
+	CN3Base::RHIDevice()->GetTextureStageState(0, D3DTSS_ALPHAARG1, &dwAA1);
+	CN3Base::RHIDevice()->GetFVF(&dwVertexShader);
 
-	CN3Base::s_lpD3DDev->SetRenderState(D3DRS_ZENABLE, FALSE);
-	CN3Base::s_lpD3DDev->SetRenderState(D3DRS_FOGENABLE, FALSE);
-	CN3Base::s_lpD3DDev->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
-	CN3Base::s_lpD3DDev->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
-	CN3Base::s_lpD3DDev->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
-	CN3Base::s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
-	CN3Base::s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_DIFFUSE);
-	CN3Base::s_lpD3DDev->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
-	CN3Base::s_lpD3DDev->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_DIFFUSE);
+	CN3Base::RHIDevice()->SetRenderState(D3DRS_ZENABLE, FALSE);
+	CN3Base::RHIDevice()->SetRenderState(D3DRS_FOGENABLE, FALSE);
+	CN3Base::RHIDevice()->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+	CN3Base::RHIDevice()->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
+	CN3Base::RHIDevice()->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+	CN3Base::RHIDevice()->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
+	CN3Base::RHIDevice()->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_DIFFUSE);
+	CN3Base::RHIDevice()->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
+	CN3Base::RHIDevice()->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_DIFFUSE);
 
-	CN3Base::s_lpD3DDev->SetFVF(FVF_TRANSFORMEDCOLOR);
-	CN3Base::s_lpD3DDev->DrawPrimitiveUP(D3DPT_LINESTRIP, 4, vLines, sizeof(__VertexTransformedColor));
+	CN3Base::RHIDevice()->SetFVF(FVF_TRANSFORMEDCOLOR);
+	CN3Base::RHIDevice()->DrawPrimitiveUP(D3DPT_LINESTRIP, 4, vLines, sizeof(__VertexTransformedColor));
 
-	CN3Base::s_lpD3DDev->SetRenderState(D3DRS_ZENABLE, dwZ);
-	CN3Base::s_lpD3DDev->SetRenderState(D3DRS_FOGENABLE, dwFog);
-	CN3Base::s_lpD3DDev->SetRenderState(D3DRS_ALPHABLENDENABLE, dwAlpha);
-	CN3Base::s_lpD3DDev->SetRenderState(D3DRS_SRCBLEND, dwSrcBlend);
-	CN3Base::s_lpD3DDev->SetRenderState(D3DRS_DESTBLEND, dwDestBlend);
-	CN3Base::s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLOROP, dwCOP);
-	CN3Base::s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLORARG1, dwCA1);
-	CN3Base::s_lpD3DDev->SetTextureStageState(0, D3DTSS_ALPHAOP, dwAOP);
-	CN3Base::s_lpD3DDev->SetTextureStageState(0, D3DTSS_ALPHAARG1, dwAA1);
-	CN3Base::s_lpD3DDev->SetFVF(dwVertexShader);
+	CN3Base::RHIDevice()->SetRenderState(D3DRS_ZENABLE, dwZ);
+	CN3Base::RHIDevice()->SetRenderState(D3DRS_FOGENABLE, dwFog);
+	CN3Base::RHIDevice()->SetRenderState(D3DRS_ALPHABLENDENABLE, dwAlpha);
+	CN3Base::RHIDevice()->SetRenderState(D3DRS_SRCBLEND, dwSrcBlend);
+	CN3Base::RHIDevice()->SetRenderState(D3DRS_DESTBLEND, dwDestBlend);
+	CN3Base::RHIDevice()->SetTextureStageState(0, D3DTSS_COLOROP, dwCOP);
+	CN3Base::RHIDevice()->SetTextureStageState(0, D3DTSS_COLORARG1, dwCA1);
+	CN3Base::RHIDevice()->SetTextureStageState(0, D3DTSS_ALPHAOP, dwAOP);
+	CN3Base::RHIDevice()->SetTextureStageState(0, D3DTSS_ALPHAARG1, dwAA1);
+	CN3Base::RHIDevice()->SetFVF(dwVertexShader);
 }
 
 bool CUITradeSellBBS::SelectedString(CN3UIBase* pSender, int& iID)

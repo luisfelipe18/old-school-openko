@@ -3,6 +3,10 @@
 //////////////////////////////////////////////////////////////////////
 
 #include "StdAfxBase.h"
+
+#ifndef _WIN32
+#include <Platform/PlatformString.h>
+#endif
 #include "N3UIString.h"
 
 CN3UIString::CN3UIString()

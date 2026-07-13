@@ -292,7 +292,7 @@ void CN3EngTool::RenderTexturePreview(CN3Texture* pTex, HWND hWndDiffuse, RECT* 
 
 			hr = s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
 			hr = s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TEXTURE);
-			hr = s_lpD3DDev->SetTexture(0, pTex->Get());
+			hr = s_lpD3DDev->SetTexture(0, pTex->GetRawD3D());
 
 			hr = s_lpD3DDev->SetFVF(
 				FVF_TRANSFORMED); //s_lpD3DDev->SetVertexShader(FVF_TRANSFORMED);

@@ -26,8 +26,10 @@ CGameCursor::CGameCursor()
 
 CGameCursor::~CGameCursor()
 {
+#ifdef _WIN32
 	if (m_hCursor)
 		::SetCursor(m_hCursor);
+#endif
 }
 
 bool CGameCursor::Load(File& file)
@@ -35,8 +37,12 @@ bool CGameCursor::Load(File& file)
 	if (!CN3UIBase::Load(file))
 		return false;
 
+#ifdef _WIN32
+	// Stash then hide the OS cursor so only the textured game cursor shows.
+	// On POSIX the SDL layer owns OS-cursor visibility.
 	m_hCursor = ::GetCursor();
 	::SetCursor(nullptr);
+#endif
 
 	std::string szID;
 	for (int i = 0; i < CURSOR_COUNT; i++)
@@ -82,20 +88,22 @@ void CGameCursor::Render()
 	{
 		CGameProcedure::s_pUIMgr->RenderStateSet();
 		DWORD dwZ = 0;
-		CN3Base::s_lpD3DDev->GetRenderState(D3DRS_ZENABLE, &dwZ);
-		CN3Base::s_lpD3DDev->SetRenderState(D3DRS_ZENABLE, FALSE);
+		CN3Base::RHIDevice()->GetRenderState(D3DRS_ZENABLE, &dwZ);
+		CN3Base::RHIDevice()->SetRenderState(D3DRS_ZENABLE, FALSE);
 
 		m_pImageCursor[m_eCurGameCursor]->Render();
-		CN3Base::s_lpD3DDev->SetRenderState(D3DRS_ZENABLE, dwZ);
+		CN3Base::RHIDevice()->SetRenderState(D3DRS_ZENABLE, dwZ);
 		CGameProcedure::s_pUIMgr->RenderStateRestore();
 	}
 }
 
 void CGameCursor::Tick()
 {
+#ifdef _WIN32
 	HCURSOR hCursor = ::GetCursor();
 	if (hCursor)
 		::SetCursor(nullptr);
+#endif
 
 	POINT ptCur = CGameProcedure::s_pLocalInput->MouseGetPos();
 	for (int i = 0; i < CURSOR_COUNT; i++)

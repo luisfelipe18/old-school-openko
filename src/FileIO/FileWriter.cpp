@@ -1,4 +1,5 @@
 ﻿#include "FileWriter.h"
+#include "PathResolver.h"
 
 #include <cassert>
 #include <cstdio> // SEEK_SET, SEEK_CUR, SEEK_END
@@ -12,6 +13,12 @@ bool FileWriter::OpenExisting(const std::filesystem::path& path)
 	// Close any existing file handle and reset write states.
 	Close();
 
+#ifdef _WIN32
+	const std::filesystem::path& openPath = path;
+#else
+	const std::filesystem::path openPath  = NormalizePathSeparators(path);
+#endif
+
 	FILE* fileHandle = nullptr;
 
 	// Open the given file for writing.
@@ -20,15 +27,15 @@ bool FileWriter::OpenExisting(const std::filesystem::path& path)
 	// If the user wishes to append, they must seek to the end of the file themselves.
 	// This matches WinAPI & general C file I/O API behaviour (where the "a" mode isn't used).
 #if defined(_MSC_VER) || defined(__MINGW32__)
-	_wfopen_s(&fileHandle, path.native().c_str(), L"rb+");
+	_wfopen_s(&fileHandle, openPath.native().c_str(), L"rb+");
 #else
-	fileHandle = fopen(path.native().c_str(), "rb+");
+	fileHandle = fopen(openPath.native().c_str(), "rb+");
 #endif
 	if (fileHandle == nullptr)
 		return false;
 
 	_fileHandle = fileHandle;
-	_path       = path;
+	_path       = openPath;
 	_open       = true;
 	_size       = 0;
 
@@ -52,22 +59,28 @@ bool FileWriter::Create(const std::filesystem::path& path)
 	// Close any existing file handle and reset write states.
 	Close();
 
+#ifdef _WIN32
+	const std::filesystem::path& createPath = path;
+#else
+	const std::filesystem::path createPath  = NormalizePathSeparators(path);
+#endif
+
 	FILE* fileHandle = nullptr;
 
 	// Open the given file for writing.
 	// If it doesn't exist, create it.
 	// If it already exists, truncate it.
 #if defined(_MSC_VER) || defined(__MINGW32__)
-	_wfopen_s(&fileHandle, path.native().c_str(), L"wb");
+	_wfopen_s(&fileHandle, createPath.native().c_str(), L"wb");
 #else
-	fileHandle = fopen(path.native().c_str(), "wb");
+	fileHandle = fopen(createPath.native().c_str(), "wb");
 #endif
 
 	if (fileHandle == nullptr)
 		return false;
 
 	_fileHandle = fileHandle;
-	_path       = path;
+	_path       = createPath;
 	_open       = true;
 	_size       = 0;
 	_sizeOnDisk = 0;

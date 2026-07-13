@@ -63,6 +63,32 @@ set(N3BASE_COMMON_SKY_SOURCES
   N3Sun.h
 )
 
+set(N3BASE_POSIX_UI_SOURCES
+  N3UIArea.cpp
+  N3UIArea.h
+  N3UIBase.cpp
+  N3UIBase.h
+  N3UIButton.cpp
+  N3UIButton.h
+  N3UIDef.h
+  N3UIEdit.cpp
+  N3UIEdit.h
+  N3UIList.cpp
+  N3UIList.h
+  N3UIProgress.cpp
+  N3UIProgress.h
+  N3UIScrollBar.cpp
+  N3UIScrollBar.h
+  N3UIStatic.cpp
+  N3UIStatic.h
+  N3UIString.cpp
+  N3UIString.h
+  N3UITooltip.cpp
+  N3UITooltip.h
+  N3UITrackBar.cpp
+  N3UITrackBar.h
+)
+
 set(N3BASE_COMMON_UI_SOURCES
   N3UIArea.cpp
   N3UIArea.h
@@ -103,6 +129,16 @@ set(N3BASE_COMMON_WEATHER_SOURCES
 set(N3BASE_TOOL_WEATHER_SOURCES
   N3GlobalEffectMng.cpp
   N3GlobalEffectMng.h
+)
+
+set(N3BASE_COMMON_RHI_SOURCES
+  RHI/RHIBuffers.h
+  RHI/RHIDevice.h
+  RHI/RHIDeviceD3D9.h
+  RHI/RHIDeviceNull.cpp
+  RHI/RHIDeviceNull.h
+  RHI/RHIStateKey.h
+  RHI/RHITextures.h
 )
 
 set(N3BASE_COMMON_SOURCES
@@ -179,14 +215,106 @@ set(N3BASE_COMMON_SOURCES
   WinCrypt.h
   VertexTypes.inl
   ${N3BASE_COMMON_AUDIO_SOURCES}
+  ${N3BASE_COMMON_RHI_SOURCES}
   ${N3BASE_COMMON_EFFECT_SOURCES}
   ${N3BASE_COMMON_SKY_SOURCES}
   ${N3BASE_COMMON_UI_SOURCES}
   ${N3BASE_COMMON_WEATHER_SOURCES}
 )
 
+# POSIX port (phase 1, docs/PORT_POSIX_PLAN.md): the platform-independent
+# subset of N3Base that already builds on macOS/Linux. Rendering, UI and
+# window-system sources rejoin this list as the RHI/SDL phases land.
+set(N3BASE_POSIX_PORTABLE_SOURCES
+  ColorValue.inl
+  DebugUtils.cpp
+  DebugUtils.h
+  DFont.cpp
+  DFont.h
+  LogWriter.cpp
+  LogWriter.h
+  Material.inl
+  My_3DStruct.cpp
+  My_3DStruct.h
+  N3AlphaPrimitiveManager.cpp
+  N3AlphaPrimitiveManager.h
+  N3AnimControl.cpp
+  N3AnimControl.h
+  N3AnimKey.cpp
+  N3AnimKey.h
+  N3Base.cpp
+  N3Base.h
+  N3BaseFileAccess.cpp
+  N3BaseFileAccess.h
+  N3Mng.h
+  N3TableBase.h
+  N3TableBaseImpl.cpp
+  N3TableBaseImpl.h
+  N3Transform.cpp
+  N3Transform.h
+  N3TransformCollision.cpp
+  N3TransformCollision.h
+  N3VMesh.cpp
+  N3VMesh.h
+  N3Camera.cpp
+  N3Camera.h
+  N3Chr.cpp
+  N3Chr.h
+  N3Cloak.cpp
+  N3Cloak.h
+  N3ColorChange.cpp
+  N3ColorChange.h
+  N3Eng.cpp
+  N3Eng.h
+  N3IMesh.cpp
+  N3IMesh.h
+  N3Joint.cpp
+  N3Joint.h
+  N3Light.cpp
+  N3Light.h
+  N3Mesh.cpp
+  N3Mesh.h
+  N3PMesh.cpp
+  N3PMesh.h
+  N3PMeshInstance.cpp
+  N3PMeshInstance.h
+  N3Scene.cpp
+  N3Scene.h
+  N3Shape.cpp
+  N3Shape.h
+  N3ShapeExtra.cpp
+  N3ShapeExtra.h
+  N3ShapeMgr.cpp
+  N3ShapeMgr.h
+  N3Skin.cpp
+  N3Skin.h
+  N3Texture.cpp
+  N3Texture.h
+  N3UIImage.cpp
+  N3UIImage.h
+  StdAfxBase.h
+  WaveFormat.cpp
+  WaveFormat.h
+  WinCrypt.cpp
+  WinCrypt.h
+  VertexTypes.inl
+  ${N3BASE_COMMON_AUDIO_SOURCES}
+  ${N3BASE_COMMON_EFFECT_SOURCES}
+  ${N3BASE_COMMON_RHI_SOURCES}
+  ${N3BASE_COMMON_SKY_SOURCES}
+  ${N3BASE_COMMON_WEATHER_SOURCES}
+  ${N3BASE_POSIX_UI_SOURCES}
+)
+
+if(WIN32)
+  set(N3BASE_CLIENT_SOURCES ${N3BASE_COMMON_SOURCES})
+else()
+  set(N3BASE_CLIENT_SOURCES ${N3BASE_POSIX_PORTABLE_SOURCES})
+endif()
+
 set(N3BASE_COMMON_DEPENDENCIES_PUBLIC
   FileIO
+  Platform
   shared
   spdlog
 )
@@ -209,14 +337,21 @@ source_group("Sky" FILES ${N3BASE_COMMON_SKY_SOURCES})
 source_group("UI" FILES ${N3BASE_COMMON_UI_SOURCES})
 source_group("Weather" FILES ${N3BASE_COMMON_WEATHER_SOURCES} ${N3BASE_TOOL_WEATHER_SOURCES})
 
-# Link in the libs that we use
-set(N3BASE_COMMON_LIBS_PRIVATE
-  d3d9.lib
-  d3dx9.lib
-  dinput8.lib
-  dsound.lib
-  dxguid.lib
-)
+# Link in the libs that we use (Windows-only import libraries)
+if(WIN32)
+  set(N3BASE_COMMON_LIBS_PRIVATE
+    d3d9.lib
+    d3dx9.lib
+    dinput8.lib
+    dsound.lib
+    dxguid.lib
+  )
+else()
+  # FreeType backs the POSIX DFont glyph atlas (docs/PORT_POSIX_PLAN.md, T7.1).
+  set(N3BASE_COMMON_LIBS_PRIVATE
+    Freetype::Freetype
+  )
+endif()
 
 # Setup warning levels
 set(N3BASE_COMMON_COMPILE_OPTIONS
@@ -227,7 +362,7 @@ set(N3BASE_COMMON_COMPILE_OPTIONS
 
 if(OPENKO_BUILD_CLIENT)
   add_library(N3Base_client STATIC
-    ${N3BASE_COMMON_SOURCES}
+    ${N3BASE_CLIENT_SOURCES}
   )
 
   set_target_properties(N3Base_client PROPERTIES

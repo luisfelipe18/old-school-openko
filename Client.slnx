@@ -24,6 +24,9 @@
     </Project>
   </Folder>
   <Folder Name="/_deps/fetch wrappers/">
+    <Project Path="deps/fetch-and-build-wrappers/fetch-asio.vcxproj" Id="98f92112-9ec7-4f20-a6c3-a0346acb271c">
+      <BuildDependency Project="deps/fetch-and-build-wrappers/sync-submodules.vcxproj" />
+    </Project>
     <Project Path="deps/fetch-and-build-wrappers/fetch-boost.vcxproj" Id="1b69c1f8-b156-4bca-aad3-168fb37b08cf">
       <BuildDependency Project="deps/fetch-and-build-wrappers/sync-submodules.vcxproj" />
     </Project>
@@ -48,6 +51,7 @@
     <Project Path="deps/fetch-and-build-wrappers/sync-submodules.vcxproj" Id="1f14357d-e06a-48a1-b39a-74082f381fc0" />
   </Folder>
   <Project Path="src/Client/WarFare/WarFare.Core.vcxproj" Id="02a7c2de-6db6-477a-977a-adf0bf2204a6">
+    <BuildDependency Project="deps/fetch-and-build-wrappers/fetch-asio.vcxproj" />
     <BuildDependency Project="src/Client/JpegFile/JpegFile.vcxproj" />
     <BuildDependency Project="src/N3Base/N3Base_client.vcxproj" />
     <BuildDependency Project="deps/fetch-and-build-wrappers/fetch-ko-client-assets.vcxproj" />

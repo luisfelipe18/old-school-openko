@@ -179,7 +179,7 @@ void CDlgSetDTex::RenderTex(LPDIRECT3DDEVICE9 lpDDev)
 
 	CDTex* pDTex = (CDTex*) m_FileList.GetItemDataPtr(CurrTex);
 	if (pDTex && pDTex->m_pTex)
-		lpTex = pDTex->m_pTex->Get();
+		lpTex = pDTex->m_pTex->GetRawD3D();
 
 	hr = lpDDev->SetTexture(0, lpTex);
 	DWORD ColorOp, ColorArg1;

@@ -11,7 +11,11 @@
 #include <N3Base/N3UIString.h>
 
 #include <algorithm>
+#ifdef _WIN32
 #include <shellapi.h>
+#else
+#include <spdlog/spdlog.h>
+#endif
 
 CUILogIn_1298::CUILogIn_1298()
 {
@@ -83,6 +87,9 @@ bool CUILogIn_1298::ReceiveMessage(CN3UIBase* pSender, uint32_t dwMsg)
 		}
 		else if (pSender == m_pBtn_Connect)
 		{
+#ifndef _WIN32
+			spdlog::info("server list: Connect button clicked");
+#endif
 			CGameProcedure::s_pProcLogIn->ConnectToGameServer(); // 고른 게임 서버에 접속
 			return true;
 		}
@@ -101,7 +108,11 @@ bool CUILogIn_1298::ReceiveMessage(CN3UIBase* pSender, uint32_t dwMsg)
 		{
 			if (!CGameProcedure::s_pProcLogIn->m_szRegistrationSite.empty())
 			{
+#ifdef _WIN32
 				ShellExecute(nullptr, "open", CGameProcedure::s_pProcLogIn->m_szRegistrationSite.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+#endif
+				// POSIX: opening the registration site in a browser lands with a
+				// later phase (SDL_OpenURL).
 			}
 
 			return true;
@@ -122,6 +133,9 @@ bool CUILogIn_1298::ReceiveMessage(CN3UIBase* pSender, uint32_t dwMsg)
 
 			if (pSender == m_pList_Group[i])
 			{
+#ifndef _WIN32
+				spdlog::info("server list: double-click on server row {}", i);
+#endif
 				SelectServer(i);
 				CGameProcedure::s_pProcLogIn->ConnectToGameServer();
 				return true;
@@ -135,6 +149,9 @@ bool CUILogIn_1298::ReceiveMessage(CN3UIBase* pSender, uint32_t dwMsg)
 		{
 			if (m_pList_Group[i] != nullptr && pSender == m_pList_Group[i])
 			{
+#ifndef _WIN32
+				spdlog::info("server list: selected server row {}", i);
+#endif
 				SelectServer(i);
 				return true;
 			}
@@ -535,6 +552,10 @@ void CUILogIn_1298::OpenServerList()
 {
 	if (m_pGroup_ServerList == nullptr)
 		return;
+
+#ifndef _WIN32
+	spdlog::info("server list opened ({} server(s) available)", m_ListServerInfos.size());
+#endif
 
 	// close all notice boxes
 	if (m_pGroup_Notice_1 != nullptr)

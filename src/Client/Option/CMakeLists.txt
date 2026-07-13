@@ -1,32 +1,70 @@
-find_package(MFC REQUIRED)
+if(WIN32)
+  find_package(MFC REQUIRED)
 
-# MFC (static)
-set(CMAKE_MFC_FLAG 1)
+  # MFC (static)
+  set(CMAKE_MFC_FLAG 1)
 
-add_executable(Option
-  Option.cpp
-  Option.h
-  OptionDlg.cpp
-  OptionDlg.h
-  resource.h
-  StdAfx.h)
+  add_executable(Option
+    Option.cpp
+    Option.h
+    OptionDlg.cpp
+    OptionDlg.h
+    resource.h
+    StdAfx.h)
+
+  set_target_properties(Option PROPERTIES WIN32_EXECUTABLE TRUE)
+  target_sources(Option PRIVATE Option.rc)
+
+  # Setup PCH
+  target_precompile_headers(Option PRIVATE StdAfx.h)
+else()
+  # POSIX port (docs/PORT_POSIX_PLAN.md): MFC has no POSIX equivalent, so
+  # this is a from-scratch reimplementation on Dear ImGui over the SDL3 +
+  # OpenGL stack the WarFare client already uses. OptionCore holds the
+  # platform-neutral Option.ini/Server.Ini logic so it's unit-testable
+  # without a display (see tests/Client/Option).
+  find_package(OpenGL REQUIRED)
+
+  add_executable(Option
+    OptionCore.cpp
+    OptionCore.h
+    OptionMainSDL.cpp)
+
+  target_link_libraries(Option PRIVATE
+    Platform
+    SDL3::SDL3
+    imgui
+    OpenGL::GL
+    spdlog::spdlog
+  )
+
+  if(APPLE)
+    # Apple deprecated the desktop OpenGL API in 10.14; the SDK marks every
+    # gl* call with a [[deprecated]]-style attribute that -Werror promotes
+    # to a hard error. OpenGL is still fully functional (just unmaintained)
+    # and is what the WarFare client's GL backend also targets, so silence
+    # the warning rather than the API itself.
+    target_compile_definitions(Option PRIVATE GL_SILENCE_DEPRECATION)
+  endif()
+
+  # Stage the original Option.ico next to the built binary so OptionMainSDL's
+  # runtime lookup (next to the executable, same spirit as WarFare's cursor
+  # resources) finds it without an install step.
+  add_custom_command(TARGET Option POST_BUILD
+    COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+      "${CMAKE_CURRENT_SOURCE_DIR}/res/Option.ico"
+      "$<TARGET_FILE_DIR:Option>/Option.ico"
+    COMMENT "Staging Option.ico next to the Option binary")
+endif()
 
 set_target_properties(Option PROPERTIES
   CXX_SCAN_FOR_MODULES OFF
 )
 
-if(WIN32)
-  set_target_properties(Option PROPERTIES WIN32_EXECUTABLE TRUE)
-  target_sources(Option PRIVATE Option.rc)
-endif()
-
 # Enable warnings as errors
 if(OPENKO_COMPILE_WARNINGS_AS_ERROR)
   set_property(TARGET Option PROPERTY COMPILE_WARNING_AS_ERROR ON)
 endif()
-
-# Setup PCH
-target_precompile_headers(Option PRIVATE StdAfx.h)
 
 # Setup warning levels
 target_compile_options(Option PRIVATE
@@ -40,6 +78,17 @@ if(MSVC)
     VS_DEBUGGER_WORKING_DIRECTORY "${OPENKO_CLIENT_DIR}"
   )
 endif()
+
+# Ship next to the other client components (docs/PORT_POSIX_PLAN.md, Hito E):
+# the Launcher / in-game menu find it as a sibling executable.
+if(APPLE)
+  set_target_properties(Option PROPERTIES INSTALL_RPATH "@executable_path")
+elseif(NOT WIN32)
+  set_target_properties(Option PROPERTIES INSTALL_RPATH "$ORIGIN")
+endif()
+install(TARGETS Option RUNTIME DESTINATION "${OPENKO_CLIENT_INSTALL_DIR}")
+install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/res/Option.ico"
+  DESTINATION "${OPENKO_CLIENT_INSTALL_DIR}" OPTIONAL)
 
 add_custom_command(TARGET Option POST_BUILD
   COMMAND "${CMAKE_COMMAND}" -E echo "$<TARGET_FILE:Option> has been built"

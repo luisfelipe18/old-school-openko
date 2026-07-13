@@ -11,7 +11,13 @@
 
 #include <N3Base/N3UIButton.h>
 
+#ifdef _WIN32
 #include <shellapi.h>
+#else
+#include "LaunchOptionTool.h"
+
+#include <Platform/PlatformTime.h> // Sleep()
+#endif
 
 CUIExitMenu::CUIExitMenu()
 {
@@ -103,7 +109,11 @@ bool CUIExitMenu::ReceiveMessage(CN3UIBase* pSender, uint32_t dwMsg)
 				CUIHotKeyDlg::MsgSend_SkillData_Save();
 			*/
 
+#ifdef _WIN32
 			::ShellExecute(nullptr, "open", "Option.exe", nullptr, nullptr, SW_SHOWNORMAL);
+#else
+			LaunchOptionTool();
+#endif
 			PostQuitMessage(0);
 		}
 		else if (CGameProcedure::s_pProcMain->m_pUIChatDlg != nullptr)

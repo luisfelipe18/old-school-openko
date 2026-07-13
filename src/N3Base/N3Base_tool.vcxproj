@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="14.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
@@ -30,6 +30,12 @@
     <ClInclude Include="mpg123_reader_io.h" />
     <ClInclude Include="My_3DStruct.h" />
     <ClInclude Include="N3AlphaPrimitiveManager.h" />
+    <ClInclude Include="RHI\RHIBuffers.h" />
+    <ClInclude Include="RHI\RHIDevice.h" />
+    <ClInclude Include="RHI\RHIDeviceD3D9.h" />
+    <ClInclude Include="RHI\RHIDeviceNull.h" />
+    <ClInclude Include="RHI\RHIStateKey.h" />
+    <ClInclude Include="RHI\RHITextures.h" />
     <ClInclude Include="N3AnimControl.h" />
     <ClInclude Include="N3AnimKey.h" />
     <ClInclude Include="N3Base.h" />
@@ -115,6 +121,7 @@
     <ClCompile Include="mpg123_reader_io.cpp" />
     <ClCompile Include="My_3DStruct.cpp" />
     <ClCompile Include="N3AlphaPrimitiveManager.cpp" />
+    <ClCompile Include="RHI\RHIDeviceNull.cpp" />
     <ClCompile Include="N3AnimControl.cpp" />
     <ClCompile Include="N3AnimKey.cpp" />
     <ClCompile Include="N3Base.cpp" />

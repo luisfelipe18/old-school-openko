@@ -10,6 +10,8 @@
 
 #include "N3TerrainDef.h"
 
+#include <N3Base/RHI/RHIBuffers.h>
+
 class CN3Texture;
 class CN3Terrain;
 class CN3TerrainPatch
@@ -25,7 +27,7 @@ protected:
 	int m_CellSize;
 	int m_NumCell;
 	int m_iLevel;
-	LPDIRECT3DVERTEXBUFFER9 m_pVB;
+	IRHIVertexBuffer* m_pVB;
 	int m_VBSize[MAX_PATCH_LEVEL];
 
 	FanInfoList m_FanInfoList;
@@ -35,7 +37,7 @@ protected:
 	bool* m_pIsTileFull;
 
 	//lightmap...
-	LPDIRECT3DVERTEXBUFFER9 m_pLightMapVB;
+	IRHIVertexBuffer* m_pLightMapVB;
 	CN3Texture** m_pRefLightMapTex;
 	int m_NumLightMapTex;
 

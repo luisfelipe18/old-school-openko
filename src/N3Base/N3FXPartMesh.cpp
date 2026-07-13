@@ -703,21 +703,21 @@ void CN3FXPartMesh::Render()
 		return;
 
 	DWORD dwAlpha = 0;
-	s_lpD3DDev->GetRenderState(D3DRS_ALPHABLENDENABLE, &dwAlpha);
+	RHIDevice()->GetRenderState(D3DRS_ALPHABLENDENABLE, &dwAlpha);
 
-	s_lpD3DDev->SetRenderState(D3DRS_ALPHABLENDENABLE, m_bAlpha);
+	RHIDevice()->SetRenderState(D3DRS_ALPHABLENDENABLE, m_bAlpha);
 	if (m_dwState == FX_PART_STATE_DYING || m_fCurrLife < m_fFadeIn)
-		s_lpD3DDev->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+		RHIDevice()->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
 
-	s_lpD3DDev->SetRenderState(D3DRS_SRCBLEND, m_dwSrcBlend);
-	s_lpD3DDev->SetRenderState(D3DRS_DESTBLEND, m_dwDestBlend);
+	RHIDevice()->SetRenderState(D3DRS_SRCBLEND, m_dwSrcBlend);
+	RHIDevice()->SetRenderState(D3DRS_DESTBLEND, m_dwDestBlend);
 
-	s_lpD3DDev->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
-	s_lpD3DDev->SetTextureStageState(1, D3DTSS_ALPHAOP, D3DTOP_DISABLE);
+	RHIDevice()->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
+	RHIDevice()->SetTextureStageState(1, D3DTSS_ALPHAOP, D3DTOP_DISABLE);
 
 	m_pShape->Render();
 
-	s_lpD3DDev->SetRenderState(D3DRS_ALPHABLENDENABLE, dwAlpha);
+	RHIDevice()->SetRenderState(D3DRS_ALPHABLENDENABLE, dwAlpha);
 }
 
 void CN3FXPartMesh::Duplicate(CN3FXPartMesh* pSrc)

@@ -77,8 +77,8 @@ bool CN3UIImage::CreateVB()
 		m_pVB = nullptr;
 	}
 
-	hr = s_lpD3DDev->CreateVertexBuffer(
-		4 * sizeof(__VertexTransformed), 0, FVF_TRANSFORMED, D3DPOOL_MANAGED, &m_pVB, nullptr);
+	hr = RHIDevice()->CreateVertexBuffer(
+		4 * sizeof(__VertexTransformed), 0, FVF_TRANSFORMED, D3DPOOL_MANAGED, &m_pVB);
 	return SUCCEEDED(hr);
 }
 
@@ -102,13 +102,17 @@ void CN3UIImage::SetVB()
 
 		float fRHW = 1.0f;
 		// -0.5f를 해주지 않으면 가끔 이미지가 한 돗트씩 밀리는 경우가 있다.(왜 그런지는 확실하게 모르겠음)
-		pVertices[0].Set((float) m_rcRegion.left - 0.5f, (float) m_rcRegion.top - 0.5f,
+		// The -0.5 is D3D9's half-pixel convention; GL/SDL_GPU map integer coords
+		// to pixel centres already, where it would shift the UI ~1px and leave a
+		// faint edge seam. Only apply it on backends that need it.
+		const float fOfs = (RHIDevice() != nullptr && RHIDevice()->NeedsHalfPixelOffset()) ? 0.5f : 0.0f;
+		pVertices[0].Set((float) m_rcRegion.left - fOfs, (float) m_rcRegion.top - fOfs,
 			UI_DEFAULT_Z, fRHW, m_Color, m_frcUVRect.left, m_frcUVRect.top);
-		pVertices[1].Set((float) m_rcRegion.right - 0.5f, (float) m_rcRegion.top - 0.5f,
+		pVertices[1].Set((float) m_rcRegion.right - fOfs, (float) m_rcRegion.top - fOfs,
 			UI_DEFAULT_Z, fRHW, m_Color, m_frcUVRect.right, m_frcUVRect.top);
-		pVertices[2].Set((float) m_rcRegion.right - 0.5f, (float) m_rcRegion.bottom - 0.5f,
+		pVertices[2].Set((float) m_rcRegion.right - fOfs, (float) m_rcRegion.bottom - fOfs,
 			UI_DEFAULT_Z, fRHW, m_Color, m_frcUVRect.right, m_frcUVRect.bottom);
-		pVertices[3].Set((float) m_rcRegion.left - 0.5f, (float) m_rcRegion.bottom - 0.5f,
+		pVertices[3].Set((float) m_rcRegion.left - fOfs, (float) m_rcRegion.bottom - fOfs,
 			UI_DEFAULT_Z, fRHW, m_Color, m_frcUVRect.left, m_frcUVRect.bottom);
 
 		m_pVB->Unlock();
@@ -175,15 +179,15 @@ void CN3UIImage::Render()
 	{
 		if (m_pVB != nullptr && m_pTexRef != nullptr)
 		{
-			s_lpD3DDev->SetStreamSource(0, m_pVB, 0, sizeof(__VertexTransformed));
-			s_lpD3DDev->SetFVF(FVF_TRANSFORMED);
+			RHIDevice()->SetStreamSource(0, m_pVB, 0, sizeof(__VertexTransformed));
+			RHIDevice()->SetFVF(FVF_TRANSFORMED);
 
-			s_lpD3DDev->SetTexture(0, m_pTexRef->Get());
-			s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_MODULATE);
-			s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TEXTURE);
-			s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLORARG2, D3DTA_DIFFUSE);
+			RHIDevice()->SetTexture(0, m_pTexRef->Get());
+			RHIDevice()->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_MODULATE);
+			RHIDevice()->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TEXTURE);
+			RHIDevice()->SetTextureStageState(0, D3DTSS_COLORARG2, D3DTA_DIFFUSE);
 
-			s_lpD3DDev->DrawPrimitive(D3DPT_TRIANGLEFAN, 0, 2);
+			RHIDevice()->DrawPrimitive(D3DPT_TRIANGLEFAN, 0, 2);
 		}
 
 		CN3UIBase::Render();
@@ -197,11 +201,11 @@ void CN3UIImage::RenderIconWrapper()
 
 	if (m_pVB != nullptr)
 	{
-		s_lpD3DDev->SetStreamSource(0, m_pVB, 0, sizeof(__VertexTransformed));
-		s_lpD3DDev->SetFVF(FVF_TRANSFORMED);
-		s_lpD3DDev->SetTexture(0, nullptr);
+		RHIDevice()->SetStreamSource(0, m_pVB, 0, sizeof(__VertexTransformed));
+		RHIDevice()->SetFVF(FVF_TRANSFORMED);
+		RHIDevice()->SetTexture(0, nullptr);
 
-		s_lpD3DDev->DrawPrimitive(D3DPT_TRIANGLEFAN, 0, 2);
+		RHIDevice()->DrawPrimitive(D3DPT_TRIANGLEFAN, 0, 2);
 	}
 
 	CN3UIBase::Render();

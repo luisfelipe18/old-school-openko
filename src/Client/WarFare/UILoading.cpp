@@ -66,13 +66,13 @@ void CUILoading::Render(const std::string& szInfo, int iPercentage)
 
 	D3DCOLOR crEnv = 0x00000000;
 	CGameProcedure::s_pEng->Clear(crEnv); // 배경은 검은색
-	CN3Base::s_lpD3DDev->BeginScene();    // 씬 렌더 ㅅ작...
+	CN3Base::RHIDevice()->BeginScene();    // 씬 렌더 ㅅ작...
 
 	CN3UIBase::Tick();
 	CUIManager::RenderStateSet();
 	CN3UIBase::Render();
 	CUIManager::RenderStateRestore();
 
-	CN3Base::s_lpD3DDev->EndScene(); // 씬 렌더 시작...
+	CN3Base::RHIDevice()->EndScene(); // 씬 렌더 시작...
 	CGameProcedure::s_pEng->Present(CN3Base::s_hWndBase);
 }

@@ -3,7 +3,13 @@
 
 #pragma once
 
+#ifdef _WIN32
 #include <d3dx9.h>
+#else
+// POSIX port: only the D3D *data* types are available (see the header notes);
+// rendering interfaces stay opaque until the RHI phases.
+#include <Platform/D3D9Types.h>
+#endif
 
 #include <cstdint>
 #include <cfloat>

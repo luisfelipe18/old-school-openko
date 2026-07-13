@@ -55,7 +55,11 @@ bool CN3SndMgr::InitOpenAL()
 	_alcDevice = alcOpenDevice(deviceName);
 	if (_alcDevice == nullptr)
 	{
+#ifdef _WIN32
 		MessageBoxW(nullptr, L"Failed to open sound device for playback", L"Error", MB_OK);
+#else
+		CLogWriter::Write("Failed to open sound device for playback");
+#endif
 		return false;
 	}
 
@@ -82,7 +86,11 @@ bool CN3SndMgr::InitOpenAL()
 		_alcContext = nullptr;
 		_alcDevice  = nullptr;
 
+#ifdef _WIN32
 		MessageBoxW(nullptr, L"Unable to generate sound sources.", L"Error", MB_OK);
+#else
+		CLogWriter::Write("Unable to generate sound sources.");
+#endif
 		return false;
 	}
 

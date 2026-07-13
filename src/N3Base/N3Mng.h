@@ -11,6 +11,10 @@
 #include "LogWriter.h"
 #endif
 
+#ifndef _WIN32
+#include <Platform/PlatformString.h>
+#endif
+
 #include <string>
 #include <map>
 
@@ -97,7 +101,11 @@ public:
 		if (szFN.empty())
 			return nullptr;
 		std::string szFN2 = szFN;
+#ifdef _WIN32
 		CharLower(&(szFN2[0]));
+#else
+		StrLowerAscii(szFN2);
+#endif
 
 		T* pData   = nullptr;
 		it_Data it = m_Datas.find(szFN2);

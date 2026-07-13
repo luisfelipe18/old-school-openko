@@ -22,20 +22,28 @@ CN3VMesh::CN3VMesh()
 
 CN3VMesh::~CN3VMesh()
 {
+#ifdef _WIN32
 	if (m_nVC > 32768)
 		::GlobalFree((HGLOBAL) (m_pVertices));
 	else
 		delete[] m_pVertices;
+#else
+	delete[] m_pVertices; // plain new[] covers every size off-Windows
+#endif
 	delete[] m_pwIndices;
 	m_pwIndices = nullptr;
 }
 
 void CN3VMesh::Release()
 {
+#ifdef _WIN32
 	if (m_nVC > 32768)
 		::GlobalFree((HGLOBAL) (m_pVertices));
 	else
 		delete[] m_pVertices;
+#else
+	delete[] m_pVertices; // plain new[] covers every size off-Windows
+#endif
 	m_pVertices = nullptr;
 	m_nVC       = 0;
 
@@ -98,14 +106,19 @@ void CN3VMesh::CreateVertices(int nVC)
 	if (nVC <= 0)
 		return;
 
+#ifdef _WIN32
 	if (m_nVC > 32768)
 		::GlobalFree((HGLOBAL) (m_pVertices));
 	else
 		delete[] m_pVertices;
+#else
+	delete[] m_pVertices; // plain new[] covers every size off-Windows
+#endif
 
 	m_pVertices = nullptr;
 	m_nVC       = 0;
 
+#ifdef _WIN32
 	if (nVC > 32768)
 	{
 		m_pVertices = (__Vector3*) (::GlobalAlloc(
@@ -115,6 +128,9 @@ void CN3VMesh::CreateVertices(int nVC)
 	{
 		m_pVertices = new __Vector3[nVC] {};
 	}
+#else
+	m_pVertices = new __Vector3[nVC] {};
+#endif
 
 	if (m_pVertices == nullptr)
 		return;
@@ -198,17 +214,17 @@ void CN3VMesh::Render(D3DCOLOR crLine)
 		return;
 
 	DWORD dwLight = 0, dwShade = 0;
-	s_lpD3DDev->GetRenderState(D3DRS_LIGHTING, &dwLight);
-	s_lpD3DDev->GetRenderState(D3DRS_FILLMODE, &dwShade);
+	RHIDevice()->GetRenderState(D3DRS_LIGHTING, &dwLight);
+	RHIDevice()->GetRenderState(D3DRS_FILLMODE, &dwShade);
 	if (dwLight != 0)
-		s_lpD3DDev->SetRenderState(D3DRS_LIGHTING, FALSE);
+		RHIDevice()->SetRenderState(D3DRS_LIGHTING, FALSE);
 	if (D3DFILL_WIREFRAME != dwShade)
-		s_lpD3DDev->SetRenderState(D3DRS_FILLMODE, D3DFILL_WIREFRAME);
+		RHIDevice()->SetRenderState(D3DRS_FILLMODE, D3DFILL_WIREFRAME);
 
-	s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
-	s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_DIFFUSE);
-	s_lpD3DDev->SetTexture(0, nullptr);
-	s_lpD3DDev->SetFVF(FVF_CV);
+	RHIDevice()->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
+	RHIDevice()->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_DIFFUSE);
+	RHIDevice()->SetTexture(0, nullptr);
+	RHIDevice()->SetFVF(FVF_CV);
 
 	__VertexColor vTs[3] {};
 	if (m_nIC > 0)
@@ -220,7 +236,7 @@ void CN3VMesh::Render(D3DCOLOR crLine)
 			vTs[1].Set(m_pVertices[m_pwIndices[i * 3 + 1]], crLine);
 			vTs[2].Set(m_pVertices[m_pwIndices[i * 3 + 2]], crLine);
 
-			s_lpD3DDev->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 1, vTs, sizeof(__VertexColor));
+			RHIDevice()->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 1, vTs, sizeof(__VertexColor));
 		}
 	}
 	else
@@ -232,15 +248,15 @@ void CN3VMesh::Render(D3DCOLOR crLine)
 			vTs[1].Set(m_pVertices[i * 3 + 1], crLine);
 			vTs[2].Set(m_pVertices[i * 3 + 2], crLine);
 
-			s_lpD3DDev->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 1, vTs, sizeof(__VertexColor));
+			RHIDevice()->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 1, vTs, sizeof(__VertexColor));
 		}
 	}
 
 	if (dwLight != 0)
-		s_lpD3DDev->SetRenderState(D3DRS_LIGHTING, dwLight);
+		RHIDevice()->SetRenderState(D3DRS_LIGHTING, dwLight);
 
 	if (D3DFILL_WIREFRAME != dwShade)
-		s_lpD3DDev->SetRenderState(D3DRS_FILLMODE, dwShade);
+		RHIDevice()->SetRenderState(D3DRS_FILLMODE, dwShade);
 }
 
 void CN3VMesh::FindMinMax()
@@ -489,17 +505,17 @@ void CN3VMesh::PartialColRender(int iCount, int* piIndices)
 		return;
 
 	DWORD dwLight = 0, dwShade = 0;
-	s_lpD3DDev->GetRenderState(D3DRS_LIGHTING, &dwLight);
-	s_lpD3DDev->GetRenderState(D3DRS_FILLMODE, &dwShade);
+	RHIDevice()->GetRenderState(D3DRS_LIGHTING, &dwLight);
+	RHIDevice()->GetRenderState(D3DRS_FILLMODE, &dwShade);
 	if (dwLight)
-		s_lpD3DDev->SetRenderState(D3DRS_LIGHTING, FALSE);
+		RHIDevice()->SetRenderState(D3DRS_LIGHTING, FALSE);
 	if (D3DFILL_WIREFRAME != dwShade)
-		s_lpD3DDev->SetRenderState(D3DRS_FILLMODE, D3DFILL_WIREFRAME);
+		RHIDevice()->SetRenderState(D3DRS_FILLMODE, D3DFILL_WIREFRAME);
 
-	s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
-	s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_DIFFUSE);
-	s_lpD3DDev->SetTexture(0, nullptr);
-	s_lpD3DDev->SetFVF(FVF_CV);
+	RHIDevice()->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
+	RHIDevice()->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_DIFFUSE);
+	RHIDevice()->SetTexture(0, nullptr);
+	RHIDevice()->SetFVF(FVF_CV);
 
 	__VertexColor vTs[3] {};
 	if (iCount > 0)
@@ -511,14 +527,14 @@ void CN3VMesh::PartialColRender(int iCount, int* piIndices)
 			vTs[1].Set(m_pVertices[piIndices[i * 3 + 1]], 0xffffffff);
 			vTs[2].Set(m_pVertices[piIndices[i * 3 + 2]], 0xffffffff);
 
-			s_lpD3DDev->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 1, vTs, sizeof(__VertexColor));
+			RHIDevice()->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 1, vTs, sizeof(__VertexColor));
 		}
 	}
 
 	if (dwLight)
-		s_lpD3DDev->SetRenderState(D3DRS_LIGHTING, dwLight);
+		RHIDevice()->SetRenderState(D3DRS_LIGHTING, dwLight);
 	if (D3DFILL_WIREFRAME != dwShade)
-		s_lpD3DDev->SetRenderState(D3DRS_FILLMODE, dwShade);
+		RHIDevice()->SetRenderState(D3DRS_FILLMODE, dwShade);
 }
 
 void CN3VMesh::PartialGetCollision(int iIndex, __Vector3& vec)

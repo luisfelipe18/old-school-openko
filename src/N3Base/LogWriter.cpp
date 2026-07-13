@@ -5,6 +5,23 @@
 #include "StdAfxBase.h"
 #include "N3Base.h"
 #include "LogWriter.h"
+#include <ctime>
+
+namespace
+{
+// Portable replacement for GetLocalTime(): month/day/wall-clock parts.
+std::tm LocalTimeNow()
+{
+	const std::time_t now = std::time(nullptr);
+	std::tm parts {};
+#ifdef _WIN32
+	localtime_s(&parts, &now);
+#else
+	localtime_r(&now, &parts);
+#endif
+	return parts;
+}
+} // namespace
 
 #include <FileIO/FileWriter.h>
 
@@ -49,14 +66,13 @@ void CLogWriter::Open(const std::string& szFN)
 	file.Seek(0, SEEK_END); // 추가 하기 위해서 파일의 끝으로 옮기고..
 
 	std::string buff;
-	SYSTEMTIME time;
-	GetLocalTime(&time);
+	const std::tm time = LocalTimeNow();
 
 	buff = "---------------------------------------------------------------------------\r\n";
 	file.Write(buff.data(), buff.length());
 
-	buff = fmt::format("// Begin writing log... [{:02}/{:02} {:02}:{:02}]\r\n", time.wMonth,
-		time.wDay, time.wHour, time.wMinute);
+	buff = fmt::format("// Begin writing log... [{:02}/{:02} {:02}:{:02}]\r\n", time.tm_mon + 1,
+		time.tm_mday, time.tm_hour, time.tm_min);
 	file.Write(buff.data(), buff.length());
 }
 
@@ -72,11 +88,10 @@ void CLogWriter::Close()
 	file.Seek(0, SEEK_END); // 추가 하기 위해서 파일의 끝으로 옮기고..
 
 	std::string buff;
-	SYSTEMTIME time;
-	GetLocalTime(&time);
+	const std::tm time = LocalTimeNow();
 
-	buff = fmt::format("// End writing log... [{:02}/{:02} {:02}:{:02}]\r\n", time.wMonth,
-		time.wDay, time.wHour, time.wMinute);
+	buff = fmt::format("// End writing log... [{:02}/{:02} {:02}:{:02}]\r\n", time.tm_mon + 1,
+		time.tm_mday, time.tm_hour, time.tm_min);
 	file.Write(buff.data(), buff.length());
 
 	buff = "---------------------------------------------------------------------------\r\n";
@@ -95,11 +110,10 @@ void CLogWriter::Write(const std::string_view message)
 			return;
 	}
 
-	SYSTEMTIME time;
-	GetLocalTime(&time);
+	const std::tm time        = LocalTimeNow();
 
 	std::string outputMessage = fmt::format(
-		"    [{:02}:{:02}:{:02}] {}\r\n", time.wHour, time.wMinute, time.wSecond, message);
+		"    [{:02}:{:02}:{:02}] {}\r\n", time.tm_hour, time.tm_min, time.tm_sec, message);
 
 	file.Seek(0, SEEK_END); // 추가 하기 위해서 파일의 끝으로 옮기고..
 	file.Write(outputMessage.data(), outputMessage.length());

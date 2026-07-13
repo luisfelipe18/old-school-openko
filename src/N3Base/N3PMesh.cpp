@@ -169,9 +169,12 @@ bool CN3PMesh::Load(File& file)
 			}
 		}
 
-#ifdef _DEBUG
+#if defined(_DEBUG) && defined(_WIN32)
 		if (bFixed)
 			::MessageBox(s_hWndBase, "잘못된 Progressive Mesh 수정", m_szName.c_str(), MB_OK);
+#elif defined(_DEBUG)
+		if (bFixed)
+			TRACE("잘못된 Progressive Mesh 수정: {}", m_szName);
 #endif
 	}
 

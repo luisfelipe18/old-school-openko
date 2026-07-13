@@ -261,7 +261,7 @@ void CN3PMeshInstance::Render()
 {
 	if (m_pPMesh == nullptr)
 		return;
-	s_lpD3DDev->SetFVF(FVF_VNT1);
+	RHIDevice()->SetFVF(FVF_VNT1);
 
 	const int iPCToRender = 1000; // primitive count to render
 
@@ -273,14 +273,14 @@ void CN3PMeshInstance::Render()
 		int i   = 0;
 		for (; i < iLC; ++i)
 		{
-			s_lpD3DDev->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, m_iNumVertices, iPCToRender,
+			RHIDevice()->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, m_iNumVertices, iPCToRender,
 				m_pIndices + i * iPCToRender * 3, D3DFMT_INDEX16, m_pPMesh->m_pVertices,
 				sizeof(__VertexT1));
 		}
 
 		int iRPC = iPC % iPCToRender;
 		if (iRPC > 0)
-			s_lpD3DDev->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, m_iNumVertices, iRPC,
+			RHIDevice()->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, m_iNumVertices, iRPC,
 				m_pIndices + i * iPCToRender * 3, D3DFMT_INDEX16, m_pPMesh->m_pVertices,
 				sizeof(__VertexT1));
 	}
@@ -297,7 +297,7 @@ void CN3PMeshInstance::RenderTwoUV()
 	if (nullptr == m_pPMesh->GetVertices2())
 		return;
 
-	s_lpD3DDev->SetFVF(FVF_VNT2);
+	RHIDevice()->SetFVF(FVF_VNT2);
 
 	const int iPCToRender = 1000; // primitive count to render
 
@@ -309,14 +309,14 @@ void CN3PMeshInstance::RenderTwoUV()
 		int i   = 0;
 		for (; i < iLC; ++i)
 		{
-			s_lpD3DDev->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, m_iNumVertices, iPCToRender,
+			RHIDevice()->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, m_iNumVertices, iPCToRender,
 				m_pIndices + i * iPCToRender * 3, D3DFMT_INDEX16, m_pPMesh->m_pVertices2,
 				sizeof(__VertexT2));
 		}
 
 		int iRPC = iPC % iPCToRender;
 		if (iRPC > 0)
-			s_lpD3DDev->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, m_iNumVertices, iRPC,
+			RHIDevice()->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, m_iNumVertices, iRPC,
 				m_pIndices + i * iPCToRender * 3, D3DFMT_INDEX16, m_pPMesh->m_pVertices2,
 				sizeof(__VertexT2));
 	}
@@ -335,7 +335,7 @@ void CN3PMeshInstance::PartialRender(int iCount, uint16_t* pIndices)
 {
 	if (m_pPMesh == nullptr)
 		return;
-	s_lpD3DDev->SetFVF(FVF_VNT1);
+	RHIDevice()->SetFVF(FVF_VNT1);
 	const int iPCToRender = 1000; // primitive count to render
 
 								  /*	if(m_iNumIndices > 3)
@@ -346,11 +346,11 @@ void CN3PMeshInstance::PartialRender(int iCount, uint16_t* pIndices)
 		int i;
 		for (i=0; i<iLC; ++i)
 		{
-			s_lpD3DDev->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, m_iNumVertices, iPCToRender, m_pIndices + i*iPCToRender*3, D3DFMT_INDEX16, m_pPMesh->m_pVertices, sizeof(__VertexT1));
+			RHIDevice()->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, m_iNumVertices, iPCToRender, m_pIndices + i*iPCToRender*3, D3DFMT_INDEX16, m_pPMesh->m_pVertices, sizeof(__VertexT1));
 		}
 
 		int iRPC = iPC%iPCToRender;
-		if(iRPC > 0) s_lpD3DDev->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, m_iNumVertices, iRPC, m_pIndices + i*iPCToRender*3, D3DFMT_INDEX16, m_pPMesh->m_pVertices, sizeof(__VertexT1));
+		if(iRPC > 0) RHIDevice()->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, m_iNumVertices, iRPC, m_pIndices + i*iPCToRender*3, D3DFMT_INDEX16, m_pPMesh->m_pVertices, sizeof(__VertexT1));
 	}
 */
 
@@ -361,14 +361,14 @@ void CN3PMeshInstance::PartialRender(int iCount, uint16_t* pIndices)
 		int i   = 0;
 		for (; i < iLC; ++i)
 		{
-			s_lpD3DDev->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, m_iNumVertices, iPCToRender,
+			RHIDevice()->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, m_iNumVertices, iPCToRender,
 				pIndices + i * iPCToRender * 3, D3DFMT_INDEX16, m_pPMesh->m_pVertices,
 				sizeof(__VertexT1));
 		}
 
 		int iRPC = iPC % iPCToRender;
 		if (iRPC > 0)
-			s_lpD3DDev->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, m_iNumVertices, iRPC,
+			RHIDevice()->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, m_iNumVertices, iRPC,
 				pIndices + i * iPCToRender * 3, D3DFMT_INDEX16, m_pPMesh->m_pVertices,
 				sizeof(__VertexT1));
 	}

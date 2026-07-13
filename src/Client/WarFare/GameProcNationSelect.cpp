@@ -63,11 +63,11 @@ void CGameProcNationSelect::Render()
 {
 	uint32_t color = 0x00000000;      // 검은색으로..
 	s_pEng->Clear(color);             // 클리어..
-	s_pEng->s_lpD3DDev->BeginScene(); // 씬 렌더 ㅅ작...
+	s_pEng->RHIDevice()->BeginScene(); // 씬 렌더 ㅅ작...
 
 	CGameProcedure::Render();         // UI 나 그밖의 기본적인 것들 렌더링..
 
-	s_pEng->s_lpD3DDev->EndScene();   // 씬 렌더 시작...
+	s_pEng->RHIDevice()->EndScene();   // 씬 렌더 시작...
 	s_pEng->Present(CN3Base::s_hWndBase);
 }
 

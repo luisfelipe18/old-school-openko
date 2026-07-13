@@ -3,6 +3,9 @@
 //////////////////////////////////////////////////////////////////////
 
 #include "StdAfx.h"
+#ifndef _WIN32
+#include <Platform/PlatformPaths.h> // _splitpath / _MAX_*
+#endif
 #include "PortalVolume.h"
 #include "GameBase.h"
 #include "PlayerMySelf.h"
@@ -96,17 +99,17 @@ bool CPortalVolume::IsInVolumn(const __Vector3& vec) const
 void CPortalVolume::Render()
 {
 	DWORD dwAlpha = 0, dwFog = 0, dwLight = 0, dwPointSize = 0;
-	CN3Base::s_lpD3DDev->GetRenderState(D3DRS_FOGENABLE, &dwFog);
-	CN3Base::s_lpD3DDev->GetRenderState(D3DRS_ALPHABLENDENABLE, &dwAlpha);
-	CN3Base::s_lpD3DDev->GetRenderState(D3DRS_LIGHTING, &dwLight);
-	CN3Base::s_lpD3DDev->GetRenderState(D3DRS_POINTSIZE, &dwPointSize);
+	CN3Base::RHIDevice()->GetRenderState(D3DRS_FOGENABLE, &dwFog);
+	CN3Base::RHIDevice()->GetRenderState(D3DRS_ALPHABLENDENABLE, &dwAlpha);
+	CN3Base::RHIDevice()->GetRenderState(D3DRS_LIGHTING, &dwLight);
+	CN3Base::RHIDevice()->GetRenderState(D3DRS_POINTSIZE, &dwPointSize);
 
 	if (dwFog)
-		CN3Base::s_lpD3DDev->SetRenderState(D3DRS_FOGENABLE, FALSE);
+		CN3Base::RHIDevice()->SetRenderState(D3DRS_FOGENABLE, FALSE);
 	if (dwAlpha)
-		CN3Base::s_lpD3DDev->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+		CN3Base::RHIDevice()->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
 	if (dwLight)
-		CN3Base::s_lpD3DDev->SetRenderState(D3DRS_LIGHTING, FALSE);
+		CN3Base::RHIDevice()->SetRenderState(D3DRS_LIGHTING, FALSE);
 
 	static __Material smtl;
 	static bool bInit = false;
@@ -119,8 +122,8 @@ void CPortalVolume::Render()
 	__Matrix44 mtxWorld;
 	mtxWorld.Identity();
 
-	CN3Base::s_lpD3DDev->SetTransform(D3DTS_WORLD, mtxWorld.toD3D());
-	CN3Base::s_lpD3DDev->SetTexture(0, nullptr);
+	CN3Base::RHIDevice()->SetTransform(D3DTS_WORLD, mtxWorld.toD3D());
+	CN3Base::RHIDevice()->SetTexture(0, nullptr);
 
 	// Shape..
 	RenderShape();
@@ -129,13 +132,13 @@ void CPortalVolume::Render()
 	RenderCollision();
 #endif
 
-	CN3Base::s_lpD3DDev->SetRenderState(D3DRS_POINTSIZE, dwPointSize);
+	CN3Base::RHIDevice()->SetRenderState(D3DRS_POINTSIZE, dwPointSize);
 	if (dwFog)
-		CN3Base::s_lpD3DDev->SetRenderState(D3DRS_FOGENABLE, dwFog);
+		CN3Base::RHIDevice()->SetRenderState(D3DRS_FOGENABLE, dwFog);
 	if (dwAlpha)
-		CN3Base::s_lpD3DDev->SetRenderState(D3DRS_ALPHABLENDENABLE, dwAlpha);
+		CN3Base::RHIDevice()->SetRenderState(D3DRS_ALPHABLENDENABLE, dwAlpha);
 	if (dwLight)
-		CN3Base::s_lpD3DDev->SetRenderState(D3DRS_LIGHTING, dwLight);
+		CN3Base::RHIDevice()->SetRenderState(D3DRS_LIGHTING, dwLight);
 }
 
 void CPortalVolume::RenderShape()
@@ -151,15 +154,15 @@ void CPortalVolume::RenderShape()
 
 		// 로딩할때 미리 계산해 놓은 월드 행렬 적용..
 		__Matrix44 mtxBackup;
-		CN3Base::s_lpD3DDev->GetTransform(D3DTS_WORLD, mtxBackup.toD3D());
-		CN3Base::s_lpD3DDev->SetTransform(D3DTS_WORLD, pSI->m_pShape->m_Matrix.toD3D());
+		CN3Base::RHIDevice()->GetTransform(D3DTS_WORLD, mtxBackup.toD3D());
+		CN3Base::RHIDevice()->SetTransform(D3DTS_WORLD, pSI->m_pShape->m_Matrix.toD3D());
 
 #ifdef _DEBUG
 		if (pSI->m_pShape->CollisionMesh())
 			pSI->m_pShape->CollisionMesh()->Render(0xffffffff);
 #endif
 
-		CN3Base::s_lpD3DDev->SetTransform(D3DTS_WORLD, mtxBackup.toD3D());
+		CN3Base::RHIDevice()->SetTransform(D3DTS_WORLD, mtxBackup.toD3D());
 	}
 
 	for (ShapePart* pSP : m_lpShapePartList)
@@ -197,7 +200,7 @@ void CPortalVolume::RenderCollision()
 		__Matrix44 mtxWorld;
 		mtxWorld.Identity();
 
-		CN3Base::s_lpD3DDev->SetTransform(D3DTS_WORLD, mtxWorld.toD3D());
+		CN3Base::RHIDevice()->SetTransform(D3DTS_WORLD, mtxWorld.toD3D());
 
 		size_t vecSize     = pCI->m_ivVector.size();
 		uint32_t* pIndices = new uint32_t[vecSize];
@@ -207,13 +210,13 @@ void CPortalVolume::RenderCollision()
 			pIndices[k] = pCI->m_ivVector[k];
 
 		__Matrix44 mtxBackup;
-		CN3Base::s_lpD3DDev->GetTransform(D3DTS_WORLD, mtxBackup.toD3D());
+		CN3Base::RHIDevice()->GetTransform(D3DTS_WORLD, mtxBackup.toD3D());
 		pSI = CPvsMgr::GetShapeInfoByManager(pCI->m_iID);
-		CN3Base::s_lpD3DDev->SetTransform(D3DTS_WORLD, pSI->m_Matrix.toD3D());
+		CN3Base::RHIDevice()->SetTransform(D3DTS_WORLD, pSI->m_Matrix.toD3D());
 		pSI->m_pShape->PartialColRender(static_cast<int>(vecSize), reinterpret_cast<int*>(pIndices));
 		delete[] pIndices;
 
-		CN3Base::s_lpD3DDev->SetTransform(D3DTS_WORLD, mtxBackup.toD3D());
+		CN3Base::RHIDevice()->SetTransform(D3DTS_WORLD, mtxBackup.toD3D());
 	}
 }
 

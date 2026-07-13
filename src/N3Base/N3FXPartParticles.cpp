@@ -773,51 +773,51 @@ void CN3FXPartParticles::Render()
 		return; // 렌더링 안하지롱.
 	}
 
-	CN3Base::s_lpD3DDev->SetFVF(FVF_XYZCOLORT1);
+	CN3Base::RHIDevice()->SetFVF(FVF_XYZCOLORT1);
 
-	//s_lpD3DDev->SetRenderState( D3DRS_ALPHABLENDENABLE, m_bAlpha );
-	//s_lpD3DDev->SetRenderState( D3DRS_SRCBLEND, m_dwSrcBlend );
-	//s_lpD3DDev->SetRenderState( D3DRS_DESTBLEND, m_dwDestBlend );
+	//RHIDevice()->SetRenderState( D3DRS_ALPHABLENDENABLE, m_bAlpha );
+	//RHIDevice()->SetRenderState( D3DRS_SRCBLEND, m_dwSrcBlend );
+	//RHIDevice()->SetRenderState( D3DRS_DESTBLEND, m_dwDestBlend );
 
 	//uint32_t dwTAddrU, dwTAddrV;
-	//s_lpD3DDev->GetTextureStageState( 0, D3DTSS_ADDRESSU, &dwTAddrU );
-	//s_lpD3DDev->GetTextureStageState( 0, D3DTSS_ADDRESSV, &dwTAddrV );
+	//RHIDevice()->GetTextureStageState( 0, D3DTSS_ADDRESSU, &dwTAddrU );
+	//RHIDevice()->GetTextureStageState( 0, D3DTSS_ADDRESSV, &dwTAddrV );
 
-	//s_lpD3DDev->SetTextureStageState( 0, D3DTSS_ADDRESSU, D3DTADDRESS_CLAMP );
-	//s_lpD3DDev->SetTextureStageState( 0, D3DTSS_ADDRESSV, D3DTADDRESS_CLAMP );
+	//RHIDevice()->SetTextureStageState( 0, D3DTSS_ADDRESSU, D3DTADDRESS_CLAMP );
+	//RHIDevice()->SetTextureStageState( 0, D3DTSS_ADDRESSV, D3DTADDRESS_CLAMP );
 
-	s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_MODULATE);
-	s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TEXTURE);
-	s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLORARG2, D3DTA_DIFFUSE);
+	RHIDevice()->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_MODULATE);
+	RHIDevice()->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TEXTURE);
+	RHIDevice()->SetTextureStageState(0, D3DTSS_COLORARG2, D3DTA_DIFFUSE);
 
-	s_lpD3DDev->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_MODULATE);
-	s_lpD3DDev->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_TEXTURE);
-	s_lpD3DDev->SetTextureStageState(0, D3DTSS_ALPHAARG2, D3DTA_DIFFUSE);
+	RHIDevice()->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_MODULATE);
+	RHIDevice()->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_TEXTURE);
+	RHIDevice()->SetTextureStageState(0, D3DTSS_ALPHAARG2, D3DTA_DIFFUSE);
 
-	s_lpD3DDev->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
-	s_lpD3DDev->SetTextureStageState(1, D3DTSS_ALPHAOP, D3DTOP_DISABLE);
+	RHIDevice()->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
+	RHIDevice()->SetTextureStageState(1, D3DTSS_ALPHAOP, D3DTOP_DISABLE);
 
 	DWORD dwCullMode = 0, dwZWriteEnable = 0, dwZBufferEnable = 0, dwLight = 0, dwAlpha = 0;
-	s_lpD3DDev->GetRenderState(D3DRS_ALPHABLENDENABLE, &dwAlpha);
-	s_lpD3DDev->GetRenderState(D3DRS_ZWRITEENABLE, &dwZWriteEnable);
-	s_lpD3DDev->GetRenderState(D3DRS_ZENABLE, &dwZBufferEnable);
-	s_lpD3DDev->GetRenderState(D3DRS_CULLMODE, &dwCullMode);
-	s_lpD3DDev->GetRenderState(D3DRS_LIGHTING, &dwLight);
+	RHIDevice()->GetRenderState(D3DRS_ALPHABLENDENABLE, &dwAlpha);
+	RHIDevice()->GetRenderState(D3DRS_ZWRITEENABLE, &dwZWriteEnable);
+	RHIDevice()->GetRenderState(D3DRS_ZENABLE, &dwZBufferEnable);
+	RHIDevice()->GetRenderState(D3DRS_CULLMODE, &dwCullMode);
+	RHIDevice()->GetRenderState(D3DRS_LIGHTING, &dwLight);
 
 	if (m_bAlpha != dwAlpha)
 	{
-		s_lpD3DDev->SetRenderState(D3DRS_ALPHABLENDENABLE, m_bAlpha);
-		s_lpD3DDev->SetRenderState(D3DRS_SRCBLEND, m_dwSrcBlend);
-		s_lpD3DDev->SetRenderState(D3DRS_DESTBLEND, m_dwDestBlend);
+		RHIDevice()->SetRenderState(D3DRS_ALPHABLENDENABLE, m_bAlpha);
+		RHIDevice()->SetRenderState(D3DRS_SRCBLEND, m_dwSrcBlend);
+		RHIDevice()->SetRenderState(D3DRS_DESTBLEND, m_dwDestBlend);
 	}
 	if (m_dwZEnable != dwZBufferEnable)
-		s_lpD3DDev->SetRenderState(D3DRS_ZENABLE, m_dwZEnable);
+		RHIDevice()->SetRenderState(D3DRS_ZENABLE, m_dwZEnable);
 	if (m_dwZWrite != dwZWriteEnable)
-		s_lpD3DDev->SetRenderState(D3DRS_ZWRITEENABLE, m_dwZWrite);
+		RHIDevice()->SetRenderState(D3DRS_ZWRITEENABLE, m_dwZWrite);
 	if (m_dwLight != dwLight)
-		s_lpD3DDev->SetRenderState(D3DRS_LIGHTING, m_dwLight);
+		RHIDevice()->SetRenderState(D3DRS_LIGHTING, m_dwLight);
 	if (m_dwDoubleSide != dwCullMode)
-		s_lpD3DDev->SetRenderState(D3DRS_CULLMODE, m_dwDoubleSide);
+		RHIDevice()->SetRenderState(D3DRS_CULLMODE, m_dwDoubleSide);
 
 	std::list<CN3FXParticle*>::iterator it;
 	it = m_pVBList_Alive.begin();
@@ -825,30 +825,30 @@ void CN3FXPartParticles::Render()
 	{
 		CN3FXParticle* pParticle = (*it);
 		if (pParticle->m_iTexIdx < m_iNumTex)
-			CN3Base::s_lpD3DDev->SetTexture(0, m_ppRefTex[pParticle->m_iTexIdx]->Get());
+			CN3Base::RHIDevice()->SetTexture(0, m_ppRefTex[pParticle->m_iTexIdx]->Get());
 		else
 			continue;
 
 		//for(int i=0;i<6;i++) m_pIB[i] = pParticle->m_iID + m_wUnitIB[i];
 
-		CN3Base::s_lpD3DDev->DrawPrimitiveUP(
+		CN3Base::RHIDevice()->DrawPrimitiveUP(
 			D3DPT_TRIANGLEFAN, 2, pParticle->m_pVB, sizeof(__VertexXyzColorT1));
-		//hr = CN3Base::s_lpD3DDev->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, 4, 2, m_pIB, D3DFMT_INDEX16, m_pVB, sizeof(__VertexXyzColorT1));
+		//hr = CN3Base::RHIDevice()->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, 4, 2, m_pIB, D3DFMT_INDEX16, m_pVB, sizeof(__VertexXyzColorT1));
 	}
 
 	if (m_bAlpha != dwAlpha)
-		s_lpD3DDev->SetRenderState(D3DRS_ALPHABLENDENABLE, dwAlpha);
+		RHIDevice()->SetRenderState(D3DRS_ALPHABLENDENABLE, dwAlpha);
 	if (m_dwZEnable != dwZBufferEnable)
-		s_lpD3DDev->SetRenderState(D3DRS_ZENABLE, dwZBufferEnable);
+		RHIDevice()->SetRenderState(D3DRS_ZENABLE, dwZBufferEnable);
 	if (m_dwZWrite != dwZWriteEnable)
-		s_lpD3DDev->SetRenderState(D3DRS_ZWRITEENABLE, dwZWriteEnable);
+		RHIDevice()->SetRenderState(D3DRS_ZWRITEENABLE, dwZWriteEnable);
 	if (m_dwLight != dwLight)
-		s_lpD3DDev->SetRenderState(D3DRS_LIGHTING, dwLight);
+		RHIDevice()->SetRenderState(D3DRS_LIGHTING, dwLight);
 	if (m_dwDoubleSide != dwCullMode)
-		s_lpD3DDev->SetRenderState(D3DRS_CULLMODE, dwCullMode);
+		RHIDevice()->SetRenderState(D3DRS_CULLMODE, dwCullMode);
 
-	//CN3Base::s_lpD3DDev->SetTextureStageState( 0, D3DTSS_ADDRESSU, dwTAddrU );
-	//CN3Base::s_lpD3DDev->SetTextureStageState( 0, D3DTSS_ADDRESSV, dwTAddrV );
+	//CN3Base::RHIDevice()->SetTextureStageState( 0, D3DTSS_ADDRESSU, dwTAddrU );
+	//CN3Base::RHIDevice()->SetTextureStageState( 0, D3DTSS_ADDRESSV, dwTAddrV );
 }
 
 float CN3FXPartParticles::CameraDist(

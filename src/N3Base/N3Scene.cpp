@@ -259,7 +259,7 @@ void CN3Scene::Render()
 	//		__ASSERT(m_pLights[i], "Light pointer is NULL");
 	//		m_pLights[i]->Render(nullptr, 0.5f);
 	//	}
-	s_lpD3DDev->SetRenderState(D3DRS_AMBIENT, m_AmbientLightColor);
+	RHIDevice()->SetRenderState(D3DRS_AMBIENT, m_AmbientLightColor);
 
 	for (CN3Shape* shape : m_Shapes)
 		shape->Render();
@@ -301,7 +301,7 @@ void CN3Scene::TickCameras()
 void CN3Scene::TickLights()
 {
 	for (int i = 0; i < 8; i++)
-		s_lpD3DDev->LightEnable(i, FALSE); // 일단 라이트 다 끄고..
+		RHIDevice()->LightEnable(i, FALSE); // 일단 라이트 다 끄고..
 
 	for (int i = 0; i < m_nLightCount; i++)
 	{
@@ -320,8 +320,8 @@ void CN3Scene::TickLights()
 		CN3Light::__Light lgt;
 		lgt.InitDirection(7, vDir, crLgt);
 
-		s_lpD3DDev->LightEnable(7, TRUE);
-		s_lpD3DDev->SetLight(7, lgt.toD3D());
+		RHIDevice()->LightEnable(7, TRUE);
+		RHIDevice()->SetLight(7, lgt.toD3D());
 	}
 
 	// Ambient Light 바꾸기..
@@ -329,7 +329,7 @@ void CN3Scene::TickLights()
 	//						(((uint32_t)(m_pLights[i]->m_Data.Diffuse.r * 255 * 0.5f)) << 16) |
 	//						(((uint32_t)(m_pLights[i]->m_Data.Diffuse.g * 255 * 0.5f)) << 8) |
 	//						(((uint32_t)(m_pLights[i]->m_Data.Diffuse.b * 255 * 0.5f)) << 0);
-	//	CN3Base::s_lpD3DDev->SetRenderState(D3DRS_AMBIENT, dwAmbient);
+	//	CN3Base::RHIDevice()->SetRenderState(D3DRS_AMBIENT, dwAmbient);
 }
 
 void CN3Scene::TickShapes()
@@ -524,9 +524,13 @@ bool CN3Scene::LoadDataAndResourcesFromFile(const std::string& szFN)
 	if (szFN.empty())
 		return false;
 
+#ifdef _WIN32
 	char szPath[512] = "", szDrv[_MAX_DRIVE] = "", szDir[_MAX_DIR] = "";
 	::_splitpath(szFN.c_str(), szDrv, szDir, nullptr, nullptr);
 	::_makepath(szPath, szDrv, szDir, nullptr, nullptr);
+#else
+	const std::string szPath = std::filesystem::path(szFN).parent_path().string() + "/";
+#endif
 
 	this->Release();
 	this->PathSet(szPath);
@@ -538,9 +542,13 @@ bool CN3Scene::SaveDataAndResourcesToFile(const std::string& szFN)
 	if (szFN.empty())
 		return false;
 
+#ifdef _WIN32
 	char szPath[512] = "", szDrv[_MAX_DRIVE] = "", szDir[_MAX_DIR] = "";
 	::_splitpath(szFN.c_str(), szDrv, szDir, nullptr, nullptr);
 	::_makepath(szPath, szDrv, szDir, nullptr, nullptr);
+#else
+	const std::string szPath = std::filesystem::path(szFN).parent_path().string() + "/";
+#endif
 
 	this->PathSet(szPath);
 	return SaveToFile(szFN);

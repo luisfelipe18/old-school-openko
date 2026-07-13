@@ -458,7 +458,7 @@ void CTexViewer::Render()
 	if (D3DTEXF_NONE != dwMipFilter)
 		lpD3DDev->SetSamplerState(0, D3DSAMP_MIPFILTER,
 			D3DTEXF_NONE);  //lpD3DDev->SetTextureStageState(0, D3DTSS_MIPFILTER,   D3DTEXF_NONE);
-	lpD3DDev->SetTexture(0, m_pTex->Get());
+	lpD3DDev->SetTexture(0, m_pTex->GetRawD3D());
 	lpD3DDev->SetTexture(1, nullptr);
 	lpD3DDev->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
 	lpD3DDev->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TEXTURE);

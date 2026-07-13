@@ -3,6 +3,7 @@
 
 #include <FileIO/FileReader.h>
 #include <FileIO/FileWriter.h>
+#include <FileIO/PathResolver.h>
 
 #ifdef _N3GAME
 #include "LogWriter.h"
@@ -21,8 +22,14 @@ bool CN3TableBaseImpl::LoadFromFile(const std::string& szFN)
 	if (szFN.empty())
 		return false;
 
+#ifndef _WIN32
+	const std::string szFNNorm = NormalizePathSeparators(std::filesystem::path(szFN)).string();
+#else
+	const std::string& szFNNorm = szFN;
+#endif
+
 	FileReader encryptedFile;
-	if (!encryptedFile.OpenExisting(szFN))
+	if (!encryptedFile.OpenExisting(szFNNorm))
 	{
 #ifdef _N3GAME
 		CLogWriter::Write("N3TableBase - Can't open file(read) File Handle error ({})", szFN);
@@ -33,7 +40,7 @@ bool CN3TableBaseImpl::LoadFromFile(const std::string& szFN)
 	std::error_code ec;
 
 	// 파일 암호화 풀기.. .. 임시 파일에다 쓴다음 ..
-	std::string szFNTmp      = szFN + ".tmp";
+	std::string szFNTmp      = szFNNorm + ".tmp";
 	size_t encryptedFileSize = static_cast<size_t>(encryptedFile.Size());
 	if (encryptedFileSize == 0)
 	{

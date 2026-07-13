@@ -270,45 +270,115 @@ set(WARFARE_POPUP_NOTICE_TEXT_SOURCES
   WarMessage.h
 )
 
+if(WIN32)
+  set(WARFARE_CORE_SOURCES
+    Bitset.h
+    ClientResourceFormatter.cpp
+    ClientResourceFormatter.h
+    GameBase.cpp
+    GameBase.h
+    GameDef.h
+    GameOptions.cpp
+    GameOptions.h
+    GameEng.cpp
+    GameEng.h
+    StdAfx.h
+    WarFareMain.cpp
+    ${WARFARE_SCENE_SOURCES}
+    ${WARFARE_SCENE_LOGIN_SOURCES}
+    ${WARFARE_SCENE_NATION_SELECTION_SOURCES}
+    ${WARFARE_SCENE_CHARACTER_SELECTION_SOURCES}
+    ${WARFARE_SCENE_CHARACTER_CREATION_SOURCES}
+    ${WARFARE_SCENE_INGAME_SOURCES}
+    ${WARFARE_SCENE_INGAME_UI_SOURCES}
+    ${WARFARE_INPUT_SOURCES}
+    ${WARFARE_NETWORK_SOURCES}
+    ${WARFARE_PLAYERS_SOURCES}
+    ${WARFARE_WORLD_SOURCES}
+    ${WARFARE_WORLD_BIRDS_SOURCES}
+    ${WARFARE_WORLD_EFFECTS_SOURCES}
+    ${WARFARE_WORLD_INDOOR_SOURCES}
+    ${WARFARE_WORLD_LIGHTING_SOURCES}
+    ${WARFARE_WORLD_OBJECTS_SOURCES}
+    ${WARFARE_WORLD_TERRAIN_SOURCES}
+    ${WARFARE_WORLD_WATER_SOURCES}
+    ${WARFARE_CORE_UIS_SOURCES}
+    ${WARFARE_POPUP_NOTICE_TEXT_SOURCES}
+  )
+else()
+  # POSIX port (docs/PORT_POSIX_PLAN.md): network (phase 2) plus the SDL
+  # window/input layer (phase 3); the rest of the game rejoins with the RHI.
+  set(WARFARE_CORE_SOURCES
+    ClientResourceFormatter.cpp
+    ClientResourceFormatter.h
+    CursorDecoder.cpp
+    CursorDecoder.h
+    GameBase.cpp
+    GameBase.h
+    GameDef.h
+    GameEng.cpp
+    GameEng.h
+    GameOptions.cpp
+    GameOptions.h
+    GLLoader.cpp
+    GLLoader.h
+    GLTranslate.h
+    LocalInput.h
+    LocalInputSDL.cpp
+    LocalInputSDL.h
+    OSGameCursor.cpp
+    OSGameCursor.h
+    RHIDeviceGL.cpp
+    RHIDeviceGL.h
+    RHIDeviceSDLGPU.cpp
+    RHIDeviceSDLGPU.h
+    SDLGPUTranslate.h
+    shaders/ShaderBlobsSDLGPU.h
+    StdAfx.h
+    TestScene.cpp
+    TestScene.h
+    text_resources.h
+    ${WARFARE_NETWORK_SOURCES}
+    ${WARFARE_PLAYERS_SOURCES}
+    ${WARFARE_WORLD_SOURCES}
+    ${WARFARE_WORLD_BIRDS_SOURCES}
+    ${WARFARE_WORLD_EFFECTS_SOURCES}
+    ${WARFARE_WORLD_INDOOR_SOURCES}
+    ${WARFARE_WORLD_LIGHTING_SOURCES}
+    ${WARFARE_WORLD_OBJECTS_SOURCES}
+    ${WARFARE_WORLD_TERRAIN_SOURCES}
+    ${WARFARE_WORLD_WATER_SOURCES}
+    ${WARFARE_CORE_UIS_SOURCES}
+    ${WARFARE_SCENE_SOURCES}
+    ${WARFARE_SCENE_LOGIN_SOURCES}
+    ${WARFARE_SCENE_NATION_SELECTION_SOURCES}
+    ${WARFARE_SCENE_CHARACTER_SELECTION_SOURCES}
+    ${WARFARE_SCENE_CHARACTER_CREATION_SOURCES}
+    ${WARFARE_SCENE_INGAME_SOURCES}
+    ${WARFARE_SCENE_INGAME_UI_SOURCES}
+    ${WARFARE_POPUP_NOTICE_TEXT_SOURCES}
+  )
+endif()
+
 add_library(WarFare.Core
-  Bitset.h
-  ClientResourceFormatter.cpp
-  ClientResourceFormatter.h
-  GameBase.cpp
-  GameBase.h
-  GameDef.h
-  GameEng.cpp
-  GameEng.h
-  StdAfx.h
-  WarFareMain.cpp
-  ${WARFARE_SCENE_SOURCES}
-  ${WARFARE_SCENE_LOGIN_SOURCES}
-  ${WARFARE_SCENE_NATION_SELECTION_SOURCES}
-  ${WARFARE_SCENE_CHARACTER_SELECTION_SOURCES}
-  ${WARFARE_SCENE_CHARACTER_CREATION_SOURCES}
-  ${WARFARE_SCENE_INGAME_SOURCES}
-  ${WARFARE_SCENE_INGAME_UI_SOURCES}
-  ${WARFARE_INPUT_SOURCES}
-  ${WARFARE_NETWORK_SOURCES}
-  ${WARFARE_PLAYERS_SOURCES}
-  ${WARFARE_WORLD_SOURCES}
-  ${WARFARE_WORLD_BIRDS_SOURCES}
-  ${WARFARE_WORLD_EFFECTS_SOURCES}
-  ${WARFARE_WORLD_INDOOR_SOURCES}
-  ${WARFARE_WORLD_LIGHTING_SOURCES}
-  ${WARFARE_WORLD_OBJECTS_SOURCES}
-  ${WARFARE_WORLD_TERRAIN_SOURCES}
-  ${WARFARE_WORLD_WATER_SOURCES}
-  ${WARFARE_CORE_UIS_SOURCES}
-  ${WARFARE_POPUP_NOTICE_TEXT_SOURCES}
+  ${WARFARE_CORE_SOURCES}
   "${TARGET_CLIENT_CONFIG_HEADER}"
 )
 
+if(WIN32)
 add_executable(WarFare
   resource.h
   StdAfx.h
   WarFareMain.cpp
 )
+else()
+# POSIX entry point: SDL3 window + event loop (diagnostics-only until the
+# RHI render phases land).
+add_executable(WarFare
+  StdAfx.h
+  WarFareMainSDL.cpp
+)
+endif()
 
 source_group("Scene" FILES ${WARFARE_SCENE_SOURCES})
 source_group("Scene/Login" FILES ${WARFARE_SCENE_LOGIN_SOURCES})
@@ -366,9 +436,21 @@ target_link_libraries(WarFare.Core PUBLIC
   N3Base_client
 )
 
+# TCP transport (APISocket) runs on standalone Asio on every platform.
+target_link_libraries(WarFare.Core PRIVATE asio)
+
+if(NOT WIN32)
+  # SDL3 backs the window/input layer on POSIX platforms.
+  target_link_libraries(WarFare.Core PRIVATE SDL3::SDL3)
+endif()
+
 target_link_libraries(WarFare PRIVATE
   WarFare.Core
 )
+
+if(NOT WIN32)
+  target_link_libraries(WarFare PRIVATE SDL3::SDL3)
+endif()
 
 # Link in the libs that we use
 if(WIN32)
@@ -409,3 +491,193 @@ endif()
 add_custom_command(TARGET WarFare POST_BUILD
   COMMAND "${CMAKE_COMMAND}" -E echo "$<TARGET_FILE:WarFare> has been built"
 )
+
+if(NOT WIN32)
+  # Package the client-owned resources (docs/PORT_POSIX_PLAN.md, F8): the .cur
+  # files were embedded via Resource.rc on Windows; on POSIX they ride next to
+  # the executable and are picked up at runtime via SDL_GetBasePath (see
+  # WarFareMainSDL / SetupWindowCursor). Same list as the CURSOR entries in
+  # Resource.rc.
+  set(WARFARE_CLIENT_RESOURCES
+    Cursor_Normal.cur
+    Cursor_Click.cur
+    Cursor_Attack.cur
+    cursor_normal1.cur
+    cursor_click1.cur
+    repair0.cur
+    repair1.cur
+  )
+
+  if(APPLE)
+    # macOS: bundle metadata; resources go into Contents/Resources/ below.
+    set_target_properties(WarFare PROPERTIES
+      MACOSX_BUNDLE                    TRUE
+      MACOSX_BUNDLE_INFO_PLIST         "${CMAKE_CURRENT_SOURCE_DIR}/Info.plist.in"
+      MACOSX_BUNDLE_BUNDLE_NAME        "Knight OnLine"
+      MACOSX_BUNDLE_GUI_IDENTIFIER     "org.openko.KnightOnLine"
+      MACOSX_BUNDLE_BUNDLE_VERSION     "0.1"
+      MACOSX_BUNDLE_SHORT_VERSION_STRING "0.1"
+      MACOSX_BUNDLE_COPYRIGHT          "OpenKO contributors"
+    )
+  endif()
+
+  # Copy client-owned resources into the built binary's runtime location so
+  # they're findable without an install step:
+  #   Linux -> next to the binary
+  #   macOS -> inside the .app bundle at Contents/Resources/
+  # We use POST_BUILD instead of the MACOSX_PACKAGE_LOCATION source property
+  # because the latter needs the file to look like a "source", which .cur
+  # files don't, and it silently drops them on some CMake generators.
+  if(APPLE)
+    set(_warfare_resource_dest "$<TARGET_BUNDLE_CONTENT_DIR:WarFare>/Resources")
+    # Ensure the Resources subdirectory exists before we copy into it.
+    add_custom_command(TARGET WarFare POST_BUILD
+      COMMAND "${CMAKE_COMMAND}" -E make_directory "${_warfare_resource_dest}")
+  else()
+    set(_warfare_resource_dest "$<TARGET_FILE_DIR:WarFare>")
+  endif()
+
+  foreach(res IN LISTS WARFARE_CLIENT_RESOURCES)
+    add_custom_command(TARGET WarFare POST_BUILD
+      COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/${res}"
+        "${_warfare_resource_dest}/${res}"
+      COMMENT "Staging ${res} into ${_warfare_resource_dest}")
+  endforeach()
+
+  # User-populated game-data staging: whatever the developer drops into
+  # <repo>/assets/Client/ (Server.Ini, Data/, UI/, textures, ...) is mirrored
+  # into the runtime location on every build so the app is self-contained.
+  # copy_directory_if_different (CMake 3.26+) skips unchanged files so this
+  # stays cheap once the initial sync has run.
+  set(_warfare_game_data_src "${CMAKE_SOURCE_DIR}/assets/Client")
+  if(APPLE)
+    # macOS: land the whole thing at Contents/Resources/GameData/. The runtime
+    # discovery in WarFareMainSDL picks it up automatically (F8, --data list).
+    set(_warfare_game_data_dst "${_warfare_resource_dest}/GameData")
+  else()
+    # Linux: sit right next to the binary; CWD-launch and auto-discovery
+    # both find it there without an extra --data argument.
+    set(_warfare_game_data_dst "${_warfare_resource_dest}/GameData")
+  endif()
+  add_custom_command(TARGET WarFare POST_BUILD
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "${_warfare_game_data_src}"
+    COMMAND "${CMAKE_COMMAND}" -E copy_directory_if_different
+      "${_warfare_game_data_src}" "${_warfare_game_data_dst}"
+    COMMENT "Staging assets/Client -> ${_warfare_game_data_dst}")
+
+  if(APPLE)
+    # App icon: Info.plist references CFBundleIconFile "KnightOnLine", so the
+    # bundle needs Contents/Resources/KnightOnLine.icns.
+    #
+    # Source precedence:
+    #   1. a committed KnightOnLine.icns (used as-is)
+    #   2. AppIcon.png (a square PNG, ideally 1024x1024) -> proper multi-res
+    #      .icns via an .iconset + iconutil (the layout macOS needs for the
+    #      Dock/Finder to show it at every size)
+    #   3. WarFare_1298.ico -> single-image .icns (low-res fallback)
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/KnightOnLine.icns")
+      add_custom_command(TARGET WarFare POST_BUILD
+        COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+          "${CMAKE_CURRENT_SOURCE_DIR}/KnightOnLine.icns"
+          "${_warfare_resource_dest}/KnightOnLine.icns")
+    elseif(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/AppIcon.png")
+      find_program(SIPS_EXECUTABLE sips)
+      find_program(ICONUTIL_EXECUTABLE iconutil)
+      if(SIPS_EXECUTABLE AND ICONUTIL_EXECUTABLE)
+        # generate_macos_icon.sh center-crops the source (many portrait PNGs
+        # ship with a decorative frame baked into the pixels, which otherwise
+        # leaves the subject looking small and boxed-in once composed into a
+        # Dock icon) before building the standard 10-entry iconset.
+        add_custom_command(TARGET WarFare POST_BUILD
+          COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/generate_macos_icon.sh"
+            "${CMAKE_CURRENT_SOURCE_DIR}/AppIcon.png"
+            "${CMAKE_CURRENT_BINARY_DIR}/KnightOnLine.iconset"
+            "${_warfare_resource_dest}/KnightOnLine.icns"
+          COMMENT "Generating multi-resolution app icon from AppIcon.png")
+      else()
+        message(STATUS "OpenKO: sips/iconutil not found; the .app will use a generic icon")
+      endif()
+    else()
+      find_program(SIPS_EXECUTABLE sips)
+      if(SIPS_EXECUTABLE)
+        set(_warfare_icon_png "${CMAKE_CURRENT_BINARY_DIR}/KnightOnLine_icon.png")
+        add_custom_command(TARGET WarFare POST_BUILD
+          COMMAND "${SIPS_EXECUTABLE}" -s format png
+            "${CMAKE_CURRENT_SOURCE_DIR}/WarFare_1298.ico"
+            --out "${_warfare_icon_png}"
+          COMMAND "${SIPS_EXECUTABLE}" -s format icns
+            "${_warfare_icon_png}"
+            --out "${_warfare_resource_dest}/KnightOnLine.icns"
+          COMMENT "Generating app icon KnightOnLine.icns from WarFare_1298.ico (low-res fallback)")
+      else()
+        message(STATUS "OpenKO: sips not found; the .app will use a generic icon")
+      endif()
+    endif()
+  else()
+    # Vendored dependencies (SDL3, mpg123, ...) that link against WarFare
+    # ship next to the binary in an installed layout. Setting the install
+    # rpath to $ORIGIN keeps them findable without LD_LIBRARY_PATH.
+    # NOTE: intentionally NOT setting BUILD_WITH_INSTALL_RPATH: dev builds
+    # keep the CMake-managed build-tree rpath so ninja-built binaries can
+    # still find libjpeg/mpg123 straight from the build directory.
+    set_target_properties(WarFare PROPERTIES INSTALL_RPATH "$ORIGIN")
+
+    # A ready-to-drop-in .desktop entry for freedesktop-conformant desktops.
+    configure_file(
+      "${CMAKE_CURRENT_SOURCE_DIR}/openko-client.desktop.in"
+      "${CMAKE_CURRENT_BINARY_DIR}/openko-client.desktop"
+      @ONLY)
+  endif()
+
+  # An install rule so packagers get a sensible layout out of the box:
+  #   ${prefix}/bin/KnightOnLine          + cursors next to it on Linux
+  #   ${prefix}/Applications/KnightOnLine.app on macOS (bundle target)
+  #   ${prefix}/share/applications/openko-client.desktop on Linux
+  install(TARGETS WarFare
+    RUNTIME  DESTINATION "${OPENKO_CLIENT_INSTALL_DIR}"
+    BUNDLE   DESTINATION "${OPENKO_CLIENT_INSTALL_DIR}")
+
+  # The cursors and the run/setup note ship on every platform.
+  install(FILES ${WARFARE_CLIENT_RESOURCES}
+    DESTINATION "${OPENKO_CLIENT_INSTALL_DIR}")
+  install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/PACKAGING_README.md"
+    DESTINATION "${OPENKO_CLIENT_INSTALL_DIR}" OPTIONAL)
+
+  if(UNIX AND NOT APPLE)
+    # Linux: a freedesktop menu entry, plus the vendored shared libraries the
+    # client links but a target machine lacks (docs/PORT_POSIX_PLAN.md, Hito E):
+    # openal-soft, and libjpeg v9 (a different soname from the system's turbo
+    # libjpeg.so.8). The $ORIGIN install rpath (set above) finds them. Install
+    # both the versioned real file (TARGET_FILE, e.g. libopenal.so.1.25.0) and
+    # the soname symlink the binary links against (TARGET_SONAME_FILE, e.g.
+    # libopenal.so.1) so the symlink resolves inside the package. ("libjpeg" is
+    # an INTERFACE wrapper - cmake/FindJpeg.cmake; the real shared target on
+    # POSIX is "jpeg"; for it the two files are the same, installed once.)
+    install(FILES "${CMAKE_CURRENT_BINARY_DIR}/openko-client.desktop"
+      DESTINATION share/applications OPTIONAL)
+    install(FILES
+      "$<TARGET_FILE:OpenAL>"
+      "$<TARGET_SONAME_FILE:OpenAL>"
+      "$<TARGET_FILE:jpeg>"
+      "$<TARGET_SONAME_FILE:jpeg>"
+      DESTINATION "${OPENKO_CLIENT_INSTALL_DIR}")
+  elseif(WIN32)
+    # Windows: drop every runtime DLL the client depends on next to the .exe
+    # (SDL3, mpg123, ... - whatever is built shared; statically-linked deps such
+    # as openal-soft here contribute nothing). TARGET_RUNTIME_DLLS resolves them.
+    install(FILES $<TARGET_RUNTIME_DLLS:WarFare>
+      DESTINATION "${OPENKO_CLIENT_INSTALL_DIR}")
+  else()
+    # macOS: pull every non-system dylib the binary links (openal, libjpeg, ...)
+    # into the .app's Contents/Frameworks and rewrite the load commands so the
+    # bundle is self-contained and relocatable. BundleUtilities::fixup_bundle is
+    # the canonical tool for this. Runs at install time, after the bundle target
+    # is staged.
+    install(CODE [[
+      include(BundleUtilities)
+      set(BU_CHMOD_BUNDLE_ITEMS TRUE)
+      fixup_bundle("${CMAKE_INSTALL_PREFIX}/Applications/KnightOnLine.app" "" "")
+    ]])
+  endif()
+endif()

@@ -968,20 +968,20 @@ void CN3ShapeMgr::RenderCollision(const __Vector3& vPos)
 
 	__Matrix44 mtxWorld;
 	mtxWorld.Identity();
-	s_lpD3DDev->SetTransform(D3DTS_WORLD, mtxWorld.toD3D());
+	RHIDevice()->SetTransform(D3DTS_WORLD, mtxWorld.toD3D());
 
 	DWORD dwFillPrev = 0, dwLight = 0;
-	s_lpD3DDev->GetRenderState(D3DRS_FILLMODE, &dwFillPrev);
-	s_lpD3DDev->SetRenderState(D3DRS_FILLMODE, D3DFILL_WIREFRAME);
+	RHIDevice()->GetRenderState(D3DRS_FILLMODE, &dwFillPrev);
+	RHIDevice()->SetRenderState(D3DRS_FILLMODE, D3DFILL_WIREFRAME);
 
-	s_lpD3DDev->GetRenderState(D3DRS_LIGHTING, &dwLight);
-	s_lpD3DDev->SetRenderState(D3DRS_LIGHTING, FALSE);
+	RHIDevice()->GetRenderState(D3DRS_LIGHTING, &dwLight);
+	RHIDevice()->SetRenderState(D3DRS_LIGHTING, FALSE);
 	//	DWORD dwZ;
-	//	s_lpD3DDev->GetRenderState(D3DRS_ZENABLE, &dwZ);
-	//	s_lpD3DDev->SetRenderState(D3DRS_ZENABLE, FALSE);
-	s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
-	s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_DIFFUSE);
-	s_lpD3DDev->SetTexture(0, nullptr);
+	//	RHIDevice()->GetRenderState(D3DRS_ZENABLE, &dwZ);
+	//	RHIDevice()->SetRenderState(D3DRS_ZENABLE, FALSE);
+	RHIDevice()->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
+	RHIDevice()->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_DIFFUSE);
+	RHIDevice()->SetTexture(0, nullptr);
 
 	for (int i = 0; i < 9; i++)
 	{
@@ -1016,15 +1016,15 @@ void CN3ShapeMgr::RenderCollision(const __Vector3& vPos)
 			vNormalDir[0].color = 0xffff0000;
 			vNormalDir[1].color = 0xffffffff;
 
-			s_lpD3DDev->SetFVF(FVF_CV);
-			s_lpD3DDev->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, 1, vCols, sizeof(__VertexColor));
-			s_lpD3DDev->DrawPrimitiveUP(D3DPT_LINESTRIP, 1, vNormalDir, sizeof(__VertexColor));
+			RHIDevice()->SetFVF(FVF_CV);
+			RHIDevice()->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, 1, vCols, sizeof(__VertexColor));
+			RHIDevice()->DrawPrimitiveUP(D3DPT_LINESTRIP, 1, vNormalDir, sizeof(__VertexColor));
 		}
 	}
 
-	s_lpD3DDev->SetRenderState(D3DRS_FILLMODE, dwFillPrev);
-	s_lpD3DDev->SetRenderState(D3DRS_LIGHTING, dwLight);
-	//	s_lpD3DDev->SetRenderState(D3DRS_ZENABLE, dwZ);
+	RHIDevice()->SetRenderState(D3DRS_FILLMODE, dwFillPrev);
+	RHIDevice()->SetRenderState(D3DRS_LIGHTING, dwLight);
+	//	RHIDevice()->SetRenderState(D3DRS_ZENABLE, dwZ);
 }
 #endif // end of #ifndef _3DSERVER
 

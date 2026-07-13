@@ -181,8 +181,8 @@ void CN3TexViewerDoc::LoadSelectedTexture()
 	{
 		LPDIRECT3DSURFACE9 lpSurf = nullptr, lpSurf2 = nullptr;
 
-		m_pTexAlpha->Get()->GetSurfaceLevel(0, &lpSurf);
-		m_pTex->Get()->GetSurfaceLevel(0, &lpSurf2);
+		m_pTexAlpha->GetRawD3D()->GetSurfaceLevel(0, &lpSurf);
+		m_pTex->GetRawD3D()->GetSurfaceLevel(0, &lpSurf2);
 		::D3DXLoadSurfaceFromSurface(
 			lpSurf, nullptr, nullptr, lpSurf2, nullptr, nullptr, D3DX_FILTER_TRIANGLE, 0);
 		lpSurf2->Release();

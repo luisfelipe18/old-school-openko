@@ -775,7 +775,7 @@ void CQTNode::RenderMaxLevel()
 			&& m_pRefTerrain->GetTileTex(t1)
 			&& (m_pRefTerrain->m_ppMapData[tx][tz].DTexInfo1.Attr.Attr == DTEX_FULL
 				|| m_pRefTerrain->m_ppMapData[tx][tz].DTexInfo2.Attr.Group > 0))
-			hr = m_pRefTerrain->s_lpD3DDev->SetTexture(0, m_pRefTerrain->GetTileTex(t1)->Get());
+			hr = m_pRefTerrain->s_lpD3DDev->SetTexture(0, m_pRefTerrain->GetTileTex(t1)->GetRawD3D());
 		else
 		{
 			int ctx = tx
@@ -787,13 +787,13 @@ void CQTNode::RenderMaxLevel()
 			//int ctx = (tx * TERRAIN_CELL_SIZE) / (m_pRefTerrain->m_iColorMapTexSize * m_pRefTerrain->m_iColorMapPixelPerUnitDistance);
 			//int ctz = (tz * TERRAIN_CELL_SIZE) / (m_pRefTerrain->m_iColorMapTexSize * m_pRefTerrain->m_iColorMapPixelPerUnitDistance);
 			hr = m_pRefTerrain->s_lpD3DDev->SetTexture(
-				0, m_pRefTerrain->m_pColorTexture[ctx][ctz].Get());
+				0, m_pRefTerrain->m_pColorTexture[ctx][ctz].GetRawD3D());
 			COP2 = D3DTOP_DISABLE;
 		}
 
 		if (m_pRefTerrain->m_ppMapData[tx][tz].DTexInfo2.Attr.Group > 0
 			&& m_pRefTerrain->GetTileTex(t2))
-			hr = m_pRefTerrain->s_lpD3DDev->SetTexture(1, m_pRefTerrain->GetTileTex(t2)->Get());
+			hr = m_pRefTerrain->s_lpD3DDev->SetTexture(1, m_pRefTerrain->GetTileTex(t2)->GetRawD3D());
 		//else hr = m_pRefTerrain->s_lpD3DDev->SetTexture( 1, nullptr);
 		else
 		{
@@ -888,7 +888,7 @@ void CQTNode::RenderMaxLevel()
 
 	for (i = 0; i < NumLightMapUse; i++)
 	{
-		m_pRefTerrain->s_lpD3DDev->SetTexture(0, pRefLightMapTex[i]->Get());
+		m_pRefTerrain->s_lpD3DDev->SetTexture(0, pRefLightMapTex[i]->GetRawD3D());
 		hr = m_pRefTerrain->s_lpD3DDev->DrawPrimitive(D3DPT_TRIANGLEFAN, (i << 2), 2);
 	}
 	//
@@ -1226,7 +1226,7 @@ void CQTNode::RenderNormalLevel()
 	tz = m_CenterZ
 		 / (m_pRefTerrain->m_iColorMapTexSize / m_pRefTerrain->m_iColorMapPixelPerUnitDistance);
 
-	hr = m_pRefTerrain->s_lpD3DDev->SetTexture(0, m_pRefTerrain->m_pColorTexture[tx][tz].Get());
+	hr = m_pRefTerrain->s_lpD3DDev->SetTexture(0, m_pRefTerrain->m_pColorTexture[tx][tz].GetRawD3D());
 
 	hr = m_pRefTerrain->s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_MODULATE);
 

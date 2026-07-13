@@ -3,6 +3,10 @@
 //////////////////////////////////////////////////////////////////////
 
 #include "StdAfxBase.h"
+
+#ifndef _WIN32
+#include <Platform/PlatformString.h>
+#endif
 #include "N3UIBase.h"
 #include "N3UIButton.h"
 #include "N3UIProgress.h"
@@ -225,7 +229,7 @@ bool CN3UIBase::ReceiveMessage(CN3UIBase* pSender, uint32_t dwMsg) // 메시지�
 	return true;
 }
 
-void CN3UIBase::CallBackProc(int iID, uint32_t dwFlag)
+void CN3UIBase::CallBackProc(int /*iID*/, uint32_t /*dwFlag*/)
 {
 }
 

@@ -4,15 +4,19 @@
 #include "StdAfxBase.h"
 #include "DFont.h"
 
+#ifdef _WIN32
 const int MAX_NUM_VERTICES   = 50 * 6;
 const float Z_DEFAULT        = 0.9f;
 const float RHW_DEFAULT      = 1.0f;
+#endif
 //////////////////////////////////////////////////////////////////////
 // Construction/Destruction
 //////////////////////////////////////////////////////////////////////
 HDC CDFont::s_hDC            = nullptr;
 int CDFont::s_iInstanceCount = 0;
 HFONT CDFont::s_hFontOld     = nullptr;
+
+#ifdef _WIN32
 
 CDFont::CDFont(const std::string& szFontName, uint32_t dwHeight, uint32_t dwFlags)
 {
@@ -410,6 +414,11 @@ void CDFont::Make2DVertex(const int iFontHeight, const std::string& szText)
 	if (szText.empty())
 		return;
 
+	// D3D9's -0.5 half-pixel offset; GL/SDL_GPU map integer coords to pixel
+	// centres already (see IRHIDevice::NeedsHalfPixelOffset). Kept consistent
+	// with N3UIImage so text stays aligned to its backgrounds on every backend.
+	const float fHP = (RHIDevice() != nullptr && RHIDevice()->NeedsHalfPixelOffset()) ? 0.5f : 0.0f;
+
 	int iStrLen                    = static_cast<int>(szText.size());
 
 	// lock vertex buffer
@@ -453,10 +462,10 @@ void CDFont::Make2DVertex(const int iFontHeight, const std::string& szText)
 				if (dwNumTriangles + 2 >= MAX_NUM_VERTICES)
 					break;
 
-				FLOAT fLeft   = vtx_sx + 0 - 0.5f;
-				FLOAT fRight  = vtx_sx + w - 0.5f;
-				FLOAT fTop    = vtx_sy + 0 - 0.5f;
-				FLOAT fBottom = vtx_sy + h - 0.5f;
+				FLOAT fLeft   = vtx_sx + 0 - fHP;
+				FLOAT fRight  = vtx_sx + w - fHP;
+				FLOAT fTop    = vtx_sy + 0 - fHP;
+				FLOAT fBottom = vtx_sy + h - fHP;
 				pVertices->Set(fLeft, fBottom, Z_DEFAULT, RHW_DEFAULT, dwColor, tx1, ty2);
 				++pVertices;
 				pVertices->Set(fLeft, fTop, Z_DEFAULT, RHW_DEFAULT, dwColor, tx1, ty1);
@@ -515,10 +524,10 @@ void CDFont::Make2DVertex(const int iFontHeight, const std::string& szText)
 				if (dwNumTriangles + 2 >= MAX_NUM_VERTICES)
 					break;
 
-				FLOAT fLeft   = vtx_sx + 0 - 0.5f;
-				FLOAT fRight  = vtx_sx + w - 0.5f;
-				FLOAT fTop    = vtx_sy + 0 - 0.5f;
-				FLOAT fBottom = vtx_sy + h - 0.5f;
+				FLOAT fLeft   = vtx_sx + 0 - fHP;
+				FLOAT fRight  = vtx_sx + w - fHP;
+				FLOAT fTop    = vtx_sy + 0 - fHP;
+				FLOAT fBottom = vtx_sy + h - fHP;
 				pVertices->Set(fLeft, fBottom, Z_DEFAULT, RHW_DEFAULT, dwColor, tx1, ty2);
 				++pVertices;
 				pVertices->Set(fLeft, fTop, Z_DEFAULT, RHW_DEFAULT, dwColor, tx1, ty1);
@@ -569,10 +578,10 @@ void CDFont::Make2DVertex(const int iFontHeight, const std::string& szText)
 
 		__ASSERT(dwNumTriangles + 2 < MAX_NUM_VERTICES, "??"); // Vertex buffer가 모자란다.
 
-		FLOAT fLeft   = vtx_sx + 0 - 0.5f;
-		FLOAT fRight  = vtx_sx + w - 0.5f;
-		FLOAT fTop    = vtx_sy + 0 - 0.5f;
-		FLOAT fBottom = vtx_sy + h - 0.5f;
+		FLOAT fLeft   = vtx_sx + 0 - fHP;
+		FLOAT fRight  = vtx_sx + w - fHP;
+		FLOAT fTop    = vtx_sy + 0 - fHP;
+		FLOAT fBottom = vtx_sy + h - fHP;
 		pVertices->Set(fLeft, fBottom, Z_DEFAULT, RHW_DEFAULT, dwColor, tx1, ty2);
 		++pVertices;
 		pVertices->Set(fLeft, fTop, Z_DEFAULT, RHW_DEFAULT, dwColor, tx1, ty1);
@@ -799,3 +808,753 @@ HRESULT CDFont::SetFontColor(uint32_t dwColor)
 
 	return S_OK;
 }
+
+#else // _WIN32 --------------------------------------------------------------
+
+// POSIX text backend (docs/PORT_POSIX_PLAN.md, T7.1): FreeType replaces the
+// GDI rasterizer with the same design - SetText renders the whole string into
+// a per-instance A4R4G4B4 texture (through the RHI) and builds one XYZRHW quad
+// per texture-row run; DrawText translates/tints those quads and draws them
+// with alpha blending. Game strings arrive in CP949 and are converted to
+// Unicode codepoints at this boundary (PlatformEncoding).
+
+#include "RHI/RHIDevice.h"
+#include "RHI/RHITextures.h"
+
+#include <Platform/PlatformEncoding.h>
+
+#include <spdlog/spdlog.h>
+
+#include <ft2build.h>
+#include FT_FREETYPE_H
+
+#include <algorithm>
+#include <cctype>
+#include <filesystem>
+#include <vector>
+
+namespace
+{
+constexpr float Z_DEFAULT   = 0.9f;
+constexpr float RHW_DEFAULT = 1.0f;
+
+// One shared FreeType library + face for every CDFont instance (the game only
+// ever asks for "굴림"/Gulim variants); refcounted through s_iInstanceCount
+// like the shared GDI DC on Windows. The face is re-sized per operation.
+FT_Library s_ftLibrary   = nullptr;
+FT_Face s_ftFace         = nullptr;
+bool s_bFontPathResolved = false;
+
+// The classic GDI default the Windows path effectively renders at.
+constexpr uint32_t FONT_DPI = 96;
+
+std::string ResolveFontFile()
+{
+	namespace fs = std::filesystem;
+	std::error_code ec;
+
+	// A Fonts/ directory next to the game data always wins, so users can drop
+	// in the exact face they want (e.g. a real Gulim or Noto Sans KR).
+	const fs::path fontsDir = fs::path(CN3Base::PathGet()) / "Fonts";
+	std::vector<fs::path> candidates;
+	if (fs::is_directory(fontsDir, ec))
+	{
+		for (const auto& entry : fs::directory_iterator(fontsDir, ec))
+		{
+			std::string ext = entry.path().extension().string();
+			std::transform(ext.begin(), ext.end(), ext.begin(),
+				[](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+			if (ext == ".ttf" || ext == ".otf" || ext == ".ttc")
+				candidates.push_back(entry.path());
+		}
+		std::sort(candidates.begin(), candidates.end());
+		if (!candidates.empty())
+			return candidates.front().string();
+	}
+
+	// System fonts with Hangul coverage first (the game is Korean at heart),
+	// then common Latin fallbacks so text still shows without CJK fonts.
+	static const char* SYSTEM_FONTS[] = {
+		// macOS
+		"/System/Library/Fonts/AppleSDGothicNeo.ttc",
+		"/System/Library/Fonts/Supplemental/AppleGothic.ttf",
+		"/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+		"/System/Library/Fonts/Helvetica.ttc",
+		// Linux
+		"/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+		"/usr/share/fonts/opentype/noto/NotoSansCJK.ttc",
+		"/usr/share/fonts/truetype/noto/NotoSansKR-Regular.ttf",
+		"/usr/share/fonts/truetype/nanum/NanumGothic.ttf",
+		"/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+		"/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+		"/usr/share/fonts/TTF/DejaVuSans.ttf",
+	};
+
+	for (const char* szPath : SYSTEM_FONTS)
+	{
+		if (fs::exists(szPath, ec))
+			return szPath;
+	}
+
+	return {};
+}
+
+// Lazily creates the shared face; returns nullptr when no usable font exists
+// (text simply stays invisible, like the T6.8 stub did).
+FT_Face SharedFace()
+{
+	if (s_ftFace != nullptr)
+		return s_ftFace;
+	if (s_ftLibrary == nullptr || s_bFontPathResolved) // resolved and failed
+		return nullptr;
+
+	s_bFontPathResolved      = true;
+
+	const std::string szPath = ResolveFontFile();
+	if (szPath.empty())
+	{
+		spdlog::warn("DFont: no usable font found; text will not render. "
+					 "Drop a .ttf into '{}Fonts/' to fix this.",
+			CN3Base::PathGet());
+		return nullptr;
+	}
+
+	if (FT_New_Face(s_ftLibrary, szPath.c_str(), 0, &s_ftFace) != 0)
+	{
+		spdlog::warn("DFont: FreeType could not open '{}'; text will not render.", szPath);
+		s_ftFace = nullptr;
+		return nullptr;
+	}
+
+	spdlog::info("DFont: using font '{}'", szPath);
+	return s_ftFace;
+}
+
+// Points -> pixels at the fixed 96 DPI the Windows path uses (MulDiv(h,96,72)).
+FT_Face SizedFace(uint32_t dwFontHeight)
+{
+	FT_Face pFace = SharedFace();
+	if (pFace == nullptr || dwFontHeight == 0)
+		return nullptr;
+
+	if (FT_Set_Char_Size(pFace, 0, static_cast<FT_F26Dot6>(dwFontHeight) * 64, FONT_DPI, FONT_DPI)
+		!= 0)
+		return nullptr;
+
+	return pFace;
+}
+
+int LineHeight(FT_Face pFace)
+{
+	return static_cast<int>((pFace->size->metrics.ascender - pFace->size->metrics.descender + 63)
+							>> 6);
+}
+
+// Decode game text to Unicode codepoints, preserving '\n'. On POSIX text
+// reaches DFont from two sources - UTF-8 (the edit buffer and network-facing
+// UI strings after NetToLocal, docs/PORT_POSIX_PLAN.md T7.3) and CP949
+// (asset strings loaded straight off disk). We validate as UTF-8 first and
+// only fall back to CP949->UTF-8, so a CP949 byte that happens to look like
+// a UTF-8 lead byte doesn't get misdecoded when the payload is really UTF-8.
+std::u32string DecodeGameText(std::string_view szText)
+{
+	if (szText.empty())
+		return {};
+
+	bool bAscii = true;
+	for (const char c : szText)
+	{
+		if (static_cast<unsigned char>(c) & 0x80)
+		{
+			bAscii = false;
+			break;
+		}
+	}
+
+	std::u32string codepoints;
+	if (bAscii)
+	{
+		codepoints.assign(szText.begin(), szText.end());
+		return codepoints;
+	}
+
+	// Structural UTF-8 validation: every multi-byte lead is followed by the
+	// right number of 10xxxxxx continuation bytes, and no overlong 2-byte
+	// sequence. Cheap enough to run every SetText - a hit means we can skip
+	// the iconv round-trip entirely.
+	auto IsValidUtf8 = [](std::string_view sv) -> bool {
+		for (size_t i = 0; i < sv.size();)
+		{
+			const auto b0 = static_cast<unsigned char>(sv[i]);
+			size_t len    = 1;
+			if (b0 < 0x80)
+			{
+				++i;
+				continue;
+			}
+			else if ((b0 & 0xE0) == 0xC0)
+				len = 2;
+			else if ((b0 & 0xF0) == 0xE0)
+				len = 3;
+			else if ((b0 & 0xF8) == 0xF0)
+				len = 4;
+			else
+				return false;
+
+			if (i + len > sv.size())
+				return false;
+			for (size_t k = 1; k < len; ++k)
+			{
+				if ((static_cast<unsigned char>(sv[i + k]) & 0xC0) != 0x80)
+					return false;
+			}
+			if (len == 2 && b0 < 0xC2)
+				return false; // overlong
+			i += len;
+		}
+		return true;
+	};
+
+	std::string_view utf8View;
+	std::string utf8Storage;
+	if (IsValidUtf8(szText))
+	{
+		utf8View = szText; // already UTF-8 (UI/chat/edit buffer)
+	}
+	else
+	{
+		// Likely CP949 (asset). Convert; Latin-1 byte-cast is the final
+		// fallback so a mis-encoded legacy asset still shows something.
+		utf8Storage = Cp949ToUtf8(szText);
+		if (utf8Storage.empty())
+		{
+			codepoints.reserve(szText.size());
+			for (const char c : szText)
+				codepoints.push_back(static_cast<unsigned char>(c));
+			return codepoints;
+		}
+		utf8View = utf8Storage;
+	}
+
+	// Minimal UTF-8 decode; the input is guaranteed well-formed by the
+	// checks above (or by Cp949ToUtf8, which drops invalid sequences).
+	codepoints.reserve(utf8View.size());
+	for (size_t i = 0; i < utf8View.size();)
+	{
+		const auto b0 = static_cast<unsigned char>(utf8View[i]);
+		char32_t cp   = 0;
+		size_t len    = 1;
+		if (b0 < 0x80)
+		{
+			cp = b0;
+		}
+		else if ((b0 & 0xE0) == 0xC0 && i + 1 < utf8View.size())
+		{
+			cp  = static_cast<char32_t>(b0 & 0x1F);
+			len = 2;
+		}
+		else if ((b0 & 0xF0) == 0xE0 && i + 2 < utf8View.size())
+		{
+			cp  = static_cast<char32_t>(b0 & 0x0F);
+			len = 3;
+		}
+		else if ((b0 & 0xF8) == 0xF0 && i + 3 < utf8View.size())
+		{
+			cp  = static_cast<char32_t>(b0 & 0x07);
+			len = 4;
+		}
+		else
+		{
+			++i;
+			continue;
+		}
+
+		for (size_t k = 1; k < len; ++k)
+			cp = (cp << 6) | (static_cast<unsigned char>(utf8View[i + k]) & 0x3F);
+
+		codepoints.push_back(cp);
+		i += len;
+	}
+
+	return codepoints;
+}
+
+int GlyphAdvance(FT_Face pFace, char32_t cp)
+{
+	if (FT_Load_Char(pFace, cp, FT_LOAD_DEFAULT) != 0)
+		return 0;
+	return static_cast<int>(pFace->glyph->advance.x >> 6);
+}
+
+// Extent of the text as one line with '\n' stripped - the exact measure GDI's
+// GetTextExtentPoint32 gave SetText for picking the texture size.
+SIZE MeasureStripped(FT_Face pFace, const std::u32string& codepoints)
+{
+	SIZE size = { 0, LineHeight(pFace) };
+	for (const char32_t cp : codepoints)
+	{
+		if (cp != U'\n')
+			size.cx += GlyphAdvance(pFace, cp);
+	}
+	return size;
+}
+} // namespace
+
+bool CDFont::HasUsableFont()
+{
+	// The shared library normally lives between the first CDFont ctor and the
+	// last dtor; bring it up temporarily if asked before any instance exists.
+	const bool bTempLib = (s_ftLibrary == nullptr);
+	if (bTempLib && FT_Init_FreeType(&s_ftLibrary) != 0)
+	{
+		s_ftLibrary = nullptr;
+		return false;
+	}
+
+	const bool bUsable = (SharedFace() != nullptr);
+
+	if (bTempLib && s_iInstanceCount == 0)
+	{
+		if (s_ftFace != nullptr)
+		{
+			FT_Done_Face(s_ftFace);
+			s_ftFace = nullptr;
+		}
+		FT_Done_FreeType(s_ftLibrary);
+		s_ftLibrary         = nullptr;
+		s_bFontPathResolved = false;
+	}
+
+	return bUsable;
+}
+
+CDFont::CDFont(const std::string& szFontName, uint32_t dwHeight, uint32_t dwFlags)
+	: m_szFontName(szFontName), m_dwFontHeight(dwHeight), m_dwFontFlags(dwFlags),
+	  m_pd3dDevice(nullptr), m_pTexture(nullptr), m_dwTexWidth(0), m_dwTexHeight(0),
+	  m_fTextScale(1.0f), m_hFont(nullptr), m_iPrimitiveCount(0), m_dwFontColor(0xffffffff)
+{
+	if (0 == s_iInstanceCount)
+	{
+		if (FT_Init_FreeType(&s_ftLibrary) != 0)
+		{
+			spdlog::warn("DFont: FT_Init_FreeType failed; text will not render");
+			s_ftLibrary = nullptr;
+		}
+	}
+	++s_iInstanceCount;
+
+	m_PrevLeftTop.Set(0.0f, 0.0f);
+	m_Size.cx = m_Size.cy = 0;
+}
+
+CDFont::~CDFont()
+{
+	InvalidateDeviceObjects();
+	DeleteDeviceObjects();
+
+	--s_iInstanceCount;
+	if (s_iInstanceCount <= 0)
+	{
+		if (s_ftFace != nullptr)
+		{
+			FT_Done_Face(s_ftFace);
+			s_ftFace = nullptr;
+		}
+		if (s_ftLibrary != nullptr)
+		{
+			FT_Done_FreeType(s_ftLibrary);
+			s_ftLibrary = nullptr;
+		}
+		s_bFontPathResolved = false;
+	}
+}
+
+HRESULT CDFont::SetFont(const std::string& szFontName, uint32_t dwHeight, uint32_t dwFlags)
+{
+	// One shared face backs every requested family; bold/italic synthesis is
+	// still TODO (the login UI does not use it).
+	m_szFontName   = szFontName;
+	m_dwFontHeight = dwHeight;
+	m_dwFontFlags  = dwFlags;
+	return S_OK;
+}
+
+HRESULT CDFont::InitDeviceObjects(LPDIRECT3DDEVICE9 pd3dDevice)
+{
+	m_pd3dDevice = pd3dDevice; // legacy handle; rendering goes through RHIDevice()
+	m_fTextScale = 1.0f;
+	return S_OK;
+}
+
+HRESULT CDFont::RestoreDeviceObjects()
+{
+	// The quads live in m_Vertices (system memory), so unlike the Windows
+	// path there is no vertex buffer to (re)create here.
+	m_iPrimitiveCount = 0;
+	return S_OK;
+}
+
+HRESULT CDFont::InvalidateDeviceObjects()
+{
+	m_Vertices.clear();
+	m_iPrimitiveCount = 0;
+	return S_OK;
+}
+
+HRESULT CDFont::DeleteDeviceObjects()
+{
+	if (m_pTexture != nullptr)
+	{
+		m_pTexture->Release();
+		m_pTexture = nullptr;
+	}
+	m_pd3dDevice = nullptr;
+	return S_OK;
+}
+
+HRESULT CDFont::SetText(const std::string& szText, uint32_t dwFlags)
+{
+	if (szText.empty())
+	{
+		m_iPrimitiveCount = 0;
+		m_Vertices.clear();
+		if (m_pTexture != nullptr)
+		{
+			m_pTexture->Release();
+			m_pTexture = nullptr;
+		}
+		return S_OK;
+	}
+
+	FT_Face pFace = SizedFace(m_dwFontHeight);
+	if (pFace == nullptr || RHIDevice() == nullptr)
+		return E_FAIL;
+
+	const std::u32string codepoints = DecodeGameText(szText);
+	if (codepoints.empty())
+		return E_FAIL;
+
+	// Texture size selection - same heuristic as the GDI path: smallest square
+	// from 32..2048 whose area fits the one-line extent with a safety margin
+	// of half a CJK cell plus one line.
+	const SIZE size = MeasureStripped(pFace, codepoints);
+	if (size.cx <= 0 || size.cy <= 0)
+		return E_FAIL;
+
+	const int iExtent  = size.cx * size.cy;
+
+	int iHalfCJK       = GlyphAdvance(pFace, U'진');
+	if (iHalfCJK <= 0)
+		iHalfCJK = size.cy;
+	iHalfCJK           = iHalfCJK / 2 + (iHalfCJK % 2);
+
+	const int iTexSizes[7] = { 32, 64, 128, 256, 512, 1024, 2048 };
+	m_dwTexWidth = m_dwTexHeight = iTexSizes[6];
+	for (const int iTexSize : iTexSizes)
+	{
+		if (iExtent <= (iTexSize - iHalfCJK - size.cy - 1) * iTexSize)
+		{
+			m_dwTexWidth = m_dwTexHeight = iTexSize;
+			break;
+		}
+	}
+	m_fTextScale = 1.0f; // s_DevCaps.MaxTextureWidth (4096) always fits 2048
+
+	// Recreate the texture only when the required size changed.
+	if (m_pTexture != nullptr)
+	{
+		D3DSURFACE_DESC sd {};
+		m_pTexture->GetLevelDesc(0, &sd);
+		if (sd.Width != m_dwTexWidth)
+		{
+			m_pTexture->Release();
+			m_pTexture = nullptr;
+		}
+	}
+
+	if (m_pTexture == nullptr)
+	{
+		const HRESULT hr = RHIDevice()->CreateTexture(m_dwTexWidth, m_dwTexHeight, 1, 0,
+			D3DFMT_A4R4G4B4, D3DPOOL_MANAGED, &m_pTexture);
+		if (FAILED(hr))
+			return hr;
+	}
+
+	// Layout + rasterize in one pass. The pen (x, y) walks the texture as a
+	// running strip that wraps at the right edge; the quad cursor (vtx_sx,
+	// vtx_sy) walks the screen, advancing lines only at '\n'. Identical to
+	// the GDI Make2DVertex flow.
+	const int iLineHeight = size.cy;
+	const int iAscender   = static_cast<int>((pFace->size->metrics.ascender + 63) >> 6);
+
+	std::vector<uint8_t> alphaMap(static_cast<size_t>(m_dwTexWidth) * m_dwTexHeight, 0);
+
+	m_Vertices.clear();
+	uint32_t dwNumTriangles = 0;
+	uint32_t sx = 0, x = 0, y = 0;
+	float vtx_sx = 0.0f, vtx_sy = 0.0f;
+	float fMaxX = 0.0f, fMaxY = 0.0f;
+	const uint32_t dwColor = 0xffffffff;
+	m_dwFontColor          = dwColor;
+
+	// Emits the quad for the [sx, x) run of the current texture row and
+	// returns its screen width.
+	const auto EmitRun     = [&]() -> float {
+		if (sx == x)
+			return 0.0f;
+
+		const float tx1     = static_cast<float>(sx) / m_dwTexWidth;
+		const float ty1     = static_cast<float>(y) / m_dwTexHeight;
+		const float tx2     = static_cast<float>(x) / m_dwTexWidth;
+		const float ty2     = static_cast<float>(y + iLineHeight) / m_dwTexHeight;
+
+		const float w       = (tx2 - tx1) * m_dwTexWidth;
+		const float h       = (ty2 - ty1) * m_dwTexHeight;
+
+		// D3D9-only half-pixel offset (see IRHIDevice::NeedsHalfPixelOffset).
+		const float fHP     = (RHIDevice() != nullptr && RHIDevice()->NeedsHalfPixelOffset()) ? 0.5f : 0.0f;
+		const float fLeft   = vtx_sx + 0 - fHP;
+		const float fRight  = vtx_sx + w - fHP;
+		const float fTop    = vtx_sy + 0 - fHP;
+		const float fBottom = vtx_sy + h - fHP;
+
+		__VertexTransformed v {};
+		v.Set(fLeft, fBottom, Z_DEFAULT, RHW_DEFAULT, dwColor, tx1, ty2);
+		m_Vertices.push_back(v);
+		v.Set(fLeft, fTop, Z_DEFAULT, RHW_DEFAULT, dwColor, tx1, ty1);
+		m_Vertices.push_back(v);
+		v.Set(fRight, fBottom, Z_DEFAULT, RHW_DEFAULT, dwColor, tx2, ty2);
+		m_Vertices.push_back(v);
+		v.Set(fRight, fTop, Z_DEFAULT, RHW_DEFAULT, dwColor, tx2, ty1);
+		m_Vertices.push_back(v);
+		v.Set(fRight, fBottom, Z_DEFAULT, RHW_DEFAULT, dwColor, tx2, ty2);
+		m_Vertices.push_back(v);
+		v.Set(fLeft, fTop, Z_DEFAULT, RHW_DEFAULT, dwColor, tx1, ty1);
+		m_Vertices.push_back(v);
+
+		dwNumTriangles += 2;
+		fMaxX           = std::max(fMaxX, fRight);
+		fMaxY           = std::max(fMaxY, fBottom);
+		return w;
+	};
+
+	for (const char32_t cp : codepoints)
+	{
+		if (cp == U'\n')
+		{
+			EmitRun();
+			sx     = x;
+			vtx_sx = 0.0f;
+			vtx_sy += static_cast<float>(iLineHeight);
+			continue;
+		}
+
+		const int iAdvance = GlyphAdvance(pFace, cp);
+		if (x + iAdvance > m_dwTexWidth)
+		{
+			// Close the run and wrap the pen to the next texture row; the
+			// text continues on the same visual line.
+			if (sx != x)
+				vtx_sx += EmitRun();
+			x  = sx = 0;
+			y += iLineHeight;
+			if (y + iLineHeight > m_dwTexHeight)
+				break; // texture full; clip the rest (GDI clipped likewise)
+		}
+
+		// Rasterize the glyph at the pen, clipped to the texture.
+		if (FT_Load_Char(pFace, cp, FT_LOAD_RENDER) == 0)
+		{
+			const FT_GlyphSlot pGlyph = pFace->glyph;
+			const FT_Bitmap& bitmap   = pGlyph->bitmap;
+			const int iLeft           = static_cast<int>(x) + pGlyph->bitmap_left;
+			const int iTop            = static_cast<int>(y) + iAscender - pGlyph->bitmap_top;
+
+			for (unsigned int row = 0; row < bitmap.rows; ++row)
+			{
+				const int iDstY = iTop + static_cast<int>(row);
+				if (iDstY < 0 || iDstY >= static_cast<int>(m_dwTexHeight))
+					continue;
+				for (unsigned int col = 0; col < bitmap.width; ++col)
+				{
+					const int iDstX = iLeft + static_cast<int>(col);
+					if (iDstX < 0 || iDstX >= static_cast<int>(m_dwTexWidth))
+						continue;
+					const uint8_t byAlpha = bitmap.buffer[row * bitmap.pitch + col];
+					uint8_t& byDst = alphaMap[static_cast<size_t>(iDstY) * m_dwTexWidth + iDstX];
+					byDst          = std::max(byDst, byAlpha);
+				}
+			}
+		}
+
+		x += iAdvance;
+	}
+	EmitRun();
+
+	// Upload: 4-bit alpha, white RGB - the exact A4R4G4B4 packing GDI used.
+	D3DLOCKED_RECT lr {};
+	if (SUCCEEDED(m_pTexture->LockRect(0, &lr, nullptr, 0)))
+	{
+		for (uint32_t row = 0; row < m_dwTexHeight; ++row)
+		{
+			auto* pDst16 = reinterpret_cast<uint16_t*>(static_cast<uint8_t*>(lr.pBits)
+													   + static_cast<size_t>(row) * lr.Pitch);
+			for (uint32_t col = 0; col < m_dwTexWidth; ++col)
+			{
+				const uint8_t byAlpha = alphaMap[static_cast<size_t>(row) * m_dwTexWidth + col]
+										>> 4;
+				pDst16[col] = (byAlpha > 0) ? static_cast<uint16_t>((byAlpha << 12) | 0x0fff)
+											: static_cast<uint16_t>(0);
+			}
+		}
+		m_pTexture->UnlockRect(0);
+	}
+
+	(void) dwFlags; // FILTERED only changes the sampler filter in DrawText
+
+	m_iPrimitiveCount = dwNumTriangles;
+	m_PrevLeftTop     = {};
+	m_Size.cx         = static_cast<long>(fMaxX);
+	m_Size.cy         = static_cast<long>(fMaxY);
+
+	return S_OK;
+}
+
+void CDFont::Make2DVertex(const int /*iFontHeight*/, const std::string& /*szText*/)
+{
+	// Folded into SetText on POSIX (layout and rasterization share one pass).
+}
+
+HRESULT CDFont::DrawText(FLOAT sx, FLOAT sy, uint32_t dwColor, uint32_t dwFlags)
+{
+	if (m_iPrimitiveCount <= 0)
+		return S_OK;
+
+	IRHIDevice* pDevice = RHIDevice();
+	if (pDevice == nullptr || m_pTexture == nullptr || m_Vertices.empty())
+		return E_FAIL;
+
+	// Translate/tint the cached quads only when something changed.
+	const __Vector2 vDiff = __Vector2(sx, sy) - m_PrevLeftTop;
+	if (fabs(vDiff.x) > 0.5f || fabs(vDiff.y) > 0.5f || dwColor != m_dwFontColor)
+	{
+		if (fabs(vDiff.x) > 0.5f)
+		{
+			m_PrevLeftTop.x = sx;
+			for (__VertexTransformed& v : m_Vertices)
+				v.x += vDiff.x;
+		}
+
+		if (fabs(vDiff.y) > 0.5f)
+		{
+			m_PrevLeftTop.y = sy;
+			for (__VertexTransformed& v : m_Vertices)
+				v.y += vDiff.y;
+		}
+
+		if (dwColor != m_dwFontColor)
+		{
+			m_dwFontColor = dwColor;
+			for (__VertexTransformed& v : m_Vertices)
+				v.color = m_dwFontColor;
+		}
+	}
+
+	// Back up, set, draw, restore - the same render-state footprint as the
+	// Windows DrawText (alpha blend over, no Z, no fog, modulate stage 0).
+	DWORD dwAlphaBlend = 0, dwSrcBlend = 0, dwDestBlend = 0, dwZEnable = 0, dwFog = 0;
+	DWORD dwColorOp = 0, dwColorArg1 = 0, dwColorArg2 = 0, dwAlphaOp = 0, dwAlphaArg1 = 0,
+		  dwAlphaArg2 = 0, dwMinFilter = 0, dwMagFilter = 0;
+
+	pDevice->GetRenderState(D3DRS_ALPHABLENDENABLE, &dwAlphaBlend);
+	pDevice->GetRenderState(D3DRS_SRCBLEND, &dwSrcBlend);
+	pDevice->GetRenderState(D3DRS_DESTBLEND, &dwDestBlend);
+	pDevice->GetRenderState(D3DRS_ZENABLE, &dwZEnable);
+	pDevice->GetRenderState(D3DRS_FOGENABLE, &dwFog);
+
+	pDevice->GetTextureStageState(0, D3DTSS_COLOROP, &dwColorOp);
+	pDevice->GetTextureStageState(0, D3DTSS_COLORARG1, &dwColorArg1);
+	pDevice->GetTextureStageState(0, D3DTSS_COLORARG2, &dwColorArg2);
+	pDevice->GetTextureStageState(0, D3DTSS_ALPHAOP, &dwAlphaOp);
+	pDevice->GetTextureStageState(0, D3DTSS_ALPHAARG1, &dwAlphaArg1);
+	pDevice->GetTextureStageState(0, D3DTSS_ALPHAARG2, &dwAlphaArg2);
+	pDevice->GetSamplerState(0, D3DSAMP_MINFILTER, &dwMinFilter);
+	pDevice->GetSamplerState(0, D3DSAMP_MAGFILTER, &dwMagFilter);
+
+	pDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+	pDevice->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
+	pDevice->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+	pDevice->SetRenderState(D3DRS_ZENABLE, D3DZB_FALSE);
+	pDevice->SetRenderState(D3DRS_FOGENABLE, FALSE);
+	pDevice->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_MODULATE);
+	pDevice->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TEXTURE);
+	pDevice->SetTextureStageState(0, D3DTSS_COLORARG2, D3DTA_DIFFUSE);
+	pDevice->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_MODULATE);
+	pDevice->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_TEXTURE);
+	pDevice->SetTextureStageState(0, D3DTSS_ALPHAARG2, D3DTA_DIFFUSE);
+
+	const DWORD dwFilter = (dwFlags & D3DFONT_FILTERED) ? D3DTEXF_LINEAR : D3DTEXF_POINT;
+	pDevice->SetSamplerState(0, D3DSAMP_MINFILTER, dwFilter);
+	pDevice->SetSamplerState(0, D3DSAMP_MAGFILTER, dwFilter);
+
+	pDevice->SetFVF(FVF_TRANSFORMED);
+	pDevice->SetTexture(0, m_pTexture);
+	pDevice->DrawPrimitiveUP(
+		D3DPT_TRIANGLELIST, m_iPrimitiveCount, m_Vertices.data(), sizeof(__VertexTransformed));
+
+	pDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, dwAlphaBlend);
+	pDevice->SetRenderState(D3DRS_SRCBLEND, dwSrcBlend);
+	pDevice->SetRenderState(D3DRS_DESTBLEND, dwDestBlend);
+	pDevice->SetRenderState(D3DRS_ZENABLE, dwZEnable);
+	pDevice->SetRenderState(D3DRS_FOGENABLE, dwFog);
+	pDevice->SetTextureStageState(0, D3DTSS_COLOROP, dwColorOp);
+	pDevice->SetTextureStageState(0, D3DTSS_COLORARG1, dwColorArg1);
+	pDevice->SetTextureStageState(0, D3DTSS_COLORARG2, dwColorArg2);
+	pDevice->SetTextureStageState(0, D3DTSS_ALPHAOP, dwAlphaOp);
+	pDevice->SetTextureStageState(0, D3DTSS_ALPHAARG1, dwAlphaArg1);
+	pDevice->SetTextureStageState(0, D3DTSS_ALPHAARG2, dwAlphaArg2);
+	pDevice->SetSamplerState(0, D3DSAMP_MINFILTER, dwMinFilter);
+	pDevice->SetSamplerState(0, D3DSAMP_MAGFILTER, dwMagFilter);
+
+	return S_OK;
+}
+
+BOOL CDFont::GetTextExtent(const std::string& szString, int iStrLen, SIZE* pSize)
+{
+	if (pSize == nullptr)
+		return FALSE;
+
+	FT_Face pFace = SizedFace(m_dwFontHeight);
+	if (pFace == nullptr)
+	{
+		// No font: report zero width so word-wrap degrades like the T6.8 stub.
+		pSize->cx = 0;
+		pSize->cy = static_cast<LONG>(m_dwFontHeight);
+		return TRUE;
+	}
+
+	if (iStrLen < 0 || iStrLen > static_cast<int>(szString.size()))
+		iStrLen = static_cast<int>(szString.size());
+
+	const std::u32string codepoints =
+		DecodeGameText(std::string_view(szString).substr(0, static_cast<size_t>(iStrLen)));
+	*pSize = MeasureStripped(pFace, codepoints);
+	return TRUE;
+}
+
+HRESULT CDFont::SetFontColor(uint32_t dwColor)
+{
+	if (m_iPrimitiveCount <= 0 || m_Vertices.empty())
+		return E_FAIL;
+
+	if (dwColor == m_dwFontColor)
+		return S_OK;
+
+	m_dwFontColor = dwColor;
+	for (__VertexTransformed& v : m_Vertices)
+		v.color = m_dwFontColor;
+
+	return S_OK;
+}
+
+#endif // _WIN32

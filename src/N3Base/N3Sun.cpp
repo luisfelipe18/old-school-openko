@@ -66,20 +66,20 @@ void CN3Sun::Render(__Matrix44& matView, __Matrix44& matProj)
 
 	// back up render state
 	DWORD dwSrcBlend = 0, dwDestBlend = 0;
-	s_lpD3DDev->GetRenderState(D3DRS_SRCBLEND, &dwSrcBlend);
-	s_lpD3DDev->GetRenderState(D3DRS_DESTBLEND, &dwDestBlend);
+	RHIDevice()->GetRenderState(D3DRS_SRCBLEND, &dwSrcBlend);
+	RHIDevice()->GetRenderState(D3DRS_DESTBLEND, &dwDestBlend);
 
 	// set render state
 	if (D3DBLEND_ONE != dwSrcBlend)
-		s_lpD3DDev->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ONE);
+		RHIDevice()->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ONE);
 
 	if (D3DBLEND_ONE != dwDestBlend)
-		s_lpD3DDev->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ONE);
+		RHIDevice()->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ONE);
 
-	s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_MODULATE);
-	s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TEXTURE);
-	s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLORARG2, D3DTA_DIFFUSE);
-	s_lpD3DDev->SetFVF(FVF_TRANSFORMED);
+	RHIDevice()->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_MODULATE);
+	RHIDevice()->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TEXTURE);
+	RHIDevice()->SetTextureStageState(0, D3DTSS_COLORARG2, D3DTA_DIFFUSE);
+	RHIDevice()->SetFVF(FVF_TRANSFORMED);
 
 	RECT rcSun[NUM_SUNPART];
 	RECT rcScreen;
@@ -108,18 +108,18 @@ void CN3Sun::Render(__Matrix44& matView, __Matrix44& matProj)
 		pSP->pVertices[3].y = (float) rcSun[i].bottom;
 
 		if (pSP->pTex)
-			s_lpD3DDev->SetTexture(0, pSP->pTex->Get());
+			RHIDevice()->SetTexture(0, pSP->pTex->Get());
 		else
-			s_lpD3DDev->SetTexture(0, nullptr);
-		s_lpD3DDev->DrawPrimitiveUP(
+			RHIDevice()->SetTexture(0, nullptr);
+		RHIDevice()->DrawPrimitiveUP(
 			D3DPT_TRIANGLEFAN, 2, pSP->pVertices, sizeof(__VertexTransformed));
 	}
 
 	// restore render state
 	if (D3DBLEND_ONE != dwSrcBlend)
-		s_lpD3DDev->SetRenderState(D3DRS_SRCBLEND, dwSrcBlend);
+		RHIDevice()->SetRenderState(D3DRS_SRCBLEND, dwSrcBlend);
 	if (D3DBLEND_ONE != dwDestBlend)
-		s_lpD3DDev->SetRenderState(D3DRS_DESTBLEND, dwDestBlend);
+		RHIDevice()->SetRenderState(D3DRS_DESTBLEND, dwDestBlend);
 }
 
 void CN3Sun::Tick()

@@ -127,7 +127,7 @@ void CN3FXSPart::Render()
 	CN3Base::s_RenderInfo.nShape_Part++; // Rendering Information Update...
 #endif
 
-	LPDIRECT3DTEXTURE9 lpTex = nullptr;
+	IRHITexture* lpTex       = nullptr;
 	int iTC                  = static_cast<int>(m_TexRefs.size());
 	if (iTC > 0)
 	{
@@ -167,55 +167,55 @@ void CN3FXSPart::Render()
 		return;                      // 렌더링 안하지롱.
 	}
 
-	s_lpD3DDev->SetMaterial(&m_Mtl); // 재질 설정..
-	s_lpD3DDev->SetTexture(0, lpTex);
+	RHIDevice()->SetMaterial(&m_Mtl); // 재질 설정..
+	RHIDevice()->SetTexture(0, lpTex);
 	if (nullptr != lpTex)
 	{
-		s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_MODULATE);
-		s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TEXTURE);
-		s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLORARG2, D3DTA_DIFFUSE);
+		RHIDevice()->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_MODULATE);
+		RHIDevice()->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TEXTURE);
+		RHIDevice()->SetTextureStageState(0, D3DTSS_COLORARG2, D3DTA_DIFFUSE);
 
-		s_lpD3DDev->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_TEXTURE);
-		s_lpD3DDev->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_MODULATE);
-		s_lpD3DDev->SetTextureStageState(0, D3DTSS_ALPHAARG2, D3DTA_DIFFUSE);
+		RHIDevice()->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_TEXTURE);
+		RHIDevice()->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_MODULATE);
+		RHIDevice()->SetTextureStageState(0, D3DTSS_ALPHAARG2, D3DTA_DIFFUSE);
 	}
 	else
 	{
-		s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
-		s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_DIFFUSE);
+		RHIDevice()->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
+		RHIDevice()->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_DIFFUSE);
 	}
 
 	__Matrix44 mtx;
-	s_lpD3DDev->GetTransform(D3DTS_WORLD, mtx.toD3D());
-	s_lpD3DDev->SetTransform(D3DTS_WORLD, m_WorldMtx.toD3D());
+	RHIDevice()->GetTransform(D3DTS_WORLD, mtx.toD3D());
+	RHIDevice()->SetTransform(D3DTS_WORLD, m_WorldMtx.toD3D());
 
 	DWORD dwCullMode = 0, dwZWriteEnable = 0, dwZBufferEnable = 0, dwLight = 0;
-	s_lpD3DDev->GetRenderState(D3DRS_ZWRITEENABLE, &dwZWriteEnable);
-	s_lpD3DDev->GetRenderState(D3DRS_ZENABLE, &dwZBufferEnable);
-	s_lpD3DDev->GetRenderState(D3DRS_CULLMODE, &dwCullMode);
-	s_lpD3DDev->GetRenderState(D3DRS_LIGHTING, &dwLight);
+	RHIDevice()->GetRenderState(D3DRS_ZWRITEENABLE, &dwZWriteEnable);
+	RHIDevice()->GetRenderState(D3DRS_ZENABLE, &dwZBufferEnable);
+	RHIDevice()->GetRenderState(D3DRS_CULLMODE, &dwCullMode);
+	RHIDevice()->GetRenderState(D3DRS_LIGHTING, &dwLight);
 
 	if (m_pRefShape->m_dwZEnable != dwZBufferEnable)
-		s_lpD3DDev->SetRenderState(D3DRS_ZENABLE, m_pRefShape->m_dwZEnable);
+		RHIDevice()->SetRenderState(D3DRS_ZENABLE, m_pRefShape->m_dwZEnable);
 	if (m_pRefShape->m_dwZWrite != dwZWriteEnable)
-		s_lpD3DDev->SetRenderState(D3DRS_ZWRITEENABLE, m_pRefShape->m_dwZWrite);
+		RHIDevice()->SetRenderState(D3DRS_ZWRITEENABLE, m_pRefShape->m_dwZWrite);
 	if (m_pRefShape->m_dwLight != dwLight)
-		s_lpD3DDev->SetRenderState(D3DRS_LIGHTING, m_pRefShape->m_dwLight);
+		RHIDevice()->SetRenderState(D3DRS_LIGHTING, m_pRefShape->m_dwLight);
 	if (m_pRefShape->m_dwDoubleSide != dwCullMode)
-		s_lpD3DDev->SetRenderState(D3DRS_CULLMODE, m_pRefShape->m_dwDoubleSide);
+		RHIDevice()->SetRenderState(D3DRS_CULLMODE, m_pRefShape->m_dwDoubleSide);
 
 	m_FXPMInst.Render();
 
 	if (m_pRefShape->m_dwZEnable != dwZBufferEnable)
-		s_lpD3DDev->SetRenderState(D3DRS_ZENABLE, dwZBufferEnable);
+		RHIDevice()->SetRenderState(D3DRS_ZENABLE, dwZBufferEnable);
 	if (m_pRefShape->m_dwZWrite != dwZWriteEnable)
-		s_lpD3DDev->SetRenderState(D3DRS_ZWRITEENABLE, dwZWriteEnable);
+		RHIDevice()->SetRenderState(D3DRS_ZWRITEENABLE, dwZWriteEnable);
 	if (m_pRefShape->m_dwLight != dwLight)
-		s_lpD3DDev->SetRenderState(D3DRS_LIGHTING, dwLight);
+		RHIDevice()->SetRenderState(D3DRS_LIGHTING, dwLight);
 	if (m_pRefShape->m_dwDoubleSide != dwCullMode)
-		s_lpD3DDev->SetRenderState(D3DRS_CULLMODE, dwCullMode);
+		RHIDevice()->SetRenderState(D3DRS_CULLMODE, dwCullMode);
 
-	s_lpD3DDev->SetTransform(D3DTS_WORLD, mtx.toD3D());
+	RHIDevice()->SetTransform(D3DTS_WORLD, mtx.toD3D());
 }
 
 bool CN3FXSPart::Load(File& file)
@@ -230,12 +230,17 @@ bool CN3FXSPart::Load(File& file)
 	szFN[nL] = '\0';   // 메시 파일 이름..
 
 	//m_pRefShape의 경로와 읽어들인 파일명을 합쳐라...
+#ifdef _WIN32
 	char szPath[_MAX_PATH];
 	char szFName[_MAX_FNAME], szExt[_MAX_EXT];
 	char szDir[_MAX_DIR];
 	_splitpath(m_pRefShape->FileName().c_str(), nullptr, szDir, nullptr, nullptr);
 	_splitpath(szFN, nullptr, nullptr, szFName, szExt);
 	_makepath(szPath, nullptr, szDir, szFName, szExt);
+#else
+	const std::filesystem::path refDir = std::filesystem::path(m_pRefShape->FileName()).parent_path();
+	std::string szPath                 = (refDir / std::filesystem::path(szFN).filename()).string();
+#endif
 
 	if (!this->MeshSet(szPath))
 		return false;
@@ -255,8 +260,12 @@ bool CN3FXSPart::Load(File& file)
 			file.Read(szFN, nL);
 			szFN[nL] = '\0'; // 텍스처 파일 이름..
 
+#ifdef _WIN32
 			_splitpath(szFN, nullptr, nullptr, szFName, szExt);
 			_makepath(szPath, nullptr, szDir, szFName, szExt);
+#else
+			szPath = (refDir / std::filesystem::path(szFN).filename()).string();
+#endif
 			m_TexRefs[j] = s_MngTex.Get(szPath);
 		}
 	}

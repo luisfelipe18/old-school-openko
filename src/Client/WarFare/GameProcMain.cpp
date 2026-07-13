@@ -65,6 +65,14 @@
 #include "LightMgr.h"
 #include "text_resources.h"
 
+#include <N3Base/DFont.h>
+#include <N3Base/My_3DStruct.h> // __VertexTransformedColor, FVF_TRANSFORMEDCOLOR
+#include <N3Base/N3UIDef.h>     // UI_DEFAULT_Z / UI_DEFAULT_RHW
+
+#include <algorithm>
+#include <cctype>
+#include <utility>
+
 #include <N3Base/N3SkyMng.h>
 #include <N3Base/N3ShapeExtra.h>
 #include <N3Base/N3Camera.h>
@@ -73,7 +81,17 @@
 
 #include <N3Base/N3UIButton.h>
 
+#ifdef _WIN32
 #include <io.h>
+#else
+#include <Platform/PlatformFileFind.h> // _findfirst/_findnext/_findclose
+#include <Platform/PlatformPaths.h>    // GetCurrentDirectory / SetCurrentDirectory
+#include <Platform/PlatformString.h>   // lstrcpy / lstrcat
+
+#include <spdlog/spdlog.h>
+#endif
+
+#include "NetworkEncoding.h" // CP949 <-> UTF-8 at the network boundary
 
 std::string g_szCmdMsg[CMD_COUNT]; // 게임상 명령어
 
@@ -200,6 +218,7 @@ CGameProcMain::~CGameProcMain()
 	delete m_pTargetSymbol; // 플레이어가 타겟으로 잡은 캐릭터의 위치위에 그리면 된다..
 
 	delete m_pLightMgr;
+	delete m_pGMFont;
 }
 
 void CGameProcMain::Release()
@@ -253,6 +272,9 @@ void CGameProcMain::ReleaseUIs()
 
 void CGameProcMain::Init()
 {
+#ifndef _WIN32
+	spdlog::info("entering main scene: CGameProcMain::Init starting");
+#endif
 	CGameProcedure::Init();
 	m_pLightMgr->Release();
 	s_pEng->SetDefaultLight(m_pLightMgr->Light(0), m_pLightMgr->Light(1), m_pLightMgr->Light(2));
@@ -260,7 +282,7 @@ void CGameProcMain::Init()
 	// Reset lighting from previous scenes.
 	// Our scene will setup lighting as needed.
 	for (int i = 0; i < 8; i++)
-		s_lpD3DDev->LightEnable(i, FALSE);
+		RHIDevice()->LightEnable(i, FALSE);
 
 	int i = 0;
 	for (uint32_t resource = IDS_CMD_WHISPER; resource <= IDS_CMD_INDIVIDUAL_BATTLE; resource++)
@@ -292,8 +314,17 @@ void CGameProcMain::Init()
 	if (m_pWarMessage != nullptr)
 		m_pWarMessage->InitFont();
 
+#ifndef _WIN32
+	spdlog::info("main scene: InitUI starting");
+#endif
 	InitUI();                                                       // 국가에 따라 다른 UI 로딩...
+#ifndef _WIN32
+	spdlog::info("main scene: InitUI done, InitZone starting (zone {})", s_pPlayer->m_InfoExt.iZoneCur);
+#endif
 	InitZone(s_pPlayer->m_InfoExt.iZoneCur, s_pPlayer->Position()); // 존 로딩..
+#ifndef _WIN32
+	spdlog::info("main scene: InitZone done");
+#endif
 
 	//sound obj...
 	if (m_pSnd_Battle == nullptr)
@@ -319,6 +350,10 @@ void CGameProcMain::Init()
 
 	if (s_pUILoading != nullptr)
 		s_pUILoading->Render("Loading Character Data...", 0);
+
+#ifndef _WIN32
+	spdlog::info("main scene: resource preload starting (Chr/Item anim, tex, joint, skins, pmesh)");
+#endif
 
 	// 경로 기억..
 	char szPathOld[_MAX_PATH], szPathFind[_MAX_PATH];
@@ -347,6 +382,9 @@ void CGameProcMain::Init()
 	}
 	_findclose(hFind);
 
+#ifndef _WIN32
+	spdlog::info("main scene: resource preload 10% (animations)");
+#endif
 	if (s_pUILoading != nullptr)
 		s_pUILoading->Render("Loading Character Data... 10 %", 10);
 
@@ -370,6 +408,9 @@ void CGameProcMain::Init()
 	}
 	_findclose(hFind);
 
+#ifndef _WIN32
+	spdlog::info("main scene: resource preload 25% (item textures)");
+#endif
 	if (s_pUILoading != nullptr)
 		s_pUILoading->Render("Loading Character Data... 25 %", 25);
 
@@ -393,6 +434,9 @@ void CGameProcMain::Init()
 	}
 	_findclose(hFind);
 
+#ifndef _WIN32
+	spdlog::info("main scene: resource preload 50% (joints)");
+#endif
 	if (s_pUILoading != nullptr)
 		s_pUILoading->Render("Loading Character Data... 50 %", 50);
 
@@ -416,6 +460,9 @@ void CGameProcMain::Init()
 	}
 	_findclose(hFind);
 
+#ifndef _WIN32
+	spdlog::info("main scene: resource preload 75% (skins)");
+#endif
 	if (s_pUILoading != nullptr)
 		s_pUILoading->Render("Loading Character Data... 75 %", 75);
 
@@ -439,6 +486,9 @@ void CGameProcMain::Init()
 	}
 	_findclose(hFind);
 
+#ifndef _WIN32
+	spdlog::info("main scene: resource preload 100% (pmesh) - sending WIZ_GAMESTART");
+#endif
 	if (s_pUILoading != nullptr)
 		s_pUILoading->Render("Loading Character Data... 100 %", 100);
 
@@ -446,6 +496,10 @@ void CGameProcMain::Init()
 
 	// 경로 돌리기..
 	::SetCurrentDirectory(szPathOld);
+
+#ifndef _WIN32
+	spdlog::info("entering main scene: CGameProcMain::Init finished");
+#endif
 }
 
 void CGameProcMain::InitPlayerPosition(const __Vector3& vPos)              // 플레이어 위치 초기화.. 일으켜 세우고, 기본동작을 취하게 한다.
@@ -667,18 +721,18 @@ void CGameProcMain::Render()
 
 	D3DCOLOR crSky = ACT_WORLD->GetSkyColorWithSky();
 	s_pEng->Clear(crSky);             // 안개 색깔을 넣어서 클리어.. -> 하늘색깔로 클리어 해야 하늘이 제대로 나온다..
-	s_pEng->s_lpD3DDev->BeginScene(); // 씬 렌더 ㅅ작...
+	s_pEng->RHIDevice()->BeginScene(); // 씬 렌더 ㅅ작...
 
 	ACT_WORLD->RenderSky();           // 하늘 렌더링..
 	float fSunAngle   = ACT_WORLD->GetSunAngleByRadinWithSky(); // 해의 각도를 가져오고..
 
 	uint32_t dwFilter = D3DTEXF_LINEAR;
-	CN3Base::s_lpD3DDev->SetSamplerState(0, D3DSAMP_MINFILTER, dwFilter);
-	CN3Base::s_lpD3DDev->SetSamplerState(0, D3DSAMP_MAGFILTER, dwFilter);
-	CN3Base::s_lpD3DDev->SetSamplerState(0, D3DSAMP_MIPFILTER, dwFilter);
-	CN3Base::s_lpD3DDev->SetSamplerState(1, D3DSAMP_MINFILTER, dwFilter);
-	CN3Base::s_lpD3DDev->SetSamplerState(1, D3DSAMP_MAGFILTER, dwFilter);
-	CN3Base::s_lpD3DDev->SetSamplerState(1, D3DSAMP_MIPFILTER, dwFilter);
+	CN3Base::RHIDevice()->SetSamplerState(0, D3DSAMP_MINFILTER, dwFilter);
+	CN3Base::RHIDevice()->SetSamplerState(0, D3DSAMP_MAGFILTER, dwFilter);
+	CN3Base::RHIDevice()->SetSamplerState(0, D3DSAMP_MIPFILTER, dwFilter);
+	CN3Base::RHIDevice()->SetSamplerState(1, D3DSAMP_MINFILTER, dwFilter);
+	CN3Base::RHIDevice()->SetSamplerState(1, D3DSAMP_MAGFILTER, dwFilter);
+	CN3Base::RHIDevice()->SetSamplerState(1, D3DSAMP_MIPFILTER, dwFilter);
 
 	ACT_WORLD->RenderTerrain();   // 지형 렌더..
 	ACT_WORLD->RenderShape();     // 물체 렌더..
@@ -705,13 +759,321 @@ void CGameProcMain::Render()
 	ACT_WORLD->RenderSkyWeather(); // 하늘 렌더링..
 
 	CGameProcedure::Render();      // UI 나 그밖의 기본적인 것들 렌더링..
+	GMPanelRender();               // GM tools overlay (J), drawn on top of the UI
 	if (m_pWarMessage)
 		m_pWarMessage->RenderMessage();
 	if (s_pGameCursor)
 		s_pGameCursor->Render();
 
-	s_pEng->s_lpD3DDev->EndScene();
+	s_pEng->RHIDevice()->EndScene();
 	s_pEng->Present(CN3Base::s_hWndBase);
+}
+
+// ---------------------------------------------------------------------------
+// GM tools panel (J): a text overlay listing the NPCs/monsters currently in the
+// map so a GM can teleport to one, plus a live view-distance tweak. Everything
+// here is gated on the local player being a GM (iAuthority == AUTHORITY_MANAGER).
+// ---------------------------------------------------------------------------
+
+// Lower-case ASCII helper for case-insensitive name matching.
+static std::string GMToLower(std::string s)
+{
+	std::transform(s.begin(), s.end(), s.begin(),
+		[](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+	return s;
+}
+
+void CGameProcMain::GMPanelRebuildList()
+{
+	m_GMPanelIDs.clear();
+	if (s_pOPMgr == nullptr || s_pPlayer == nullptr)
+		return;
+
+	const __Vector3 vMe = s_pPlayer->Position();
+
+	std::vector<std::pair<float, int>> byDist;
+	byDist.reserve(s_pOPMgr->m_NPCs.size());
+	for (const auto& [iID, pNPC] : s_pOPMgr->m_NPCs)
+	{
+		if (pNPC == nullptr)
+			continue;
+		// Name search: keep only entries whose name contains the filter text
+		// (e.g. "antares" matches the boss). Empty filter keeps everything.
+		if (!m_szGMPanelFilter.empty()
+			&& GMToLower(pNPC->IDString()).find(m_szGMPanelFilter) == std::string::npos)
+			continue;
+		byDist.emplace_back((pNPC->Position() - vMe).Magnitude(), iID);
+	}
+
+	std::sort(byDist.begin(), byDist.end(),
+		[](const auto& a, const auto& b) { return a.first < b.first; });
+
+	m_GMPanelIDs.reserve(byDist.size());
+	for (const auto& [fDist, iID] : byDist)
+		m_GMPanelIDs.push_back(iID);
+
+	if (m_iGMPanelSel >= static_cast<int>(m_GMPanelIDs.size()))
+		m_iGMPanelSel = std::max(0, static_cast<int>(m_GMPanelIDs.size()) - 1);
+	if (m_iGMPanelSel < 0)
+		m_iGMPanelSel = 0;
+}
+
+void CGameProcMain::GMPanelTeleportTo(int iNpcID)
+{
+	if (s_pOPMgr == nullptr || s_pPlayer == nullptr)
+		return;
+
+	CPlayerNPC* pNPC = s_pOPMgr->CharacterGetByID(iNpcID, false);
+	if (pNPC == nullptr)
+		return;
+
+	// Move the local character onto the target and tell the server we stopped
+	// there. GMs bypass the movement/collision checks (see CPlayerMySelf), so
+	// the jump is not rejected client-side; a GM account is likewise exempt from
+	// the server's speed checks.
+	s_pPlayer->PositionSet(pNPC->Position(), true);
+	MsgSend_Move(false, false);
+}
+
+// The letter/space key that was just pressed, as a search character (0 if none).
+static char GMTypedChar(const CLocalInput* pIn)
+{
+	static const struct
+	{
+		int  dik;
+		char ch;
+	} kKeys[] = {
+		{DIK_A, 'a'}, {DIK_B, 'b'}, {DIK_C, 'c'}, {DIK_D, 'd'}, {DIK_E, 'e'}, {DIK_F, 'f'},
+		{DIK_G, 'g'}, {DIK_H, 'h'}, {DIK_I, 'i'}, {DIK_J, 'j'}, {DIK_K, 'k'}, {DIK_L, 'l'},
+		{DIK_M, 'm'}, {DIK_N, 'n'}, {DIK_O, 'o'}, {DIK_P, 'p'}, {DIK_Q, 'q'}, {DIK_R, 'r'},
+		{DIK_S, 's'}, {DIK_T, 't'}, {DIK_U, 'u'}, {DIK_V, 'v'}, {DIK_W, 'w'}, {DIK_X, 'x'},
+		{DIK_Y, 'y'}, {DIK_Z, 'z'}, {DIK_SPACE, ' '},
+		{DIK_0, '0'}, {DIK_1, '1'}, {DIK_2, '2'}, {DIK_3, '3'}, {DIK_4, '4'},
+		{DIK_5, '5'}, {DIK_6, '6'}, {DIK_7, '7'}, {DIK_8, '8'}, {DIK_9, '9'},
+	};
+	for (const auto& k : kKeys)
+	{
+		if (pIn->IsKeyPress(k.dik))
+			return k.ch;
+	}
+	return 0;
+}
+
+void CGameProcMain::GMPanelHandleInput()
+{
+	if (s_pPlayer == nullptr || s_pPlayer->m_InfoBase.iAuthority != AUTHORITY_MANAGER)
+		return;
+
+	// Closed: J opens it.
+	if (!m_bGMPanelVisible)
+	{
+		if (s_pLocalInput->IsKeyPress(DIK_J))
+		{
+			m_bGMPanelVisible = true;
+			m_iGMPanelSel     = 0;
+			m_szGMPanelFilter.clear();
+			GMPanelRebuildList();
+			CommandMove(MD_STOP, true); // halt any in-progress (mouse/continuous) move
+		}
+		return;
+	}
+
+	// Open: the panel is modal. Esc closes it; every keyboard key is consumed at
+	// the end (KeyboardClearInput) so typing a name doesn't also fire the game
+	// hotkeys (I = inventory, etc.).
+	if (s_pLocalInput->IsKeyPress(DIK_ESCAPE))
+	{
+		m_bGMPanelVisible = false;
+		s_pLocalInput->KeyboardClearPresses();
+		return;
+	}
+
+	// The box is dual-purpose: type a name to filter the list, or type a GM
+	// command and press Tab to run it (the client prepends '+' and sends it as
+	// operator chat, which the server routes to OperationMessage). Examples:
+	//   giveitem 379021000 1   zonechange 21   expadd 1000000
+	if (const char ch = GMTypedChar(s_pLocalInput))
+		m_szGMPanelFilter += ch;
+	if (s_pLocalInput->IsKeyPress(DIK_BACK) && !m_szGMPanelFilter.empty())
+		m_szGMPanelFilter.pop_back();
+
+	if (s_pLocalInput->IsKeyPress(DIK_TAB) && !m_szGMPanelFilter.empty())
+	{
+		const std::string szCmd = "+" + m_szGMPanelFilter;
+		MsgSend_Chat(N3_CHAT_NORMAL, szCmd);
+		// Echo locally so it's obvious the command was sent (the server acts on
+		// it; effects like exp/item/zone appear as their own updates).
+		if (m_pUIChatDlg != nullptr)
+			m_pUIChatDlg->AddChatMsg(N3_CHAT_NORMAL, "GM command sent: " + szCmd, 0xFFFFDD33);
+		m_szGMPanelFilter.clear();
+	}
+
+	// Reflect the current filter and live distances.
+	GMPanelRebuildList();
+
+	const int iCount = static_cast<int>(m_GMPanelIDs.size());
+	if (iCount > 0)
+	{
+		if (s_pLocalInput->IsKeyPress(DIK_DOWN))
+			m_iGMPanelSel = (m_iGMPanelSel + 1) % iCount;
+		if (s_pLocalInput->IsKeyPress(DIK_UP))
+			m_iGMPanelSel = (m_iGMPanelSel + iCount - 1) % iCount;
+		if (s_pLocalInput->IsKeyPress(DIK_RETURN))
+			GMPanelTeleportTo(m_GMPanelIDs[m_iGMPanelSel]);
+	}
+
+	// Render/view distance: +/- (main row or numpad) in 128-unit steps. The
+	// engine feeds s_Options.iViewDist into the camera far plane every frame
+	// (CGameEng::Tick), so this takes effect live.
+	int& iViewDist = CN3Base::s_Options.iViewDist;
+	if (s_pLocalInput->IsKeyPress(DIK_EQUALS) || s_pLocalInput->IsKeyPress(DIK_ADD))
+		iViewDist = std::min(4096, iViewDist + 128);
+	if (s_pLocalInput->IsKeyPress(DIK_MINUS) || s_pLocalInput->IsKeyPress(DIK_SUBTRACT))
+		iViewDist = std::max(256, iViewDist - 128);
+
+	// Modal: swallow this frame's key presses so they don't leak into the
+	// gameplay hotkeys below. Clear only the edge flags (not the held state) so
+	// a key you hold while typing registers once, not once per frame.
+	s_pLocalInput->KeyboardClearPresses();
+}
+
+// Filled translucent quad in screen space (for the panel background).
+void CGameProcMain::GMPanelDrawRect(float x, float y, float w, float h, uint32_t color)
+{
+	__VertexTransformedColor v[4] = {
+		{x, y, UI_DEFAULT_Z, UI_DEFAULT_RHW, color},
+		{x + w, y, UI_DEFAULT_Z, UI_DEFAULT_RHW, color},
+		{x + w, y + h, UI_DEFAULT_Z, UI_DEFAULT_RHW, color},
+		{x, y + h, UI_DEFAULT_Z, UI_DEFAULT_RHW, color},
+	};
+
+	DWORD dwZ = 0, dwFog = 0, dwAlpha = 0, dwSrc = 0, dwDest = 0, dwFVF = 0, dwCull = 0;
+	DWORD dwCOP = 0, dwCA1 = 0, dwAOP = 0, dwAA1 = 0;
+	CN3Base::RHIDevice()->GetRenderState(D3DRS_ZENABLE, &dwZ);
+	CN3Base::RHIDevice()->GetRenderState(D3DRS_FOGENABLE, &dwFog);
+	CN3Base::RHIDevice()->GetRenderState(D3DRS_ALPHABLENDENABLE, &dwAlpha);
+	CN3Base::RHIDevice()->GetRenderState(D3DRS_SRCBLEND, &dwSrc);
+	CN3Base::RHIDevice()->GetRenderState(D3DRS_DESTBLEND, &dwDest);
+	CN3Base::RHIDevice()->GetRenderState(D3DRS_CULLMODE, &dwCull);
+	CN3Base::RHIDevice()->GetTextureStageState(0, D3DTSS_COLOROP, &dwCOP);
+	CN3Base::RHIDevice()->GetTextureStageState(0, D3DTSS_COLORARG1, &dwCA1);
+	CN3Base::RHIDevice()->GetTextureStageState(0, D3DTSS_ALPHAOP, &dwAOP);
+	CN3Base::RHIDevice()->GetTextureStageState(0, D3DTSS_ALPHAARG1, &dwAA1);
+	CN3Base::RHIDevice()->GetFVF(&dwFVF);
+
+	CN3Base::RHIDevice()->SetRenderState(D3DRS_ZENABLE, FALSE);
+	CN3Base::RHIDevice()->SetRenderState(D3DRS_FOGENABLE, FALSE);
+	CN3Base::RHIDevice()->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+	CN3Base::RHIDevice()->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
+	CN3Base::RHIDevice()->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+	CN3Base::RHIDevice()->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+	CN3Base::RHIDevice()->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
+	CN3Base::RHIDevice()->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_DIFFUSE);
+	CN3Base::RHIDevice()->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
+	CN3Base::RHIDevice()->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_DIFFUSE);
+	CN3Base::RHIDevice()->SetFVF(FVF_TRANSFORMEDCOLOR);
+
+	CN3Base::RHIDevice()->DrawPrimitiveUP(D3DPT_TRIANGLEFAN, 2, v, sizeof(__VertexTransformedColor));
+
+	CN3Base::RHIDevice()->SetRenderState(D3DRS_ZENABLE, dwZ);
+	CN3Base::RHIDevice()->SetRenderState(D3DRS_FOGENABLE, dwFog);
+	CN3Base::RHIDevice()->SetRenderState(D3DRS_ALPHABLENDENABLE, dwAlpha);
+	CN3Base::RHIDevice()->SetRenderState(D3DRS_SRCBLEND, dwSrc);
+	CN3Base::RHIDevice()->SetRenderState(D3DRS_DESTBLEND, dwDest);
+	CN3Base::RHIDevice()->SetRenderState(D3DRS_CULLMODE, dwCull);
+	CN3Base::RHIDevice()->SetTextureStageState(0, D3DTSS_COLOROP, dwCOP);
+	CN3Base::RHIDevice()->SetTextureStageState(0, D3DTSS_COLORARG1, dwCA1);
+	CN3Base::RHIDevice()->SetTextureStageState(0, D3DTSS_ALPHAOP, dwAOP);
+	CN3Base::RHIDevice()->SetTextureStageState(0, D3DTSS_ALPHAARG1, dwAA1);
+	CN3Base::RHIDevice()->SetFVF(dwFVF);
+}
+
+void CGameProcMain::GMPanelRender()
+{
+	if (!m_bGMPanelVisible)
+		return;
+	if (s_pPlayer == nullptr || s_pPlayer->m_InfoBase.iAuthority != AUTHORITY_MANAGER)
+		return;
+	if (s_pOPMgr == nullptr)
+		return;
+
+	if (m_pGMFont == nullptr)
+	{
+		const std::string szFontID = fmt::format_text_resource(IDS_FONT_ID);
+		m_pGMFont                  = new CDFont(szFontID, 16, D3DFONT_BOLD);
+		m_pGMFont->InitDeviceObjects(s_lpD3DDev);
+		m_pGMFont->RestoreDeviceObjects();
+	}
+
+	// Build every line first so we can size and place the background box.
+	std::vector<std::pair<std::string, uint32_t>> lines;
+	lines.emplace_back(fmt::format("== GM PANEL ==   View distance: {}  (+/-)   Esc: close",
+						   CN3Base::s_Options.iViewDist),
+		0xFFFFF080);
+	lines.emplace_back(
+		fmt::format("Box: {}_", m_szGMPanelFilter.empty() ? "(type a name or command)" : m_szGMPanelFilter),
+		0xFF80D0FF);
+	lines.emplace_back("Tab runs a GM command. exp to a user: expadd <charName> <n>",
+		0xFF90E090);
+	lines.emplace_back("  also: expadd <n> (self) | giveitem [charName] <id> [n] | zonechange <zone>",
+		0xFF90E090);
+	lines.emplace_back(
+		fmt::format("Matches: {}   (Up/Down select, Enter teleport)", m_GMPanelIDs.size()),
+		0xFFD0D0D0);
+
+	if (m_GMPanelIDs.empty() && !m_szGMPanelFilter.empty())
+		lines.emplace_back("(no match present - the monster must be spawned in this zone)",
+			0xFFFF9090);
+
+	// Window of rows centred on the selection.
+	const int iCount   = static_cast<int>(m_GMPanelIDs.size());
+	const int iMaxRows = 16;
+	int iStart         = m_iGMPanelSel - iMaxRows / 2;
+	iStart             = std::clamp(iStart, 0, std::max(0, iCount - iMaxRows));
+	const int iEnd     = std::min(iCount, iStart + iMaxRows);
+
+	const __Vector3 vMe = s_pPlayer->Position();
+	for (int i = iStart; i < iEnd; ++i)
+	{
+		CPlayerNPC* pNPC = s_pOPMgr->CharacterGetByID(m_GMPanelIDs[i], false);
+		if (pNPC == nullptr)
+			continue;
+
+		const float fDist  = (pNPC->Position() - vMe).Magnitude();
+		std::string szName = pNPC->IDString();
+		if (szName.empty())
+			szName = fmt::format("NPC#{}", pNPC->IDNumber());
+
+		const bool bSel = (i == m_iGMPanelSel);
+		lines.emplace_back(
+			fmt::format("{} {}  (id {})  {:.0f}m", bSel ? ">" : "  ", szName, pNPC->IDNumber(), fDist),
+			bSel ? 0xFF60FF60 : 0xFFFFFFFF);
+	}
+
+	// Layout: bottom-left corner.
+	const float fLineH  = 19.0f;
+	const float fPadX   = 12.0f;
+	const float fPadY   = 10.0f;
+	const float fBoxW   = 620.0f;
+	const float fBoxH   = static_cast<float>(lines.size()) * fLineH + fPadY * 2.0f;
+	const float fScreenH = static_cast<float>(CN3Base::s_CameraData.vp.Height);
+	const float fBoxX   = 12.0f;
+	const float fBoxY   = fScreenH - fBoxH - 12.0f;
+
+	// Translucent black background so the text reads over any scene.
+	GMPanelDrawRect(fBoxX, fBoxY, fBoxW, fBoxH, D3DCOLOR_ARGB(0xC0, 0x00, 0x00, 0x00));
+
+	CUIManager::RenderStateSet();
+	float x = fBoxX + fPadX;
+	float y = fBoxY + fPadY;
+	for (const auto& [szText, dwColor] : lines)
+	{
+		m_pGMFont->SetText(szText);
+		m_pGMFont->DrawText(x + 1.0f, y + 1.0f, 0xFF000000, 0); // drop shadow for legibility
+		m_pGMFont->DrawText(x, y, dwColor, 0);
+		y += fLineH;
+	}
+	CUIManager::RenderStateRestore();
 }
 
 void CGameProcMain::RenderTarget()
@@ -997,6 +1359,7 @@ bool CGameProcMain::ProcessPacket(Packet& pkt)
 			std::string szID, szMsg;
 			int iLen = pkt.read<int16_t>();
 			pkt.readString(szID, iLen);
+			szID = NetToLocal(szID);
 
 			e_ChatMode eCM = N3_CHAT_UNKNOWN;
 			if (szID.empty())
@@ -1234,6 +1597,9 @@ void CGameProcMain::ProcessLocalInput(uint32_t dwMouseFlags)
 				s_pPlayer->m_bTempMoveTurbo = true;                   // 엄청 빨리 움직이게 한다..  // 임시 함수.. 나중에 없애자..
 			else
 				s_pPlayer->m_bTempMoveTurbo = false;                  // 엄청 빨리 움직이게 한다..  // 임시 함수.. 나중에 없애자..
+
+			// GM tools panel (J): monster list + teleport + view distance.
+			GMPanelHandleInput();
 		}
 
 		if (s_pLocalInput->IsKeyPress(KM_TOGGLE_ATTACK))
@@ -1288,7 +1654,10 @@ void CGameProcMain::ProcessLocalInput(uint32_t dwMouseFlags)
 				m_pUIDroppedItemDlg->LeaveDroppedState();
 		}
 
-		if (s_pLocalInput->IsKeyDown(KM_MOVE_FOWARD) || s_pLocalInput->IsKeyDown(DIK_UP))
+		// While the GM panel is open the Up/Down arrows drive its selection, so
+		// suppress keyboard movement (the panel is modal for those keys).
+		if ((s_pLocalInput->IsKeyDown(KM_MOVE_FOWARD) || s_pLocalInput->IsKeyDown(DIK_UP))
+			&& !m_bGMPanelVisible)
 		{
 			bool bStart = false;
 			if (s_pLocalInput->IsKeyPress(KM_MOVE_FOWARD) || s_pLocalInput->IsKeyPress(DIK_UP))
@@ -1312,7 +1681,8 @@ void CGameProcMain::ProcessLocalInput(uint32_t dwMouseFlags)
 
 			CommandMove(MD_FORWARD, bStart); // 앞으로 이동..
 		}
-		else if (s_pLocalInput->IsKeyDown(KM_MOVE_BACKWARD) || s_pLocalInput->IsKeyDown(DIK_DOWN))
+		else if ((s_pLocalInput->IsKeyDown(KM_MOVE_BACKWARD) || s_pLocalInput->IsKeyDown(DIK_DOWN))
+			&& !m_bGMPanelVisible)
 		{
 			bool bStart = false;
 			if (s_pLocalInput->IsKeyPress(KM_MOVE_BACKWARD) || s_pLocalInput->IsKeyPress(DIK_DOWN))
@@ -1342,8 +1712,9 @@ void CGameProcMain::ProcessLocalInput(uint32_t dwMouseFlags)
 		}
 
 		// 전진/후진 키를 떼는 순간.
-		if (s_pLocalInput->IsKeyPressed(KM_MOVE_FOWARD) || s_pLocalInput->IsKeyPressed(DIK_UP)
-			|| s_pLocalInput->IsKeyPressed(KM_MOVE_BACKWARD) || s_pLocalInput->IsKeyPressed(DIK_DOWN))
+		if ((s_pLocalInput->IsKeyPressed(KM_MOVE_FOWARD) || s_pLocalInput->IsKeyPressed(DIK_UP)
+				|| s_pLocalInput->IsKeyPressed(KM_MOVE_BACKWARD) || s_pLocalInput->IsKeyPressed(DIK_DOWN))
+			&& !m_bGMPanelVisible)
 			CommandMove(MD_STOP, true);
 
 		if (s_pLocalInput->IsKeyPress(KM_TOGGLE_INVENTORY))
@@ -1556,13 +1927,15 @@ void CGameProcMain::MsgSend_Chat(e_ChatMode eMode, const std::string& szChat)
 	if (eMode == N3_CHAT_CLAN && s_pPlayer->m_InfoBase.iKnightsID <= 0)
 		return;
 
+	const std::string szWire = LocalToNet(szChat);
+
 	uint8_t byBuff[512];
 	int iOffset = 0;
 
 	CAPISocket::MP_AddByte(byBuff, iOffset, WIZ_CHAT);
 	CAPISocket::MP_AddByte(byBuff, iOffset, eMode);
-	CAPISocket::MP_AddShort(byBuff, iOffset, (int16_t) szChat.size());
-	CAPISocket::MP_AddString(byBuff, iOffset, szChat);
+	CAPISocket::MP_AddShort(byBuff, iOffset, (int16_t) szWire.size());
+	CAPISocket::MP_AddString(byBuff, iOffset, szWire);
 
 	__ASSERT(iOffset < 512, "Send Buffer OverFlow");
 	s_pSocket->Send(byBuff, iOffset); // 보낸다..
@@ -1573,6 +1946,8 @@ void CGameProcMain::MsgSend_ChatSelectTarget(const std::string& szTargetID)
 	if (szTargetID.empty() || szTargetID.size() > 20)
 		return;
 
+	const std::string szWire = LocalToNet(szTargetID);
+
 	int iOffset = 0;
 	uint8_t byBuff[32];
 
@@ -1581,8 +1956,8 @@ void CGameProcMain::MsgSend_ChatSelectTarget(const std::string& szTargetID)
 	// TEMP(srmeier): testing private messages
 	CAPISocket::MP_AddByte(byBuff, iOffset, 0x01);
 
-	CAPISocket::MP_AddShort(byBuff, iOffset, (int16_t) szTargetID.size());
-	CAPISocket::MP_AddString(byBuff, iOffset, szTargetID);
+	CAPISocket::MP_AddShort(byBuff, iOffset, (int16_t) szWire.size());
+	CAPISocket::MP_AddString(byBuff, iOffset, szWire);
 
 	s_pSocket->Send(byBuff, iOffset);
 }
@@ -1661,10 +2036,12 @@ bool CGameProcMain::MsgSend_PartyOrForceCreate(const std::string& szID)
 	if (m_pUIPartyOrForce->MemberCount() >= 2)
 		eCmdParty = N3_SP_PARTY_OR_FORCE_INSERT;
 
+	const std::string szWire = LocalToNet(szID);
+
 	CAPISocket::MP_AddByte(byBuff, iOffset, WIZ_PARTY);
 	CAPISocket::MP_AddByte(byBuff, iOffset, eCmdParty);
-	CAPISocket::MP_AddShort(byBuff, iOffset, (int16_t) szID.size());
-	CAPISocket::MP_AddString(byBuff, iOffset, szID);
+	CAPISocket::MP_AddShort(byBuff, iOffset, (int16_t) szWire.size());
+	CAPISocket::MP_AddString(byBuff, iOffset, szWire);
 
 	s_pSocket->Send(byBuff, iOffset);          // 보낸다..
 
@@ -1767,10 +2144,12 @@ void CGameProcMain::MsgSend_Administrator(e_SubPacket_Administrator eSP, const s
 	uint8_t byBuff[64];
 	int iOffset = 0;
 
+	const std::string szWire = LocalToNet(szID);
+
 	CAPISocket::MP_AddByte(byBuff, iOffset, WIZ_OPERATOR); // 관리자 전용패킷..
 	CAPISocket::MP_AddByte(byBuff, iOffset, eSP);
-	CAPISocket::MP_AddShort(byBuff, iOffset, (int16_t) szID.size());
-	CAPISocket::MP_AddString(byBuff, iOffset, szID);
+	CAPISocket::MP_AddShort(byBuff, iOffset, (int16_t) szWire.size());
+	CAPISocket::MP_AddString(byBuff, iOffset, szWire);
 
 	s_pSocket->Send(byBuff, iOffset);
 }
@@ -1803,13 +2182,15 @@ void CGameProcMain::MsgSend_KnightsJoin(int iTargetID)
 
 void CGameProcMain::MsgSend_KnightsLeave(const std::string& szName)
 {
+	const std::string szWire = LocalToNet(szName);
+
 	uint8_t byBuff[64];
 	int iOffset = 0;
 
 	CAPISocket::MP_AddByte(byBuff, iOffset, WIZ_KNIGHTS_PROCESS); // 관리자 전용패킷..
 	CAPISocket::MP_AddByte(byBuff, iOffset, N3_SP_KNIGHTS_MEMBER_REMOVE);
-	CAPISocket::MP_AddShort(byBuff, iOffset, static_cast<int16_t>(szName.length()));
-	CAPISocket::MP_AddString(byBuff, iOffset, szName);            // 아이디 문자열 패킷에 넣기..
+	CAPISocket::MP_AddShort(byBuff, iOffset, static_cast<int16_t>(szWire.length()));
+	CAPISocket::MP_AddString(byBuff, iOffset, szWire);            // 아이디 문자열 패킷에 넣기..
 	s_pSocket->Send(byBuff, iOffset);
 }
 
@@ -1825,18 +2206,23 @@ void CGameProcMain::MsgSend_KnightsWithdraw()
 
 void CGameProcMain::MsgSend_KnightsAppointViceChief(const std::string& szName)
 {
+	const std::string szWire = LocalToNet(szName);
+
 	uint8_t byBuff[64];
 	int iOffset = 0;
 
 	CAPISocket::MP_AddByte(byBuff, iOffset, WIZ_KNIGHTS_PROCESS); // 관리자 전용패킷..
 	CAPISocket::MP_AddByte(byBuff, iOffset, N3_SP_KNIGHTS_APPOINT_VICECHIEF);
-	CAPISocket::MP_AddShort(byBuff, iOffset, static_cast<int16_t>(szName.length()));
-	CAPISocket::MP_AddString(byBuff, iOffset, szName);            // 아이디 문자열 패킷에 넣기..
+	CAPISocket::MP_AddShort(byBuff, iOffset, static_cast<int16_t>(szWire.length()));
+	CAPISocket::MP_AddString(byBuff, iOffset, szWire);            // 아이디 문자열 패킷에 넣기..
 	s_pSocket->Send(byBuff, iOffset);
 }
 
 bool CGameProcMain::MsgRecv_MyInfo_All(Packet& pkt)
 {
+#ifndef _WIN32
+	spdlog::info("MsgRecv_MyInfo_All: received - initializing player character");
+#endif
 	int iZone = s_pPlayer->m_InfoExt.iZoneCur;
 	s_pPlayer->Release(); // 일단 몽창 다 해제 하고....
 	s_pPlayer->m_InfoExt.iZoneCur = iZone;
@@ -1846,6 +2232,7 @@ bool CGameProcMain::MsgRecv_MyInfo_All(Packet& pkt)
 
 	std::string szID;
 	pkt.readString(szID, iLen);
+	szID = NetToLocal(szID);
 	s_pPlayer->IDSet(iID, szID, D3DCOLOR_XRGB(100, 210, 255)); // 밝은 파란색과 하늘색 중간..
 
 	float fX                      = (pkt.read<uint16_t>()) / 10.0f;
@@ -1865,7 +2252,13 @@ bool CGameProcMain::MsgRecv_MyInfo_All(Packet& pkt)
 			static_cast<int>(s_pPlayer->m_InfoBase.eRace));
 	}
 	__ASSERT(pLooks, "failed find character resource data");
+#ifndef _WIN32
+	spdlog::info("MsgRecv_MyInfo_All: InitChr starting (race {})", static_cast<int>(s_pPlayer->m_InfoBase.eRace));
+#endif
 	s_pPlayer->InitChr(pLooks); // 관절 세팅..
+#ifndef _WIN32
+	spdlog::info("MsgRecv_MyInfo_All: InitChr done");
+#endif
 
 	s_pPlayer->m_InfoExt.iRank              = pkt.read<uint8_t>();
 	s_pPlayer->m_InfoExt.iTitle             = pkt.read<uint8_t>();
@@ -1892,6 +2285,7 @@ bool CGameProcMain::MsgRecv_MyInfo_All(Packet& pkt)
 
 	int iKnightNameLen = pkt.read<uint8_t>(); // 소속 기사단 이름 길이.
 	pkt.readString(szKnightsName, iKnightNameLen);
+	szKnightsName     = NetToLocal(szKnightsName);
 	int iKnightsGrade = pkt.read<uint8_t>();  // 소속 기사단 등급
 	int iKnightsRank  = pkt.read<uint8_t>();  // 소속 기사단 순위
 
@@ -2192,6 +2586,9 @@ bool CGameProcMain::MsgRecv_MyInfo_All(Packet& pkt)
 		m_pUICmdList->CreateCategoryList();
 
 	m_bLoadComplete = TRUE; // 로딩 끝..
+#ifndef _WIN32
+	spdlog::info("MsgRecv_MyInfo_All: player character fully initialized");
+#endif
 
 	return true;
 }
@@ -2206,10 +2603,12 @@ bool CGameProcMain::MsgRecv_Chat(Packet& pkt)
 	std::string szName;
 	int iNameLen = pkt.read<uint8_t>();
 	pkt.readString(szName, iNameLen);
+	szName = NetToLocal(szName);
 
 	std::string szMsg;
 	int iMsgLen = pkt.read<int16_t>();
 	pkt.readString(szMsg, iMsgLen);
+	szMsg = NetToLocal(szMsg);
 
 	if (szName.empty())
 		szChat = szMsg;
@@ -2533,6 +2932,7 @@ bool CGameProcMain::MsgRecv_UserIn(Packet& pkt, bool bWithFX)
 	std::string szName;
 	int iNameLen = pkt.read<uint8_t>();
 	pkt.readString(szName, iNameLen);
+	szName = NetToLocal(szName);
 
 	e_Nation eNation = (e_Nation) pkt.read<uint8_t>(); // 소속 국가. 0 이면 없다. 1
 
@@ -2545,6 +2945,7 @@ bool CGameProcMain::MsgRecv_UserIn(Packet& pkt, bool bWithFX)
 	int iKnightNameLen = pkt.read<uint8_t>(); // 소속 기사단 이름 길이.
 	std::string szKnightsName;
 	pkt.readString(szKnightsName, iKnightNameLen);
+	szKnightsName     = NetToLocal(szKnightsName);
 	int iKnightsGrade = pkt.read<uint8_t>();  // 등급
 	int iKnightsRank  = pkt.read<uint8_t>();  // 순위
 
@@ -2862,7 +3263,10 @@ bool CGameProcMain::MsgRecv_NPCIn(Packet& pkt)
 	int iNameLen = pkt.read<uint8_t>();
 	std::string szName;                        // NPC 아이디..
 	if (iNameLen > 0)
+	{
 		pkt.readString(szName, iNameLen);
+		szName = NetToLocal(szName);
+	}
 	else
 		szName = "";
 
@@ -4468,16 +4872,28 @@ void CGameProcMain::InitZone(int iZone, const __Vector3& vPosPlayer)
 		if (pZoneData == nullptr)
 		{
 			CLogWriter::Write("can't find zone data. (zone : {})", s_pPlayer->m_InfoExt.iZoneCur);
+#ifndef _WIN32
+			spdlog::error("InitZone: zone data not found for zone {} - Data/Zone*.tbl entry missing", iZone);
+#endif
 			__ASSERT(0, "Zone Data Not Found!");
 			return;
 		}
 
 		s_pOPMgr->Release(); // 다른 넘들 다 날린다..
+#ifndef _WIN32
+		spdlog::info("InitZone: loading world/terrain for zone {} (terrain='{}')", iZone, pZoneData->szTerrainFN);
+#endif
 		s_pWorldMgr->InitWorld(iZone);
+#ifndef _WIN32
+		spdlog::info("InitZone: world/terrain loaded, loading minimap '{}'", pZoneData->szMiniMapFN);
+#endif
 
 		// 미니맵 로딩..
 		float fWidth = ACT_WORLD->GetWidthByMeterWithTerrain();
 		m_pUIStateBarAndMiniMap->LoadMap(pZoneData->szMiniMapFN, fWidth, fWidth);
+#ifndef _WIN32
+		spdlog::info("InitZone: minimap loaded");
+#endif
 
 		// 줌 비율 정하기..
 		float fZoom           = 6.0f;
@@ -4958,6 +5374,7 @@ bool CGameProcMain::MsgRecv_ItemDroppedGetResult(Packet& pkt) // 땅에 떨어�
 		iItemID = pkt.read<uint32_t>();
 		iStrLen = (int) pkt.read<int16_t>();
 		pkt.readString(szString, iStrLen);
+		szString = NetToLocal(szString);
 	}
 
 	if (m_pUIDroppedItemDlg != nullptr)
@@ -5132,7 +5549,7 @@ void CGameProcMain::MsgRecv_Notice(Packet& pkt)
 		std::string szNotice;
 		pkt.readString(szNotice, iStrLen);
 		if (m_pUINotice)
-			m_pUINotice->m_Texts.push_back(szNotice);
+			m_pUINotice->m_Texts.push_back(NetToLocal(szNotice));
 	}
 
 	if (m_pUINotice && iNoticeCount > 0)
@@ -5161,6 +5578,7 @@ void CGameProcMain::MsgRecv_PartyOrForce(Packet& pkt)
 			int iStrLen = pkt.read<int16_t>();
 			std::string szID;
 			pkt.readString(szID, iStrLen);
+			szID = NetToLocal(szID);
 
 			if (iID >= 0)
 			{
@@ -5180,6 +5598,7 @@ void CGameProcMain::MsgRecv_PartyOrForce(Packet& pkt)
 				int iIDLength = pkt.read<int16_t>();
 				std::string szID;
 				pkt.readString(szID, iIDLength);
+				szID           = NetToLocal(szID);
 				int iHPMax     = pkt.read<int16_t>();
 				int iHP        = pkt.read<int16_t>();
 				int iLevel     = pkt.read<uint8_t>();
@@ -6401,6 +6820,7 @@ void CGameProcMain::MsgRecv_KnightsListBasic(Packet& pkt)
 				int iID  = pkt.read<int16_t>();               // 기사단 ID
 				int iLen = pkt.read<int16_t>();               // ID 문자열 길이..
 				pkt.readString(szID, iLen);                   // ID 문자열..
+				szID = NetToLocal(szID);
 
 				m_pUIKnightsOp->KnightsInfoInsert(iID, szID); // 기사단 정보 모든 걸 받는다..
 			}
@@ -6788,8 +7208,10 @@ void CGameProcMain::MsgRecv_WarpList(Packet& pkt) // 워프 리스트 - 존 체�
 		WI.iID  = pkt.read<int16_t>();               // 워프 ID
 		iStrLen = pkt.read<int16_t>();               // 이름 길이
 		pkt.readString(WI.szName, iStrLen);          // 이름
-		iStrLen = pkt.read<int16_t>();               // 동의문 길이
+		WI.szName = NetToLocal(WI.szName);
+		iStrLen   = pkt.read<int16_t>();             // 동의문 길이
 		pkt.readString(WI.szAgreement, iStrLen);     // 동의문
+		WI.szAgreement = NetToLocal(WI.szAgreement);
 		WI.iZone    = pkt.read<int16_t>();           // 존번호
 		WI.iMaxUser = pkt.read<int16_t>();           // 최대 유저 카운트.
 		WI.iGold    = pkt.read<uint32_t>();          // 돈
@@ -6868,6 +7290,7 @@ void CGameProcMain::MsgRecv_Knights_Create(Packet& pkt)
 			int iID  = pkt.read<int16_t>();        // 기사단 ID
 			int iLen = pkt.read<int16_t>();        // ID 문자열 길이..
 			pkt.readString(szID, iLen);            // ID 문자열..
+			szID            = NetToLocal(szID);
 			int iGrade      = pkt.read<uint8_t>(); // 등급
 			int iRank       = pkt.read<uint8_t>(); // 순위
 			uint32_t dwGold = pkt.read<uint32_t>();
@@ -7016,6 +7439,7 @@ void CGameProcMain::MsgRecv_Knights_Join(Packet& pkt)
 			int iL              = pkt.read<int16_t>(); // 소속 기사단 이름 길이.
 			std::string szKnightsName;
 			pkt.readString(szKnightsName, iL);
+			szKnightsName = NetToLocal(szKnightsName);
 			int iGrade = pkt.read<uint8_t>();          // 등급
 			int iRank  = pkt.read<uint8_t>();          // 순위
 
@@ -7115,6 +7539,7 @@ void CGameProcMain::MsgRecv_Knights_Leave(Packet& pkt)
 			int iL              = pkt.read<int16_t>(); // 소속 기사단 이름 길이.
 			std::string szKnightsName;
 			pkt.readString(szKnightsName, iL);
+			szKnightsName = NetToLocal(szKnightsName);
 			int iGrade = pkt.read<uint8_t>();          // 등급
 			int iRank  = pkt.read<uint8_t>();          // 순위
 
@@ -7385,6 +7810,7 @@ void CGameProcMain::MsgRecv_Knigts_Join_Req(Packet& pkt)
 			int iL                  = pkt.read<int16_t>(); // 소속 기사단 이름 길이.
 			std::string szKnightsName;
 			pkt.readString(szKnightsName, iL);
+			szKnightsName = NetToLocal(szKnightsName);
 
 			//			std::string szName;
 			//			__KnightsInfoBase* pKIB = m_pUIKnightsOp->KnightsInfoFind(m_iJoinReqClan);
@@ -7925,9 +8351,13 @@ bool CGameProcMain::OnMouseRbtnDown(POINT ptCur, POINT ptPrev)
 	{
 		SetGameCursor(nullptr);
 
+#ifdef _WIN32
+		// Warp the OS cursor back so mouse-look doesn't drift it off-window.
+		// The SDL relative-mouse path handles this on POSIX.
 		POINT ptScreen = ptPrev;
 		::ClientToScreen(s_hWndBase, &ptScreen);
 		::SetCursorPos(ptScreen.x, ptScreen.y);
+#endif
 		s_pLocalInput->MouseSetPos(ptPrev.x, ptPrev.y);
 	}
 
@@ -7955,7 +8385,8 @@ void CGameProcMain::ProcessUIKeyInput(bool /*bEnable*/)
 	{
 		CGameProcedure::ProcessUIKeyInput();
 
-		if (s_pLocalInput->IsKeyPress(DIK_RETURN) && !s_bKeyPress)
+		// Enter teleports in the GM panel instead of opening chat while it's open.
+		if (s_pLocalInput->IsKeyPress(DIK_RETURN) && !s_bKeyPress && !m_bGMPanelVisible)
 			m_pUIChatDlg->SetFocus();
 	}
 	else

@@ -211,7 +211,7 @@ void CUIManager::Render()
 	every game procedure which is somewhat unwanted right now...
 	*/
 	////////////////////////////////////////////////////////
-#ifdef _DEBUG
+#if defined(_DEBUG) && defined(_WIN32)
 	if (m_pDFont == nullptr)
 	{
 		m_pDFont = new CDFont("굴림", 10);
@@ -261,7 +261,7 @@ void CUIManager::Render()
 
 void CUIManager::RenderStateSet()
 {
-	if (nullptr == s_lpD3DDev)
+	if (nullptr == RHIDevice())
 		return;
 
 #ifdef _DEBUG
@@ -270,37 +270,37 @@ void CUIManager::RenderStateSet()
 #endif
 
 	// back up old state
-	s_lpD3DDev->GetRenderState(D3DRS_ZENABLE, &(s_sRSFU.dwZEnable));
-	s_lpD3DDev->GetRenderState(D3DRS_ALPHABLENDENABLE, &(s_sRSFU.dwAlphaBlend));
-	s_lpD3DDev->GetRenderState(D3DRS_SRCBLEND, &(s_sRSFU.dwSrcBlend));
-	s_lpD3DDev->GetRenderState(D3DRS_DESTBLEND, &(s_sRSFU.dwDestBlend));
-	s_lpD3DDev->GetRenderState(D3DRS_FOGENABLE, &(s_sRSFU.dwFog));
+	RHIDevice()->GetRenderState(D3DRS_ZENABLE, &(s_sRSFU.dwZEnable));
+	RHIDevice()->GetRenderState(D3DRS_ALPHABLENDENABLE, &(s_sRSFU.dwAlphaBlend));
+	RHIDevice()->GetRenderState(D3DRS_SRCBLEND, &(s_sRSFU.dwSrcBlend));
+	RHIDevice()->GetRenderState(D3DRS_DESTBLEND, &(s_sRSFU.dwDestBlend));
+	RHIDevice()->GetRenderState(D3DRS_FOGENABLE, &(s_sRSFU.dwFog));
 	/*
-	s_lpD3DDev->GetTextureStageState(0, D3DTSS_MAGFILTER,   &(s_sRSFU.dwMagFilter));
-	s_lpD3DDev->GetTextureStageState(0, D3DTSS_MINFILTER,   &(s_sRSFU.dwMinFilter));
-	s_lpD3DDev->GetTextureStageState(0, D3DTSS_MIPFILTER,   &(s_sRSFU.dwMipFilter));
+	RHIDevice()->GetTextureStageState(0, D3DTSS_MAGFILTER,   &(s_sRSFU.dwMagFilter));
+	RHIDevice()->GetTextureStageState(0, D3DTSS_MINFILTER,   &(s_sRSFU.dwMinFilter));
+	RHIDevice()->GetTextureStageState(0, D3DTSS_MIPFILTER,   &(s_sRSFU.dwMipFilter));
 	*/
-	s_lpD3DDev->GetSamplerState(0, D3DSAMP_MAGFILTER, &(s_sRSFU.dwMagFilter));
-	s_lpD3DDev->GetSamplerState(0, D3DSAMP_MINFILTER, &(s_sRSFU.dwMinFilter));
-	s_lpD3DDev->GetSamplerState(0, D3DSAMP_MIPFILTER, &(s_sRSFU.dwMipFilter));
+	RHIDevice()->GetSamplerState(0, D3DSAMP_MAGFILTER, &(s_sRSFU.dwMagFilter));
+	RHIDevice()->GetSamplerState(0, D3DSAMP_MINFILTER, &(s_sRSFU.dwMinFilter));
+	RHIDevice()->GetSamplerState(0, D3DSAMP_MIPFILTER, &(s_sRSFU.dwMipFilter));
 
 	// set state
 	if (D3DZB_FALSE != s_sRSFU.dwZEnable)
-		s_lpD3DDev->SetRenderState(D3DRS_ZENABLE, D3DZB_FALSE);
+		RHIDevice()->SetRenderState(D3DRS_ZENABLE, D3DZB_FALSE);
 	if (TRUE != s_sRSFU.dwAlphaBlend)
-		s_lpD3DDev->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+		RHIDevice()->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
 	if (D3DBLEND_SRCALPHA != s_sRSFU.dwSrcBlend)
-		s_lpD3DDev->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
+		RHIDevice()->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
 	if (D3DBLEND_INVSRCALPHA != s_sRSFU.dwDestBlend)
-		s_lpD3DDev->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+		RHIDevice()->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
 	if (FALSE != s_sRSFU.dwFog)
-		s_lpD3DDev->SetRenderState(D3DRS_FOGENABLE, FALSE); // 2d도 fog를 먹는다 ㅡ.ㅡ;
+		RHIDevice()->SetRenderState(D3DRS_FOGENABLE, FALSE); // 2d도 fog를 먹는다 ㅡ.ㅡ;
 	if (D3DTEXF_POINT != s_sRSFU.dwMagFilter)
-		s_lpD3DDev->SetSamplerState(0, D3DSAMP_MAGFILTER, D3DTEXF_POINT);
+		RHIDevice()->SetSamplerState(0, D3DSAMP_MAGFILTER, D3DTEXF_POINT);
 	if (D3DTEXF_POINT != s_sRSFU.dwMinFilter)
-		s_lpD3DDev->SetSamplerState(0, D3DSAMP_MINFILTER, D3DTEXF_POINT);
+		RHIDevice()->SetSamplerState(0, D3DSAMP_MINFILTER, D3DTEXF_POINT);
 	if (D3DTEXF_NONE != s_sRSFU.dwMipFilter)
-		s_lpD3DDev->SetSamplerState(0, D3DSAMP_MIPFILTER, D3DTEXF_NONE);
+		RHIDevice()->SetSamplerState(0, D3DSAMP_MIPFILTER, D3DTEXF_NONE);
 }
 
 void CUIManager::RenderStateRestore()
@@ -312,21 +312,21 @@ void CUIManager::RenderStateRestore()
 
 	// restore
 	if (D3DZB_FALSE != s_sRSFU.dwZEnable)
-		s_lpD3DDev->SetRenderState(D3DRS_ZENABLE, s_sRSFU.dwZEnable);
+		RHIDevice()->SetRenderState(D3DRS_ZENABLE, s_sRSFU.dwZEnable);
 	if (TRUE != s_sRSFU.dwAlphaBlend)
-		s_lpD3DDev->SetRenderState(D3DRS_ALPHABLENDENABLE, s_sRSFU.dwAlphaBlend);
+		RHIDevice()->SetRenderState(D3DRS_ALPHABLENDENABLE, s_sRSFU.dwAlphaBlend);
 	if (D3DBLEND_SRCALPHA != s_sRSFU.dwSrcBlend)
-		s_lpD3DDev->SetRenderState(D3DRS_SRCBLEND, s_sRSFU.dwSrcBlend);
+		RHIDevice()->SetRenderState(D3DRS_SRCBLEND, s_sRSFU.dwSrcBlend);
 	if (D3DBLEND_INVSRCALPHA != s_sRSFU.dwDestBlend)
-		s_lpD3DDev->SetRenderState(D3DRS_DESTBLEND, s_sRSFU.dwDestBlend);
+		RHIDevice()->SetRenderState(D3DRS_DESTBLEND, s_sRSFU.dwDestBlend);
 	if (FALSE != s_sRSFU.dwFog)
-		s_lpD3DDev->SetRenderState(D3DRS_FOGENABLE, s_sRSFU.dwFog);
+		RHIDevice()->SetRenderState(D3DRS_FOGENABLE, s_sRSFU.dwFog);
 	if (D3DTEXF_POINT != s_sRSFU.dwMagFilter)
-		s_lpD3DDev->SetSamplerState(0, D3DSAMP_MAGFILTER, s_sRSFU.dwMagFilter);
+		RHIDevice()->SetSamplerState(0, D3DSAMP_MAGFILTER, s_sRSFU.dwMagFilter);
 	if (D3DTEXF_POINT != s_sRSFU.dwMinFilter)
-		s_lpD3DDev->SetSamplerState(0, D3DSAMP_MINFILTER, s_sRSFU.dwMinFilter);
+		RHIDevice()->SetSamplerState(0, D3DSAMP_MINFILTER, s_sRSFU.dwMinFilter);
 	if (D3DTEXF_NONE != s_sRSFU.dwMipFilter)
-		s_lpD3DDev->SetSamplerState(0, D3DSAMP_MIPFILTER, s_sRSFU.dwMipFilter);
+		RHIDevice()->SetSamplerState(0, D3DSAMP_MIPFILTER, s_sRSFU.dwMipFilter);
 }
 
 bool CUIManager::BroadcastIconDropMsg(__IconItemSkill* spItem)

@@ -9,8 +9,11 @@
 #include "N3Sun.h"
 #include "N3Cloud.h"
 #include "N3Star.h"
+#ifdef _WIN32
 #include "mmsystem.h"
+#endif
 #include "N3Texture.h"
+#include <Platform/PlatformTime.h>
 
 #include "N3GERain.h"
 #include "N3GESnow.h"
@@ -25,7 +28,7 @@ typedef std::vector<__SKY_DAYCHANGE>::iterator it_SDC;
 CN3SkyMng::CN3SkyMng()
 {
 	m_eWeather    = SW_CLEAR;
-	m_dwCheckTick = timeGetTime();
+	m_dwCheckTick = PlatformTickMs();
 
 #ifdef _N3GAME // 게임이 아닌 툴에서는 필요없다...
 	m_pSnd_Weather_Snow = nullptr;
@@ -134,33 +137,33 @@ void CN3SkyMng::Render()
 	__Matrix44 matView = s_CameraData.mtxView;
 	matView.m[3][0] = matView.m[3][1] = matView.m[3][2] = 0.0f;
 
-	s_lpD3DDev->SetTransform(D3DTS_VIEW, matView.toD3D());
+	RHIDevice()->SetTransform(D3DTS_VIEW, matView.toD3D());
 
 	// backup render state
 	DWORD dwAlphaBlend = 0, dwSrcBlend = 0, dwDestBlend = 0, dwZEnable = 0, dwFog = 0,
 		  dwLighting = 0;
-	s_lpD3DDev->GetRenderState(D3DRS_ALPHABLENDENABLE, &dwAlphaBlend);
-	s_lpD3DDev->GetRenderState(D3DRS_SRCBLEND, &dwSrcBlend);
-	s_lpD3DDev->GetRenderState(D3DRS_DESTBLEND, &dwDestBlend);
-	s_lpD3DDev->GetRenderState(D3DRS_ZENABLE, &dwZEnable);
-	s_lpD3DDev->GetRenderState(D3DRS_FOGENABLE, &dwFog);
-	s_lpD3DDev->GetRenderState(D3DRS_LIGHTING, &dwLighting);
+	RHIDevice()->GetRenderState(D3DRS_ALPHABLENDENABLE, &dwAlphaBlend);
+	RHIDevice()->GetRenderState(D3DRS_SRCBLEND, &dwSrcBlend);
+	RHIDevice()->GetRenderState(D3DRS_DESTBLEND, &dwDestBlend);
+	RHIDevice()->GetRenderState(D3DRS_ZENABLE, &dwZEnable);
+	RHIDevice()->GetRenderState(D3DRS_FOGENABLE, &dwFog);
+	RHIDevice()->GetRenderState(D3DRS_LIGHTING, &dwLighting);
 
 	// set render state
 	if (TRUE != dwAlphaBlend)
-		s_lpD3DDev->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+		RHIDevice()->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
 	if (D3DBLEND_SRCALPHA != dwSrcBlend)
-		s_lpD3DDev->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
+		RHIDevice()->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
 	if (D3DBLEND_INVSRCALPHA != dwDestBlend)
-		s_lpD3DDev->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+		RHIDevice()->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
 	if (D3DZB_FALSE != dwZEnable)
-		s_lpD3DDev->SetRenderState(D3DRS_ZENABLE, D3DZB_FALSE);
+		RHIDevice()->SetRenderState(D3DRS_ZENABLE, D3DZB_FALSE);
 	if (FALSE != dwFog)
-		s_lpD3DDev->SetRenderState(D3DRS_FOGENABLE, FALSE);
+		RHIDevice()->SetRenderState(D3DRS_FOGENABLE, FALSE);
 	if (FALSE != dwLighting)
-		s_lpD3DDev->SetRenderState(D3DRS_LIGHTING, FALSE);
-	s_lpD3DDev->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1); // default 수치 이다.
-	s_lpD3DDev->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_TEXTURE);   // default 수치 이다.
+		RHIDevice()->SetRenderState(D3DRS_LIGHTING, FALSE);
+	RHIDevice()->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1); // default 수치 이다.
+	RHIDevice()->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_TEXTURE);   // default 수치 이다.
 
 	if (m_pSky)
 		m_pSky->Render();                                                   // 하늘
@@ -175,18 +178,18 @@ void CN3SkyMng::Render()
 
 	// Restore the modified renderstates
 	if (TRUE != dwAlphaBlend)
-		s_lpD3DDev->SetRenderState(D3DRS_ALPHABLENDENABLE, dwAlphaBlend);
+		RHIDevice()->SetRenderState(D3DRS_ALPHABLENDENABLE, dwAlphaBlend);
 	if (D3DBLEND_SRCALPHA != dwSrcBlend)
-		s_lpD3DDev->SetRenderState(D3DRS_SRCBLEND, dwSrcBlend);
+		RHIDevice()->SetRenderState(D3DRS_SRCBLEND, dwSrcBlend);
 	if (D3DBLEND_INVSRCALPHA != dwDestBlend)
-		s_lpD3DDev->SetRenderState(D3DRS_DESTBLEND, dwDestBlend);
+		RHIDevice()->SetRenderState(D3DRS_DESTBLEND, dwDestBlend);
 	if (D3DZB_FALSE != dwZEnable)
-		s_lpD3DDev->SetRenderState(D3DRS_ZENABLE, dwZEnable);
+		RHIDevice()->SetRenderState(D3DRS_ZENABLE, dwZEnable);
 	if (FALSE != dwFog)
-		s_lpD3DDev->SetRenderState(D3DRS_FOGENABLE, dwFog);
+		RHIDevice()->SetRenderState(D3DRS_FOGENABLE, dwFog);
 	if (FALSE != dwLighting)
-		s_lpD3DDev->SetRenderState(D3DRS_LIGHTING, dwLighting);
-	s_lpD3DDev->SetTransform(D3DTS_VIEW, s_CameraData.mtxView.toD3D());
+		RHIDevice()->SetRenderState(D3DRS_LIGHTING, dwLighting);
+	RHIDevice()->SetTransform(D3DTS_VIEW, s_CameraData.mtxView.toD3D());
 }
 
 void CN3SkyMng::RenderWeather()
@@ -206,7 +209,7 @@ void CN3SkyMng::RenderWeather()
 
 void CN3SkyMng::Tick()
 {
-	uint32_t dwCurTickCount = timeGetTime();
+	uint32_t dwCurTickCount = PlatformTickMs();
 	__ASSERT(dwCurTickCount >= m_dwCheckTick, "음수이다.");
 	uint32_t dwCurGameTime = m_dwCheckGameTime
 							 + (uint32_t) ((dwCurTickCount - m_dwCheckTick) * TIME_REAL_PER_GAME
@@ -462,8 +465,12 @@ bool CN3SkyMng::LoadFromTextFile(const char* szIniFN)
 				{
 					std::string szErrLine = fmt::format(
 						"From \"DayChage Count : \" -> Line : {}", i);
+#ifdef _WIN32
 					MessageBoxA(CN3Base::s_hWndBase, szErrLine.c_str(),
 						"하늘 환경설정 데이터 Parsing 실패", MB_OK); //CN3Base::s_hWndBase
+#else
+					CLogWriter::Write("Sky config parsing failed: {}", szErrLine);
+#endif
 					this->Release();
 					return false;
 				}
@@ -783,7 +790,7 @@ void CN3SkyMng::InitToDefaultHardCoding()
 void CN3SkyMng::SetCheckGameTime(uint32_t dwCheckGameTime)
 {
 	dwCheckGameTime      %= 86400;
-	uint32_t dwCheckTick  = timeGetTime();
+	uint32_t dwCheckTick  = PlatformTickMs();
 	m_dwCheckGameTime     = dwCheckGameTime;
 	m_dwCheckTick         = dwCheckTick;
 
@@ -984,7 +991,7 @@ void CN3SkyMng::SetWeather(eSKY_WEATHER eWeather, int iPercentage)
 	m_eWeather                = eWeather;
 
 	// 현재 게임 시간 구하기
-	uint32_t dwCurTickCount   = timeGetTime();
+	uint32_t dwCurTickCount   = PlatformTickMs();
 	__ASSERT(dwCurTickCount >= m_dwCheckTick, "음수이다.");
 	uint32_t dwCurGameTime = m_dwCheckGameTime
 							 + (uint32_t) ((dwCurTickCount - m_dwCheckTick) * TIME_REAL_PER_GAME
@@ -1412,7 +1419,7 @@ void CN3SkyMng::SunAndMoonDirectionFixByHour(int iHour) // 해와 달 각도 관
 
 void CN3SkyMng::GetGameTime(int* piYear, int* piMonth, int* piDay, int* piHour, int* piMin)
 {
-	uint32_t dwCurTickCount = timeGetTime();
+	uint32_t dwCurTickCount = PlatformTickMs();
 	__ASSERT(dwCurTickCount >= m_dwCheckTick, "음수이다.");
 	uint32_t dwCurGameTime = m_dwCheckGameTime
 							 + (uint32_t) ((dwCurTickCount - m_dwCheckTick) * TIME_REAL_PER_GAME

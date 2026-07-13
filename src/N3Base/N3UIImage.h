@@ -28,7 +28,7 @@ public:
 	}
 
 protected:
-	LPDIRECT3DVERTEXBUFFER9 m_pVB; // vertex buffer
+	IRHIVertexBuffer* m_pVB; // vertex buffer
 	CN3Texture* m_pTexRef;         // texture 참조 포인터 (s_TexMng에서 관리하므로 참조포인터이다.)
 
 	// 텍스처 이름.. 따로 갖고 있는 이유는 툴에서 텍스처 부르기가 실패할 경우를 대비해서이다.

@@ -3,6 +3,9 @@
 //////////////////////////////////////////////////////////////////////
 
 #include "StdAfx.h"
+#ifndef _WIN32
+#include <Platform/PlatformString.h> // lstrcmpiA
+#endif
 #include "UISkillTreeDlg.h"
 #include "PacketDef.h"
 #include "LocalInput.h"

@@ -81,19 +81,19 @@ bool CN3Joint::Save(File& file)
 void CN3Joint::Render(const __Matrix44* pMtxParent, float fUnitSize)
 {
 	DWORD dwAlpha, dwFog, dwLight, dwZ;
-	s_lpD3DDev->GetRenderState(D3DRS_ZENABLE, &dwZ);
-	s_lpD3DDev->GetRenderState(D3DRS_FOGENABLE, &dwFog);
-	s_lpD3DDev->GetRenderState(D3DRS_ALPHABLENDENABLE, &dwAlpha);
-	s_lpD3DDev->GetRenderState(D3DRS_LIGHTING, &dwLight);
+	RHIDevice()->GetRenderState(D3DRS_ZENABLE, &dwZ);
+	RHIDevice()->GetRenderState(D3DRS_FOGENABLE, &dwFog);
+	RHIDevice()->GetRenderState(D3DRS_ALPHABLENDENABLE, &dwAlpha);
+	RHIDevice()->GetRenderState(D3DRS_LIGHTING, &dwLight);
 
 	if (dwZ)
-		s_lpD3DDev->SetRenderState(D3DRS_ZENABLE, FALSE);
+		RHIDevice()->SetRenderState(D3DRS_ZENABLE, FALSE);
 	if (dwFog)
-		s_lpD3DDev->SetRenderState(D3DRS_FOGENABLE, FALSE);
+		RHIDevice()->SetRenderState(D3DRS_FOGENABLE, FALSE);
 	if (dwAlpha)
-		s_lpD3DDev->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+		RHIDevice()->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
 	if (dwLight)
-		s_lpD3DDev->SetRenderState(D3DRS_LIGHTING, FALSE);
+		RHIDevice()->SetRenderState(D3DRS_LIGHTING, FALSE);
 
 	static __Matrix44 stm;
 	static __Material smtl;
@@ -105,9 +105,9 @@ void CN3Joint::Render(const __Matrix44* pMtxParent, float fUnitSize)
 		bInit = true;
 	}
 
-	s_lpD3DDev->SetTransform(D3DTS_WORLD, stm.toD3D());
-	s_lpD3DDev->SetMaterial(&smtl);
-	s_lpD3DDev->SetTexture(0, nullptr);
+	RHIDevice()->SetTransform(D3DTS_WORLD, stm.toD3D());
+	RHIDevice()->SetMaterial(&smtl);
+	RHIDevice()->SetTexture(0, nullptr);
 
 	if (m_pParent) // 부모 관절과 이어주는 선..
 	{
@@ -124,8 +124,8 @@ void CN3Joint::Render(const __Matrix44* pMtxParent, float fUnitSize)
 
 		vBone[0].Set(v[0], 0xff00ff00);
 		vBone[1].Set(v[1], 0xff0000ff);
-		s_lpD3DDev->SetFVF(FVF_CV);
-		s_lpD3DDev->DrawPrimitiveUP(D3DPT_LINELIST, 1, vBone, sizeof(__VertexColor)); // 선그리기..
+		RHIDevice()->SetFVF(FVF_CV);
+		RHIDevice()->DrawPrimitiveUP(D3DPT_LINELIST, 1, vBone, sizeof(__VertexColor)); // 선그리기..
 	}
 
 	// 박스 그리기..
@@ -163,21 +163,21 @@ void CN3Joint::Render(const __Matrix44* pMtxParent, float fUnitSize)
 	mtxBox  *= m_Matrix;
 	mtxAxis *= m_Matrix;
 
-	s_lpD3DDev->SetFVF(FVF_CV);
-	s_lpD3DDev->SetTransform(D3DTS_WORLD, mtxBox.toD3D());
-	s_lpD3DDev->DrawPrimitiveUP(
+	RHIDevice()->SetFVF(FVF_CV);
+	RHIDevice()->SetTransform(D3DTS_WORLD, mtxBox.toD3D());
+	RHIDevice()->DrawPrimitiveUP(
 		D3DPT_TRIANGLELIST, 12, vBoxes, sizeof(__VertexColor));                   // 박스 그리기..
-	s_lpD3DDev->SetTransform(D3DTS_WORLD, mtxAxis.toD3D());
-	s_lpD3DDev->DrawPrimitiveUP(D3DPT_LINELIST, 3, vAxis, sizeof(__VertexColor)); // 축 그리기..
+	RHIDevice()->SetTransform(D3DTS_WORLD, mtxAxis.toD3D());
+	RHIDevice()->DrawPrimitiveUP(D3DPT_LINELIST, 3, vAxis, sizeof(__VertexColor)); // 축 그리기..
 
 	if (dwZ)
-		s_lpD3DDev->SetRenderState(D3DRS_ZENABLE, dwZ);
+		RHIDevice()->SetRenderState(D3DRS_ZENABLE, dwZ);
 	if (dwFog)
-		s_lpD3DDev->SetRenderState(D3DRS_FOGENABLE, dwFog);
+		RHIDevice()->SetRenderState(D3DRS_FOGENABLE, dwFog);
 	if (dwAlpha)
-		s_lpD3DDev->SetRenderState(D3DRS_ALPHABLENDENABLE, dwAlpha);
+		RHIDevice()->SetRenderState(D3DRS_ALPHABLENDENABLE, dwAlpha);
 	if (dwLight)
-		s_lpD3DDev->SetRenderState(D3DRS_LIGHTING, dwLight);
+		RHIDevice()->SetRenderState(D3DRS_LIGHTING, dwLight);
 
 	for (CN3Joint* pChild : m_Children)
 	{

@@ -13,6 +13,7 @@
 #include "PacketDef.h"
 #include "APISocket.h"
 #include "text_resources.h"
+#include "NetworkEncoding.h"
 
 #include <N3Base/N3UIString.h>
 #include <N3Base/N3UIImage.h>
@@ -929,7 +930,7 @@ bool CUIKnights::MsgRecv_MemberInfo(Packet& pkt)
 		__KnightsMemberInfo KMI;
 
 		pkt.readString(KMI.szName, iNameLength);
-		// KMI.szName = szName;
+		KMI.szName     = NetToLocal(KMI.szName);
 		KMI.eDuty      = (e_KnightsDuty) pkt.read<uint8_t>();
 		KMI.iLevel     = pkt.read<uint8_t>();
 		KMI.eClass     = (e_Class) pkt.read<int16_t>();
@@ -998,7 +999,7 @@ void CUIKnights::UpdateKnightsGrade(int iVal)
 			m_pImage_Grade[iVal - 1]->SetVisible(true);
 }
 
-void CUIKnights::UpdateKnightsRank(int iVal)
+void CUIKnights::UpdateKnightsRank(int /*iVal*/)
 {
 	// TODO: @Demircivi.
 }
@@ -1348,8 +1349,9 @@ void CUIFriends::MsgSend_MemberInfo(bool bDisableInterval)
 	{
 		std::string szID;
 		m_pList_Friends->GetString(i, szID);
-		CAPISocket::MP_AddShort(&(buffers[0]), iOffset, (int16_t) szID.size());
-		CAPISocket::MP_AddString(&(buffers[0]), iOffset, szID);
+		const std::string szWire = LocalToNet(szID);
+		CAPISocket::MP_AddShort(&(buffers[0]), iOffset, (int16_t) szWire.size());
+		CAPISocket::MP_AddString(&(buffers[0]), iOffset, szWire);
 	}
 
 	CGameProcedure::s_pSocket->Send(&(buffers[0]), iOffset);
@@ -1364,12 +1366,14 @@ void CUIFriends::MsgSend_MemberInfo(const std::string& szID)
 	int iOffset = 0;
 	uint8_t byBuff[32];
 
+	const std::string szWire = LocalToNet(szID);
+
 	CAPISocket::MP_AddByte(byBuff, iOffset,
 		WIZ_FRIEND_PROCESS); // 친구 정보.. Send s1(이름길이), str1(유저이름) | Receive s1(이름길이), str1(유저이름), s1(ID), b2(접속, 파티)
 	CAPISocket::MP_AddShort(byBuff, iOffset, iFC);
 
-	CAPISocket::MP_AddShort(byBuff, iOffset, (int16_t) szID.size());
-	CAPISocket::MP_AddString(byBuff, iOffset, szID);
+	CAPISocket::MP_AddShort(byBuff, iOffset, (int16_t) szWire.size());
+	CAPISocket::MP_AddString(byBuff, iOffset, szWire);
 
 	CGameProcedure::s_pSocket->Send(byBuff, iOffset);
 }
@@ -1387,6 +1391,7 @@ void CUIFriends::MsgRecv_MemberInfo(Packet& pkt)
 		iLen = pkt.read<
 			int16_t>(); // 친구 정보.. Send s1(이름길이), str1(유저이름) | Receive s1(이름길이), str1(유저이름), s1(ID), b2(접속, 파티)
 		pkt.readString(szID, iLen);
+		szID     = NetToLocal(szID);
 		iID      = pkt.read<int16_t>();
 		bStatus  = pkt.read<uint8_t>();
 

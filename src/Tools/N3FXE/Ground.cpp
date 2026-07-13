@@ -58,7 +58,7 @@ void CGround::Render()
 	s_lpD3DDev->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
 
 	if (m_pTile)
-		s_lpD3DDev->SetTexture(0, m_pTile->Get());
+		s_lpD3DDev->SetTexture(0, m_pTile->GetRawD3D());
 	else
 		s_lpD3DDev->SetTexture(0, nullptr);
 

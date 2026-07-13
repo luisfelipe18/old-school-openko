@@ -57,3 +57,6 @@ last-build-states/
 
 # Do not ignore CMakeLists.txt
 !CMakeLists.txt
+
+# CMake build directories (POSIX presets: build/<preset>/)
+/build/

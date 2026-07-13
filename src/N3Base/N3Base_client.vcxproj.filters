@@ -492,4 +492,13 @@
     </None>
     <None Include="VertexTypes.inl" />
   </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="RHI\RHIDeviceNull.cpp" />
+    <ClInclude Include="RHI\RHIBuffers.h" />
+    <ClInclude Include="RHI\RHIDevice.h" />
+    <ClInclude Include="RHI\RHIDeviceD3D9.h" />
+    <ClInclude Include="RHI\RHIDeviceNull.h" />
+    <ClInclude Include="RHI\RHIStateKey.h" />
+    <ClInclude Include="RHI\RHITextures.h" />
+  </ItemGroup>
 </Project>

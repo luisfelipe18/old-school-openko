@@ -31,7 +31,9 @@
 		/*assert(pos + sizeof(type) <= size());*/              \
 		if (pos + sizeof(type) > size())                       \
 			return {};                                         \
-		return *reinterpret_cast<const type*>(&_storage[pos]); \
+		type value;                                            \
+		memcpy(&value, &_storage[pos], sizeof(value));         \
+		return value;                                          \
 	}                                                          \
 	template <>                                                \
 	type ByteBuffer::read<type>()                              \

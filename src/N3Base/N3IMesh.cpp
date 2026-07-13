@@ -274,7 +274,7 @@ __VertexT1* CN3IMesh::BuildVertexList()
 
 void CN3IMesh::Render(bool bUseTwoUV)
 {
-	if (s_lpD3DDev == nullptr || m_nFC <= 0)
+	if (RHIDevice() == nullptr || m_nFC <= 0)
 		return;
 
 	if (bUseTwoUV)
@@ -282,8 +282,8 @@ void CN3IMesh::Render(bool bUseTwoUV)
 		__VertexT2* pVs = this->BuildVertexListTwoUV();
 		if (pVs)
 		{
-			s_lpD3DDev->SetFVF(FVF_VNT2);
-			s_lpD3DDev->DrawPrimitiveUP(D3DPT_TRIANGLELIST, m_nFC, pVs, sizeof(__VertexT2));
+			RHIDevice()->SetFVF(FVF_VNT2);
+			RHIDevice()->DrawPrimitiveUP(D3DPT_TRIANGLELIST, m_nFC, pVs, sizeof(__VertexT2));
 		}
 	}
 	else
@@ -291,21 +291,21 @@ void CN3IMesh::Render(bool bUseTwoUV)
 		__VertexT1* pVs = this->BuildVertexList();
 		if (pVs)
 		{
-			s_lpD3DDev->SetFVF(FVF_VNT1);
-			s_lpD3DDev->DrawPrimitiveUP(D3DPT_TRIANGLELIST, m_nFC, pVs, sizeof(__VertexT1));
+			RHIDevice()->SetFVF(FVF_VNT1);
+			RHIDevice()->DrawPrimitiveUP(D3DPT_TRIANGLELIST, m_nFC, pVs, sizeof(__VertexT1));
 		}
 	}
 
 	//	this->BuildVertexList();
-	//	s_lpD3DDev->SetFVF(FVF_VNT1);
-	//	s_lpD3DDev->SetStreamSource( 0, m_lpVB, sizeof(__VertexT1) );
-	//	s_lpD3DDev->DrawPrimitive(D3DPT_TRIANGLELIST, 0, m_nFC);
+	//	RHIDevice()->SetFVF(FVF_VNT1);
+	//	RHIDevice()->SetStreamSource( 0, m_lpVB, sizeof(__VertexT1) );
+	//	RHIDevice()->DrawPrimitive(D3DPT_TRIANGLELIST, 0, m_nFC);
 }
 
 #ifdef _N3TOOL
 void CN3IMesh::RenderSelected()
 {
-	if (s_lpD3DDev == nullptr || m_nFC <= 0)
+	if (RHIDevice() == nullptr || m_nFC <= 0)
 		return;
 	__VertexT1* pVs = this->BuildVertexList();
 	if (nullptr == pVs)
@@ -468,7 +468,7 @@ void CN3IMesh::ApplyOffset(__Vector3 vOffset)
 #ifdef _N3GAME
 void CN3IMesh::TickForShadow(bool bUseTwoUV)
 {
-	if (s_lpD3DDev == nullptr || m_nFC <= 0)
+	if (RHIDevice() == nullptr || m_nFC <= 0)
 	{
 		m_pVertexT1 = nullptr;
 		return;

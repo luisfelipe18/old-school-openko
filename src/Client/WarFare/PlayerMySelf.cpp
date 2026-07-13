@@ -3,6 +3,9 @@
 //////////////////////////////////////////////////////////////////////
 
 #include "StdAfx.h"
+#ifndef _WIN32
+#include <Platform/PlatformPaths.h> // _splitpath / _MAX_* for model-filename building
+#endif
 #include "PlayerMySelf.h"
 #include "PacketDef.h"
 #include "PlayerOtherMgr.h"
@@ -417,19 +420,19 @@ void CPlayerMySelf::InventoryChrRender(const RECT& Rect)
 {
 	/*
 	uint32_t dwUsefog = TRUE;
-	CN3Base::s_lpD3DDev->GetRenderState( D3DRS_FOGENABLE , &dwUsefog );
+	CN3Base::RHIDevice()->GetRenderState( D3DRS_FOGENABLE , &dwUsefog );
 
 	uint32_t dwUseLighting=TRUE;
-	CN3Base::s_lpD3DDev->GetRenderState( D3DRS_LIGHTING, &dwUseLighting );
+	CN3Base::RHIDevice()->GetRenderState( D3DRS_LIGHTING, &dwUseLighting );
 
 	int	bLight[8];
-	for ( int i = 0; i < 8; i++ )	CN3Base::s_lpD3DDev->GetLightEnable(i, &bLight[i]);
+	for ( int i = 0; i < 8; i++ )	CN3Base::RHIDevice()->GetLightEnable(i, &bLight[i]);
 
-	if (dwUseLighting) CN3Base::s_lpD3DDev->SetRenderState( D3DRS_LIGHTING, TRUE );
-	if (dwUsefog) CN3Base::s_lpD3DDev->SetRenderState( D3DRS_FOGENABLE, FALSE );
+	if (dwUseLighting) CN3Base::RHIDevice()->SetRenderState( D3DRS_LIGHTING, TRUE );
+	if (dwUsefog) CN3Base::RHIDevice()->SetRenderState( D3DRS_FOGENABLE, FALSE );
 	// set render states
-	for ( i = 1; i < 8; i++ )	CN3Base::s_lpD3DDev->LightEnable(i, FALSE);
-	CN3Base::s_lpD3DDev->LightEnable(0, TRUE);
+	for ( i = 1; i < 8; i++ )	CN3Base::RHIDevice()->LightEnable(i, FALSE);
+	CN3Base::RHIDevice()->LightEnable(0, TRUE);
 
 	D3DLIGHT8 lgt0;
 	
@@ -439,27 +442,27 @@ void CPlayerMySelf::InventoryChrRender(const RECT& Rect)
 	lgt0.Range = 100.0f;
 	lgt0.Position = __Vector3(0.0f, 2.0f, -10.0f);
 	lgt0.Diffuse.r = 220/255.0f; lgt0.Diffuse.g = 255/255.0f; lgt0.Diffuse.b = 220/255.0f;
-	CN3Base::s_lpD3DDev->SetLight(0, &lgt0);
+	CN3Base::RHIDevice()->SetLight(0, &lgt0);
 
 	//캐릭터 찍기..
 	//
 	__Matrix44 mtxproj, mtxview, mtxworld, mtxprojback, mtxviewback, mtxworldback;
 
-	CN3Base::s_lpD3DDev->GetTransform(D3DTS_PROJECTION, mtxprojback.toD3D());
-	CN3Base::s_lpD3DDev->GetTransform(D3DTS_VIEW, mtxviewback.toD3D());
-	CN3Base::s_lpD3DDev->GetTransform(D3DTS_WORLD, mtxworldback.toD3D());
+	CN3Base::RHIDevice()->GetTransform(D3DTS_PROJECTION, mtxprojback.toD3D());
+	CN3Base::RHIDevice()->GetTransform(D3DTS_VIEW, mtxviewback.toD3D());
+	CN3Base::RHIDevice()->GetTransform(D3DTS_WORLD, mtxworldback.toD3D());
 
 	mtxproj.OrthoLH(12.0f, 9.0f, 0, 100);  
-    CN3Base::s_lpD3DDev->SetTransform(D3DTS_PROJECTION, mtxproj.toD3D());
+    CN3Base::RHIDevice()->SetTransform(D3DTS_PROJECTION, mtxproj.toD3D());
 
     mtxview.LookAtLH(
 		{ 0.0f, 2.0f,-10.0f },
 		{ 0.0f, 0.0f, 0.0f },
 		{ 0.0f, 1.0f, 0.0f });
-    CN3Base::s_lpD3DDev->SetTransform(D3DTS_VIEW, mtxview.toD3D());
+    CN3Base::RHIDevice()->SetTransform(D3DTS_VIEW, mtxview.toD3D());
 
 	mtxworld.Identity();
-	CN3Base::s_lpD3DDev->SetTransform(D3DTS_WORLD, mtxworld.toD3D());
+	CN3Base::RHIDevice()->SetTransform(D3DTS_WORLD, mtxworld.toD3D());
 
 
 ///////////////////////////////////////////////////////////////
@@ -490,37 +493,37 @@ void CPlayerMySelf::InventoryChrRender(const RECT& Rect)
 	m_ChrInv.RotSet(qt);
 
 	CGameProcedure::s_pEng->ClearZBuffer(nullptr);
-	CN3Base::s_lpD3DDev->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);
+	CN3Base::RHIDevice()->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);
 	m_ChrInv.m_nLOD = 0;
 	m_ChrInv.Render();
 
-	CN3Base::s_lpD3DDev->SetTransform(D3DTS_PROJECTION, mtxprojback.toD3D());
-	CN3Base::s_lpD3DDev->SetTransform(D3DTS_VIEW, mtxviewback.toD3D());
-	CN3Base::s_lpD3DDev->SetTransform(D3DTS_WORLD, mtxworldback.toD3D());
+	CN3Base::RHIDevice()->SetTransform(D3DTS_PROJECTION, mtxprojback.toD3D());
+	CN3Base::RHIDevice()->SetTransform(D3DTS_VIEW, mtxviewback.toD3D());
+	CN3Base::RHIDevice()->SetTransform(D3DTS_WORLD, mtxworldback.toD3D());
 
-	CN3Base::s_lpD3DDev->SetRenderState(D3DRS_AMBIENT, 0x00000000);
+	CN3Base::RHIDevice()->SetRenderState(D3DRS_AMBIENT, 0x00000000);
 
-	CN3Base::s_lpD3DDev->SetRenderState( D3DRS_LIGHTING, dwUseLighting );
-	CN3Base::s_lpD3DDev->SetRenderState( D3DRS_FOGENABLE , dwUsefog );
-	for ( i = 0; i < 8; i++ )	CN3Base::s_lpD3DDev->LightEnable(i, bLight[i]);
+	CN3Base::RHIDevice()->SetRenderState( D3DRS_LIGHTING, dwUseLighting );
+	CN3Base::RHIDevice()->SetRenderState( D3DRS_FOGENABLE , dwUsefog );
+	for ( i = 0; i < 8; i++ )	CN3Base::RHIDevice()->LightEnable(i, bLight[i]);
 */
 	// 아래로 dino수정
 	// backup render state
 	DWORD dwLighting = 0;
 	__D3DLight9 BackupLight0;
 
-	s_lpD3DDev->GetRenderState(D3DRS_LIGHTING, &dwLighting);
+	RHIDevice()->GetRenderState(D3DRS_LIGHTING, &dwLighting);
 	BOOL bLight[8] = {};
 	for (int i = 0; i < 8; ++i)
-		s_lpD3DDev->GetLightEnable(i, &bLight[i]);
-	s_lpD3DDev->GetLight(0, BackupLight0.toD3D());
+		RHIDevice()->GetLightEnable(i, &bLight[i]);
+	RHIDevice()->GetLight(0, BackupLight0.toD3D());
 
 	// set render state
 	if (TRUE != dwLighting)
-		s_lpD3DDev->SetRenderState(D3DRS_LIGHTING, TRUE);
+		RHIDevice()->SetRenderState(D3DRS_LIGHTING, TRUE);
 	for (int i = 1; i < 8; ++i)
-		s_lpD3DDev->LightEnable(i, FALSE);
-	s_lpD3DDev->LightEnable(0, TRUE);
+		RHIDevice()->LightEnable(i, FALSE);
+	RHIDevice()->LightEnable(0, TRUE);
 
 	// 0번 light 설정
 	__D3DLight9 Light0  = {};
@@ -531,7 +534,7 @@ void CPlayerMySelf::InventoryChrRender(const RECT& Rect)
 	Light0.Diffuse.r    = 220 / 255.0f;
 	Light0.Diffuse.g    = 255 / 255.0f;
 	Light0.Diffuse.b    = 220 / 255.0f;
-	s_lpD3DDev->SetLight(0, Light0.toD3D());
+	RHIDevice()->SetLight(0, Light0.toD3D());
 
 	// 캐릭터 위치와 방향 세팅
 	m_ChrInv.PosSet(0, 0, 0);
@@ -544,10 +547,10 @@ void CPlayerMySelf::InventoryChrRender(const RECT& Rect)
 
 	// restore
 	if (TRUE != dwLighting)
-		s_lpD3DDev->SetRenderState(D3DRS_LIGHTING, dwLighting);
+		RHIDevice()->SetRenderState(D3DRS_LIGHTING, dwLighting);
 	for (int i = 0; i < 8; ++i)
-		s_lpD3DDev->LightEnable(i, bLight[i]);
-	s_lpD3DDev->SetLight(0, BackupLight0.toD3D());
+		RHIDevice()->LightEnable(i, bLight[i]);
+	RHIDevice()->SetLight(0, BackupLight0.toD3D());
 }
 
 void CPlayerMySelf::InventoryChrTick()

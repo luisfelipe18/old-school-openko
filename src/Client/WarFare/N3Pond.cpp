@@ -268,42 +268,42 @@ void CN3Pond::Render()
 	DWORD dwColor_0 = 0, dwColorArg1_0 = 0, dwColorArg2_0 = 0, dwMipFilter_0 = 0;
 	DWORD dwColor_1 = 0, dwColorArg1_1 = 0, dwColorArg2_1 = 0, dwMipFilter_1 = 0;
 
-	s_lpD3DDev->GetTransform(D3DTS_WORLD, matOld.toD3D());
-	s_lpD3DDev->GetRenderState(D3DRS_ALPHABLENDENABLE, &dwAlphaEnable);
-	s_lpD3DDev->GetRenderState(D3DRS_SRCBLEND, &dwSrcBlend);
-	s_lpD3DDev->GetRenderState(D3DRS_DESTBLEND, &dwDestBlend);
+	RHIDevice()->GetTransform(D3DTS_WORLD, matOld.toD3D());
+	RHIDevice()->GetRenderState(D3DRS_ALPHABLENDENABLE, &dwAlphaEnable);
+	RHIDevice()->GetRenderState(D3DRS_SRCBLEND, &dwSrcBlend);
+	RHIDevice()->GetRenderState(D3DRS_DESTBLEND, &dwDestBlend);
 
-	s_lpD3DDev->GetTextureStageState(0, D3DTSS_COLOROP, &dwColor_0);
-	s_lpD3DDev->GetTextureStageState(0, D3DTSS_COLORARG1, &dwColorArg1_0);
-	s_lpD3DDev->GetTextureStageState(0, D3DTSS_COLORARG2, &dwColorArg2_0);
-	s_lpD3DDev->GetSamplerState(0, D3DSAMP_MIPFILTER, &dwMipFilter_0);
+	RHIDevice()->GetTextureStageState(0, D3DTSS_COLOROP, &dwColor_0);
+	RHIDevice()->GetTextureStageState(0, D3DTSS_COLORARG1, &dwColorArg1_0);
+	RHIDevice()->GetTextureStageState(0, D3DTSS_COLORARG2, &dwColorArg2_0);
+	RHIDevice()->GetSamplerState(0, D3DSAMP_MIPFILTER, &dwMipFilter_0);
 
-	s_lpD3DDev->GetTextureStageState(1, D3DTSS_COLOROP, &dwColor_1);
-	s_lpD3DDev->GetTextureStageState(1, D3DTSS_COLORARG1, &dwColorArg1_1);
-	s_lpD3DDev->GetTextureStageState(1, D3DTSS_COLORARG2, &dwColorArg2_1);
-	s_lpD3DDev->GetSamplerState(1, D3DSAMP_MIPFILTER, &dwMipFilter_1);
+	RHIDevice()->GetTextureStageState(1, D3DTSS_COLOROP, &dwColor_1);
+	RHIDevice()->GetTextureStageState(1, D3DTSS_COLORARG1, &dwColorArg1_1);
+	RHIDevice()->GetTextureStageState(1, D3DTSS_COLORARG2, &dwColorArg2_1);
+	RHIDevice()->GetSamplerState(1, D3DSAMP_MIPFILTER, &dwMipFilter_1);
 
 	// Set
-	s_lpD3DDev->SetTransform(D3DTS_WORLD, matWorld.toD3D());
+	RHIDevice()->SetTransform(D3DTS_WORLD, matWorld.toD3D());
 
 	// texture state 세팅 (alpha)
-	s_lpD3DDev->SetTexture(0, m_pTexPond[iTex]->Get());
-	s_lpD3DDev->SetTexture(2, nullptr);
+	RHIDevice()->SetTexture(0, m_pTexPond[iTex]->Get());
+	RHIDevice()->SetTexture(2, nullptr);
 
-	s_lpD3DDev->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
-	s_lpD3DDev->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
-	s_lpD3DDev->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+	RHIDevice()->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+	RHIDevice()->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
+	RHIDevice()->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
 
-	s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_MODULATE);
-	s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TEXTURE);
-	s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLORARG2, D3DTA_DIFFUSE);
-	s_lpD3DDev->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_MODULATE);
-	s_lpD3DDev->SetTextureStageState(1, D3DTSS_COLORARG1, D3DTA_TEXTURE);
-	s_lpD3DDev->SetTextureStageState(1, D3DTSS_COLORARG2, D3DTA_CURRENT);
-	s_lpD3DDev->SetSamplerState(0, D3DSAMP_MIPFILTER, D3DTEXF_NONE);
-	s_lpD3DDev->SetSamplerState(1, D3DSAMP_MIPFILTER, D3DTEXF_NONE);
+	RHIDevice()->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_MODULATE);
+	RHIDevice()->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TEXTURE);
+	RHIDevice()->SetTextureStageState(0, D3DTSS_COLORARG2, D3DTA_DIFFUSE);
+	RHIDevice()->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_MODULATE);
+	RHIDevice()->SetTextureStageState(1, D3DTSS_COLORARG1, D3DTA_TEXTURE);
+	RHIDevice()->SetTextureStageState(1, D3DTSS_COLORARG2, D3DTA_CURRENT);
+	RHIDevice()->SetSamplerState(0, D3DSAMP_MIPFILTER, D3DTEXF_NONE);
+	RHIDevice()->SetSamplerState(1, D3DSAMP_MIPFILTER, D3DTEXF_NONE);
 
-	s_lpD3DDev->SetFVF(D3DFVF_XYZ | D3DFVF_NORMAL | D3DFVF_DIFFUSE | D3DFVF_TEX2);
+	RHIDevice()->SetFVF(D3DFVF_XYZ | D3DFVF_NORMAL | D3DFVF_DIFFUSE | D3DFVF_TEX2);
 
 	for (const CPondMesh& mesh : m_PondMeshes)
 	{
@@ -311,29 +311,29 @@ void CN3Pond::Render()
 			continue;
 
 		if (mesh.m_pTexWave != nullptr)
-			s_lpD3DDev->SetTexture(1, mesh.m_pTexWave->Get());
+			RHIDevice()->SetTexture(1, mesh.m_pTexWave->Get());
 		else
-			s_lpD3DDev->SetTexture(1, nullptr);
+			RHIDevice()->SetTexture(1, nullptr);
 
-		s_lpD3DDev->DrawIndexedPrimitiveUP(
+		RHIDevice()->DrawIndexedPrimitiveUP(
 			D3DPT_TRIANGLELIST, 0, mesh.m_iVC, mesh.m_iIC, mesh.m_wpIndex, D3DFMT_INDEX16, mesh.m_pVertices, sizeof(__VertexPond));
 	}
 
 	// restore
-	s_lpD3DDev->SetTransform(D3DTS_WORLD, matOld.toD3D());
-	s_lpD3DDev->SetRenderState(D3DRS_ALPHABLENDENABLE, dwAlphaEnable);
-	s_lpD3DDev->SetRenderState(D3DRS_SRCBLEND, dwSrcBlend);
-	s_lpD3DDev->SetRenderState(D3DRS_DESTBLEND, dwDestBlend);
+	RHIDevice()->SetTransform(D3DTS_WORLD, matOld.toD3D());
+	RHIDevice()->SetRenderState(D3DRS_ALPHABLENDENABLE, dwAlphaEnable);
+	RHIDevice()->SetRenderState(D3DRS_SRCBLEND, dwSrcBlend);
+	RHIDevice()->SetRenderState(D3DRS_DESTBLEND, dwDestBlend);
 
-	s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLOROP, dwColor_0);
-	s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLORARG1, dwColorArg1_0);
-	s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLORARG2, dwColorArg2_0);
-	s_lpD3DDev->SetSamplerState(0, D3DSAMP_MIPFILTER, dwMipFilter_0);
+	RHIDevice()->SetTextureStageState(0, D3DTSS_COLOROP, dwColor_0);
+	RHIDevice()->SetTextureStageState(0, D3DTSS_COLORARG1, dwColorArg1_0);
+	RHIDevice()->SetTextureStageState(0, D3DTSS_COLORARG2, dwColorArg2_0);
+	RHIDevice()->SetSamplerState(0, D3DSAMP_MIPFILTER, dwMipFilter_0);
 
-	s_lpD3DDev->SetTextureStageState(1, D3DTSS_COLOROP, dwColor_1);
-	s_lpD3DDev->SetTextureStageState(1, D3DTSS_COLORARG1, dwColorArg1_1);
-	s_lpD3DDev->SetTextureStageState(1, D3DTSS_COLORARG2, dwColorArg2_1);
-	s_lpD3DDev->SetSamplerState(1, D3DSAMP_MIPFILTER, dwMipFilter_1);
+	RHIDevice()->SetTextureStageState(1, D3DTSS_COLOROP, dwColor_1);
+	RHIDevice()->SetTextureStageState(1, D3DTSS_COLORARG1, dwColorArg1_1);
+	RHIDevice()->SetTextureStageState(1, D3DTSS_COLORARG2, dwColorArg2_1);
+	RHIDevice()->SetSamplerState(1, D3DSAMP_MIPFILTER, dwMipFilter_1);
 }
 
 void CN3Pond::UpdateWaterPositions()

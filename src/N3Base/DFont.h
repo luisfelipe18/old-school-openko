@@ -5,6 +5,12 @@
 
 #include "N3Base.h"
 
+#ifndef _WIN32
+#include <vector>
+
+struct IRHITexture;
+#endif
+
 enum e_D3DFontFlags : uint8_t
 {
 	// Font creation flags
@@ -52,6 +58,17 @@ public:
 		return m_Size;
 	}
 
+#ifndef _WIN32
+	// True when the FreeType backend located a usable font file, so callers
+	// (and the headless test) can tell "no text expected" from "text broken".
+	static bool HasUsableFont();
+
+	IRHITexture* GetRHITexture() const
+	{
+		return m_pTexture;
+	}
+#endif
+
 	uint32_t GetFontColor() const
 	{
 		return m_dwFontColor;
@@ -67,8 +84,16 @@ protected:
 	uint32_t m_dwFontFlags;
 
 	LPDIRECT3DDEVICE9 m_pd3dDevice; // A D3DDevice used for rendering
+#ifdef _WIN32
 	LPDIRECT3DTEXTURE9 m_pTexture;  // The d3d texture for this font
 	LPDIRECT3DVERTEXBUFFER9 m_pVB;  // VertexBuffer for rendering text
+#else
+	// POSIX (docs/PORT_POSIX_PLAN.md, T7.1): FreeType rasterizes the string
+	// into an RHI texture; the quads live in system memory and draw through
+	// DrawPrimitiveUP, so no vertex buffer object is needed.
+	IRHITexture* m_pTexture;                     // glyph texture for this font
+	std::vector<__VertexTransformed> m_Vertices; // text quads (XYZRHW)
+#endif
 	uint32_t m_dwTexWidth;          // Texture dimensions
 	uint32_t m_dwTexHeight;         // Texture dimensions
 	FLOAT m_fTextScale;             // 쓸 폰트가 너무 클경우 비디오 카드에

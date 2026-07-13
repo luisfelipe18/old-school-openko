@@ -9,6 +9,7 @@
 #include "PacketDef.h"
 #include "LocalInput.h"
 #include "APISocket.h"
+#include "NetworkEncoding.h"
 #include "N3FXMgr.h"
 #include "PlayerMySelf.h"
 #include "GameProcLogIn.h"
@@ -37,11 +38,29 @@
 #include <N3Base/N3SndObj.h>
 #include <N3Base/N3FXBundle.h>
 
-#include <N3Base/BitMapFile.h>
+#ifdef _WIN32
+#include <N3Base/BitMapFile.h> // Win32 GDI DIB path, screen capture only
+#endif
 
 #include <JpegFile/JpegFile.h>
 
 #include <shared/lzf.h>
+
+#ifndef _WIN32
+#include "OSGameCursor.h" // POSIX OS-cursor swapping (::SetCursor stand-in)
+
+#include <Platform/PlatformPaths.h> // GetUserConfigDir()
+#include <Platform/PlatformTime.h>  // Sleep()
+
+#include <spdlog/spdlog.h>
+
+#include <algorithm>
+#include <cstring>
+#include <filesystem>
+#include <fstream>
+#include <map>
+#include <vector>
+#endif
 
 #include <cassert>
 
@@ -113,6 +132,7 @@ void CGameProcedure::Init()
 	s_pUIMgr->SetFocusedUI(nullptr);
 }
 
+#ifdef _WIN32
 void CGameProcedure::StaticMemberInit(HINSTANCE hInstance, HWND hWndMain)
 {
 	//////////////////////////////////////////////////////////////////////////////////////////
@@ -219,7 +239,90 @@ void CGameProcedure::StaticMemberInit(HINSTANCE hInstance, HWND hWndMain)
 	s_pProcCharacterCreate = new CGameProcCharacterCreate(); // 캐릭터 만들기
 	s_pProcMain            = new CGameProcMain();            // 메인 게임 프로시져
 }
+#else  // !_WIN32
+// POSIX bring-up (docs/PORT_POSIX_PLAN.md, T6.8/F9). The SDL entry point
+// already owns the window + GL/Null context and has installed the RHI
+// backend, so there is no D3D device or display-mode work here.
+void CGameProcedure::StaticMemberInit(HINSTANCE /*hInstance*/, HWND /*hWndMain*/)
+{
+	s_bWindowed = true;
 
+	s_pEng = new CGameEng();
+	// CN3Eng::Init is a POSIX no-op that just verifies the RHI backend exists.
+	if (!s_pEng->Init(s_bWindowed, nullptr, s_Options.iViewWidth, s_Options.iViewHeight,
+			s_Options.iViewColorDepth, TRUE))
+	{
+		spdlog::error("engine init failed (no RHI device); aborting bring-up");
+		exit(-1);
+	}
+
+	CGameBase::StaticMemberInit(); // tables + world/player managers
+
+	s_pSocket    = new CAPISocket();
+	s_pSocketSub = new CAPISocket();
+
+	// The software game cursor (CGameCursor) is driven by e_Cursor, but the
+	// game logic still selects cursors by these HCURSOR handles and the
+	// HCURSOR->e_Cursor mapping in SetGameCursor(HCURSOR) compares them by
+	// identity. On Windows LoadCursor() hands back distinct handles; on POSIX
+	// there is no OS cursor to load, so give each a distinct non-null
+	// sentinel (they are only ever compared, never dereferenced, on POSIX).
+	// Without this every handle stays nullptr, all compare equal, the mapping
+	// always resolves to the first branch (normal), and the attack/repair
+	// cursors never appear.
+	s_hCursorNormal    = reinterpret_cast<HCURSOR>(1);
+	s_hCursorNormal1   = reinterpret_cast<HCURSOR>(2);
+	s_hCursorClick     = reinterpret_cast<HCURSOR>(3);
+	s_hCursorClick1    = reinterpret_cast<HCURSOR>(4);
+	s_hCursorAttack    = reinterpret_cast<HCURSOR>(5);
+	s_hCursorPreRepair = reinterpret_cast<HCURSOR>(6);
+	s_hCursorNowRepair = reinterpret_cast<HCURSOR>(7);
+
+	if (!CN3Base::s_Options.bWindowCursor)
+	{
+		s_pGameCursor = new CGameCursor();
+		s_pGameCursor->LoadFromFile("ui\\cursor.uif");
+	}
+
+	SetGameCursor(s_hCursorNormal);
+
+	s_pLocalInput = new CLocalInput();
+	s_pLocalInput->Init(nullptr, nullptr); // SDL keyboard/mouse
+
+	if (s_Options.bSndEnable)
+		s_SndMgr.Init();
+
+	CN3FXBundle::SetEffectSndDistance(static_cast<float>(s_Options.iEffectSndDist));
+	s_pFX = new CN3FXMgr();
+
+	__TABLE_UI_RESRC* pTblUI = s_pTbl_UI.Find(NATION_ELMORAD); // 기본은 엘모라드 UI 로 한다..
+	if (pTblUI == nullptr)
+	{
+		CLogWriter::Write("UI resources not found for {}", static_cast<int>(NATION_ELMORAD));
+		spdlog::error("UI resource table is empty - 'Data/UIs_us.tbl' failed to load from "
+					  "'{}'. Check that the game data directory has a complete Data/ folder "
+					  "(pass --data <path> or populate assets/Client before building).",
+			CN3Base::PathGet());
+		exit(-1);
+	}
+
+	s_pUIMgr     = new CUIManager();
+	s_pMsgBoxMgr = new CUIMessageBoxManager();
+	CN3UIBase::EnableTooltip(pTblUI->szToolTip);
+
+	// 각 프로시저들 생성 - all of them, same as Windows: a successful game-server
+	// login hands off to nation/character select via ProcActiveSet(), which
+	// silently no-ops on a null procedure and would leave the player stuck on
+	// the login scene after picking a server.
+	s_pProcLogIn           = new CGameProcLogIn();           // 로그인 프로시져
+	s_pProcNationSelect    = new CGameProcNationSelect();    // 나라 선택
+	s_pProcCharacterSelect = new CGameProcCharacterSelect(); // 캐릭터 선택
+	s_pProcCharacterCreate = new CGameProcCharacterCreate(); // 캐릭터 만들기
+	s_pProcMain            = new CGameProcMain();            // 메인 게임 프로시져
+}
+#endif // _WIN32
+
+#ifdef _WIN32
 void CGameProcedure::StaticMemberRelease()
 {
 	delete s_pSocket;
@@ -335,6 +438,45 @@ void CGameProcedure::StaticMemberRelease()
 	delete s_pEng;
 	s_pEng = nullptr; // 젤 마지막에 엔진 날리기.!!!!!
 }
+#else  // !_WIN32
+// POSIX teardown: release only the objects the POSIX StaticMemberInit created,
+// in reverse order. No registry writes, display-mode restore, or ending screen.
+void CGameProcedure::StaticMemberRelease()
+{
+	delete s_pSocket;
+	s_pSocket = nullptr;
+	delete s_pSocketSub;
+	s_pSocketSub = nullptr;
+	delete s_pFX;
+	s_pFX = nullptr;
+
+	delete s_pProcLogIn;
+	s_pProcLogIn = nullptr;
+	delete s_pProcNationSelect;
+	s_pProcNationSelect = nullptr;
+	delete s_pProcCharacterSelect;
+	s_pProcCharacterSelect = nullptr;
+	delete s_pProcCharacterCreate;
+	s_pProcCharacterCreate = nullptr;
+	delete s_pProcMain;
+	s_pProcMain = nullptr;
+
+	CGameBase::StaticMemberRelease();
+
+	delete s_pUILoading;
+	s_pUILoading = nullptr;
+	delete s_pMsgBoxMgr;
+	s_pMsgBoxMgr = nullptr;
+	delete s_pUIMgr;
+	s_pUIMgr = nullptr;
+	delete s_pLocalInput;
+	s_pLocalInput = nullptr;
+	delete s_pGameCursor;
+	s_pGameCursor = nullptr;
+	delete s_pEng;
+	s_pEng = nullptr;
+}
+#endif // _WIN32
 
 void CGameProcedure::Tick()
 {
@@ -378,7 +520,9 @@ void CGameProcedure::Tick()
 
 	CN3Base::s_SndMgr.Tick();              // Sound Engine...
 
-	// Screen capture hotkey (NUM-)
+#ifdef _WIN32
+	// Screen capture hotkey (NUM-). The DIB screen grab is Win32 GDI; the SDL
+	// backend gets its own capture path in a later phase.
 	if (s_pLocalInput->IsKeyPress(DIK_NUMPADMINUS))
 	{
 		SYSTEMTIME st;
@@ -387,9 +531,19 @@ void CGameProcedure::Tick()
 		std::string szFN = fmt::format("{}_{}_{}_{}.{}.{}.ksc", st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
 		CaptureScreenAndSaveToFile(szFN);
 	}
+#endif
 
 	//////////////////////////////////
 	// Network Msg 처리하기
+
+	// Pump the sockets: drain readable data and detect disconnects. This
+	// replaces the WSAAsyncSelect notifications that used to arrive through
+	// the window message pump (WM_SOCKETMSG).
+	if (!s_pSocket->Poll())
+		ReportServerConnectionClosed(true);
+
+	s_pSocketSub->Poll();
+
 	while (!s_pSocket->m_qRecvPkt.empty())
 	{
 		auto pkt = s_pSocket->m_qRecvPkt.front();
@@ -451,6 +605,12 @@ void CGameProcedure::RenderActive()
 
 bool CGameProcedure::CaptureScreenAndSaveToFile(const std::string& szFN)
 {
+#ifndef _WIN32
+	// Win32 GDI screen grab (CopyScreenToDIB); the SDL/GL capture path lands
+	// with a later phase.
+	(void) szFN;
+	return false;
+#else
 	if (szFN.empty())
 		return false;
 
@@ -483,10 +643,34 @@ bool CGameProcedure::CaptureScreenAndSaveToFile(const std::string& szFN)
 
 	CLogWriter::Write("Screen captured: {}", szFN);
 	return true;
+#endif
 }
 
 void CGameProcedure::ProcActiveSet(CGameProcedure* pProc)
 {
+#ifndef _WIN32
+	const auto szProcName = [](CGameProcedure* p) -> const char* {
+		if (p == nullptr)
+			return "none";
+		if (p == s_pProcLogIn)
+			return "login";
+		if (p == s_pProcNationSelect)
+			return "nation-select";
+		if (p == s_pProcCharacterSelect)
+			return "character-select";
+		if (p == s_pProcCharacterCreate)
+			return "character-create";
+		if (p == s_pProcMain)
+			return "main";
+		return "unknown";
+	};
+
+	if (pProc == nullptr)
+		spdlog::warn("ProcActiveSet(nullptr) ignored - target scene procedure was never created");
+	else if (s_pProcActive != pProc)
+		spdlog::info("scene change: {} -> {}", szProcName(s_pProcActive), szProcName(pProc));
+#endif
+
 	if (pProc == nullptr || s_pProcActive == pProc)
 		return;
 
@@ -522,6 +706,120 @@ void CGameProcedure::MessageBoxClose(int iMsgBoxIndex)
 		s_pMsgBoxMgr->MessageBoxCloseAll();
 }
 
+#ifndef _WIN32
+// POSIX per-user settings persistence.
+//
+// The Windows client stores per-account/server/character settings (skill
+// hotkey bar, window positions, camera/run mode) under HKCU\Software\
+// KnightOnline\<account>_<server>_<char> as named REG_BINARY values. There is
+// no registry on POSIX, so mirror it with one small binary file per key under
+// the user's config dir; each file holds the named blobs. Same partitioning,
+// same call sites - the hotkey bar now survives a restart.
+namespace
+{
+	// `key` is GetStrRegKeySetting()'s "Software\\KnightOnline\\a_b_c" string;
+	// flatten the separators into a single filename under the config dir.
+	std::filesystem::path RegSettingsFilePath(std::string key)
+	{
+		static const std::filesystem::path baseDir = [] {
+			std::filesystem::path dir = GetUserConfigDir();
+			if (dir.empty())
+				dir = std::filesystem::temp_directory_path();
+			std::error_code ec;
+			std::filesystem::create_directories(dir, ec);
+			return dir;
+		}();
+
+		for (char& c : key)
+		{
+			if (c == '\\' || c == '/' || c == ':')
+				c = '_';
+		}
+		return baseDir / (key + ".bin");
+	}
+
+	// Record layout: [u32 nameLen][name][u32 dataLen][data], repeated.
+	std::map<std::string, std::vector<uint8_t>> RegSettingsLoad(const std::filesystem::path& path)
+	{
+		std::map<std::string, std::vector<uint8_t>> values;
+		std::ifstream in(path, std::ios::binary);
+		if (!in)
+			return values;
+
+		while (true)
+		{
+			uint32_t nameLen = 0;
+			if (!in.read(reinterpret_cast<char*>(&nameLen), sizeof(nameLen)))
+				break;
+			if (nameLen == 0 || nameLen > (1u << 16))
+				break; // corrupt/truncated - stop reading
+			std::string name(nameLen, '\0');
+			if (!in.read(name.data(), nameLen))
+				break;
+
+			uint32_t dataLen = 0;
+			if (!in.read(reinterpret_cast<char*>(&dataLen), sizeof(dataLen)))
+				break;
+			if (dataLen > (1u << 20))
+				break;
+			std::vector<uint8_t> data(dataLen);
+			if (dataLen > 0 && !in.read(reinterpret_cast<char*>(data.data()), dataLen))
+				break;
+
+			values[std::move(name)] = std::move(data);
+		}
+		return values;
+	}
+
+	bool RegSettingsStore(
+		const std::filesystem::path& path, const std::map<std::string, std::vector<uint8_t>>& values)
+	{
+		std::ofstream out(path, std::ios::binary | std::ios::trunc);
+		if (!out)
+			return false;
+
+		for (const auto& [name, data] : values)
+		{
+			const uint32_t nameLen = static_cast<uint32_t>(name.size());
+			const uint32_t dataLen = static_cast<uint32_t>(data.size());
+			out.write(reinterpret_cast<const char*>(&nameLen), sizeof(nameLen));
+			out.write(name.data(), nameLen);
+			out.write(reinterpret_cast<const char*>(&dataLen), sizeof(dataLen));
+			if (dataLen > 0)
+				out.write(reinterpret_cast<const char*>(data.data()), dataLen);
+		}
+		return static_cast<bool>(out);
+	}
+}
+
+bool CGameProcedure::RegPutSetting(const char* ValueName, void* pValueData, long length)
+{
+	if (ValueName == nullptr || pValueData == nullptr || length < 0)
+		return false;
+
+	const std::filesystem::path path = RegSettingsFilePath(GetStrRegKeySetting());
+	auto values                      = RegSettingsLoad(path);
+
+	const uint8_t* p  = static_cast<const uint8_t*>(pValueData);
+	values[ValueName] = std::vector<uint8_t>(p, p + length);
+	return RegSettingsStore(path, values);
+}
+
+bool CGameProcedure::RegGetSetting(const char* ValueName, void* pValueData, long length)
+{
+	if (ValueName == nullptr || pValueData == nullptr || length < 0)
+		return false;
+
+	const auto values = RegSettingsLoad(RegSettingsFilePath(GetStrRegKeySetting()));
+	const auto it     = values.find(ValueName);
+	if (it == values.end())
+		return false;
+
+	const std::size_t n = std::min<std::size_t>(static_cast<std::size_t>(length), it->second.size());
+	std::memcpy(pValueData, it->second.data(), n);
+	return true;
+}
+#else
 bool CGameProcedure::RegPutSetting(const char* ValueName, void* pValueData, long length)
 {
 	HKEY hKey = nullptr;
@@ -585,6 +883,7 @@ bool CGameProcedure::RegGetSetting(const char* ValueName, void* pValueData, long
 
 	return true;
 }
+#endif // _WIN32
 
 void CGameProcedure::UIPostData_Write(const std::string& szKey, CN3UIBase* pUI)
 {
@@ -634,27 +933,31 @@ void CGameProcedure::UIPostData_Read(const std::string& szKey, CN3UIBase* pUI, i
 
 void CGameProcedure::SetGameCursor(HCURSOR hCursor, bool bLocked)
 {
+	// Map the OS cursor handle to the engine's logical cursor. On Windows the
+	// handles come from LoadCursor(); on POSIX they are distinct sentinels set
+	// in StaticMemberInit. Both the software cursor (CGameCursor) and the POSIX
+	// OS-cursor backend (OSGameCursor) key off this e_Cursor, so resolve it once
+	// regardless of which cursor mode is active.
+	e_Cursor eCursor = CURSOR_KA_NORMAL;
+	if (hCursor == s_hCursorNormal)
+		eCursor = CURSOR_KA_NORMAL;
+	else if (hCursor == s_hCursorNormal1)
+		eCursor = CURSOR_EL_NORMAL;
+	else if (hCursor == s_hCursorClick)
+		eCursor = CURSOR_KA_CLICK;
+	else if (hCursor == s_hCursorClick1)
+		eCursor = CURSOR_EL_CLICK;
+	else if (hCursor == s_hCursorAttack)
+		eCursor = CURSOR_ATTACK;
+	else if (hCursor == s_hCursorPreRepair)
+		eCursor = CURSOR_PRE_REPAIR;
+	else if (hCursor == s_hCursorNowRepair)
+		eCursor = CURSOR_NOW_REPAIR;
+	else if (hCursor == nullptr)
+		eCursor = CURSOR_UNKNOWN;
+
 	if (s_pGameCursor)
 	{
-		e_Cursor eCursor = CURSOR_KA_NORMAL;
-
-		if (hCursor == s_hCursorNormal)
-			eCursor = CURSOR_KA_NORMAL;
-		else if (hCursor == s_hCursorNormal1)
-			eCursor = CURSOR_EL_NORMAL;
-		else if (hCursor == s_hCursorClick)
-			eCursor = CURSOR_KA_CLICK;
-		else if (hCursor == s_hCursorClick1)
-			eCursor = CURSOR_EL_CLICK;
-		else if (hCursor == s_hCursorAttack)
-			eCursor = CURSOR_ATTACK;
-		else if (hCursor == s_hCursorPreRepair)
-			eCursor = CURSOR_PRE_REPAIR;
-		else if (hCursor == s_hCursorNowRepair)
-			eCursor = CURSOR_NOW_REPAIR;
-		else if (hCursor == nullptr)
-			eCursor = CURSOR_UNKNOWN;
-
 		SetGameCursor(eCursor, bLocked);
 
 		if ((!m_bCursorLocked) && bLocked)
@@ -664,6 +967,7 @@ void CGameProcedure::SetGameCursor(HCURSOR hCursor, bool bLocked)
 	}
 	else
 	{
+#ifdef _WIN32
 		if ((m_bCursorLocked) && (!bLocked))
 			return;
 		else if (((m_bCursorLocked) && bLocked) || ((!m_bCursorLocked) && !bLocked))
@@ -677,6 +981,12 @@ void CGameProcedure::SetGameCursor(HCURSOR hCursor, bool bLocked)
 			m_bCursorLocked   = true;
 			SetCursor(hCursor);
 		}
+#else
+		// POSIX OS-cursor mode: there is no ::SetCursor equivalent through the
+		// engine, so hand the swap to the SDL-backed OSGameCursor, which owns
+		// the same lock/restore semantics CGameCursor uses.
+		OSGameCursor::Set(eCursor, bLocked);
+#endif
 	}
 }
 
@@ -702,7 +1012,11 @@ void CGameProcedure::RestoreGameCursor()
 		if (m_bCursorLocked)
 			m_bCursorLocked = false;
 
+#ifdef _WIN32
 		SetCursor(m_hPrevGameCursor);
+#else
+		OSGameCursor::Restore();
+#endif
 	}
 }
 
@@ -830,16 +1144,19 @@ void CGameProcedure::ReportDebugStringAndSendToServer(const std::string& szDebug
 
 void CGameProcedure::MsgSend_GameServerLogIn()
 {
-	uint8_t byBuff[128];                                                     // 패킷 버퍼..
-	int iOffset = 0;                                                         // 버퍼의 오프셋..
+	const std::string szAccountWire = LocalToNet(s_szAccount);
+	const std::string szPassWire    = LocalToNet(s_szPassWord);
 
-	CAPISocket::MP_AddByte(byBuff, iOffset, WIZ_LOGIN);                      // 커멘드.
-	CAPISocket::MP_AddShort(byBuff, iOffset, (int16_t) s_szAccount.size());  // 아이디 길이..
-	CAPISocket::MP_AddString(byBuff, iOffset, s_szAccount);                  // 실제 아이디..
-	CAPISocket::MP_AddShort(byBuff, iOffset, (int16_t) s_szPassWord.size()); // 패스워드 길이
-	CAPISocket::MP_AddString(byBuff, iOffset, s_szPassWord);                 // 실제 패스워드
+	uint8_t byBuff[128];                                                        // 패킷 버퍼..
+	int iOffset = 0;                                                            // 버퍼의 오프셋..
 
-	s_pSocket->Send(byBuff, iOffset);                                        // 보낸다
+	CAPISocket::MP_AddByte(byBuff, iOffset, WIZ_LOGIN);                         // 커멘드.
+	CAPISocket::MP_AddShort(byBuff, iOffset, (int16_t) szAccountWire.size());   // 아이디 길이..
+	CAPISocket::MP_AddString(byBuff, iOffset, szAccountWire);                   // 실제 아이디..
+	CAPISocket::MP_AddShort(byBuff, iOffset, (int16_t) szPassWire.size());      // 패스워드 길이
+	CAPISocket::MP_AddString(byBuff, iOffset, szPassWire);                      // 실제 패스워드
+
+	s_pSocket->Send(byBuff, iOffset);                                           // 보낸다
 }
 
 void CGameProcedure::MsgSend_VersionCheck()                                  // virtual
@@ -857,13 +1174,16 @@ void CGameProcedure::MsgSend_VersionCheck()                                  // 
 
 void CGameProcedure::MsgSend_CharacterSelect()                   // virtual
 {
+	const std::string szAccountWire = LocalToNet(s_szAccount);
+	const std::string szIDWire      = LocalToNet(s_pPlayer->IDString());
+
 	uint8_t byBuff[64];
 	int iOffset = 0;
 	CAPISocket::MP_AddByte(byBuff, iOffset, WIZ_SEL_CHAR);                            // 커멘드.
-	CAPISocket::MP_AddShort(byBuff, iOffset, (int16_t) s_szAccount.size());           // 계정 길이..
-	CAPISocket::MP_AddString(byBuff, iOffset, s_szAccount);                           // 계정 문자열..
-	CAPISocket::MP_AddShort(byBuff, iOffset, (int16_t) s_pPlayer->IDString().size()); // 캐릭 아이디 길이..
-	CAPISocket::MP_AddString(byBuff, iOffset, s_pPlayer->IDString());                 // 캐릭 아이디 문자열..
+	CAPISocket::MP_AddShort(byBuff, iOffset, (int16_t) szAccountWire.size());         // 계정 길이..
+	CAPISocket::MP_AddString(byBuff, iOffset, szAccountWire);                         // 계정 문자열..
+	CAPISocket::MP_AddShort(byBuff, iOffset, (int16_t) szIDWire.size());              // 캐릭 아이디 길이..
+	CAPISocket::MP_AddString(byBuff, iOffset, szIDWire);                              // 캐릭 아이디 문자열..
 	CAPISocket::MP_AddByte(byBuff, iOffset, s_pPlayer->m_InfoExt.iZoneInit);          // 처음 접속인지 아닌지 0x01:처음 접속
 	CAPISocket::MP_AddByte(byBuff, iOffset, s_pPlayer->m_InfoExt.iZoneCur);           // 캐릭터 선택창에서의 캐릭터 존 번호
 	s_pSocket->Send(byBuff, iOffset);                                                 // 보낸다

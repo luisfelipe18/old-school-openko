@@ -10,9 +10,14 @@
 #include "N3FXShape.h"
 #include "N3Chr.h"
 #include "N3Base.h"
-#include <mmsystem.h>
+#include "RHI/RHIDevice.h"
+#include <Platform/PlatformTime.h>
+#ifndef _WIN32
+#include <Platform/PlatformString.h>
+#endif
 
 LPDIRECT3DDEVICE9 CN3Base::s_lpD3DDev = nullptr;      // 참조 포인터.. 멋대로 해제하면 안된다..
+IRHIDevice* CN3Base::s_pRHIDev         = nullptr;      // 렌더 백엔드 (RHI)
 uint32_t CN3Base::s_dwTextureCaps     = 0;            // Texture 호환성..
 float CN3Base::s_fFrmPerSec           = 30.0f;        // Frame Per Second
 float CN3Base::s_fSecPerFrm           = 1.0f / 30.0f; // Second per Frame
@@ -103,8 +108,11 @@ void CN3Base::SaveResrc()
 #endif // end of _N3TOOL
 
 //-----------------------------------------------------------------------------
-// Name: DXUtil_Timer()
-// Desc: Performs timer opertations. Use the following commands:
+// Name: TimerProcess()
+// Desc: Performs timer operations (derived from the DXUtil_Timer sample).
+//       Runs on std::chrono's monotonic clock (formerly
+//       QueryPerformanceCounter with a timeGetTime() fallback), so it behaves
+//       identically on every platform. Use the following commands:
 //          TIMER_RESET           - to reset the timer
 //          TIMER_START           - to start the timer
 //          TIMER_STOP            - to stop (or pause) the timer
@@ -116,161 +124,61 @@ void CN3Base::SaveResrc()
 //-----------------------------------------------------------------------------
 float CN3Base::TimerProcess(TIMER_COMMAND command)
 {
-	static BOOL m_bTimerInitialized    = FALSE;
-	static BOOL m_bUsingQPF            = FALSE;
-	static LONGLONG m_llQPFTicksPerSec = 0;
+	static double s_fStopTime        = 0.0;
+	static double s_fLastElapsedTime = 0.0;
+	static double s_fBaseTime        = 0.0;
 
-	// Initialize the timer
-	if (FALSE == m_bTimerInitialized)
-	{
-		m_bTimerInitialized = TRUE;
-
-		// Use QueryPerformanceFrequency() to get frequency of timer.  If QPF is
-		// not supported, we will timeGetTime() which returns milliseconds.
-		LARGE_INTEGER qwTicksPerSec;
-		m_bUsingQPF = QueryPerformanceFrequency(&qwTicksPerSec);
-		if (m_bUsingQPF)
-			m_llQPFTicksPerSec = qwTicksPerSec.QuadPart;
-	}
-
-	if (m_bUsingQPF)
-	{
-		static LONGLONG m_llStopTime        = 0;
-		static LONGLONG m_llLastElapsedTime = 0;
-		static LONGLONG m_llBaseTime        = 0;
-		double fTime = 0.0, fElapsedTime = 0.0;
-		LARGE_INTEGER qwTime;
-
-		// Get either the current time or the stop time, depending
-		// on whether we're stopped and what command was sent
-		if (m_llStopTime != 0 && command != TIMER_START && command != TIMER_GETABSOLUTETIME)
-			qwTime.QuadPart = m_llStopTime;
-		else
-			QueryPerformanceCounter(&qwTime);
-
-		// Return the elapsed time
-		if (command == TIMER_GETELAPSEDTIME)
-		{
-			fElapsedTime = (double) (qwTime.QuadPart - m_llLastElapsedTime)
-						   / (double) m_llQPFTicksPerSec;
-			m_llLastElapsedTime = qwTime.QuadPart;
-			return (FLOAT) fElapsedTime;
-		}
-
-		// Return the current time
-		if (command == TIMER_GETAPPTIME)
-		{
-			double fAppTime = (double) (qwTime.QuadPart - m_llBaseTime)
-							  / (double) m_llQPFTicksPerSec;
-			return (FLOAT) fAppTime;
-		}
-
-		// Reset the timer
-		if (command == TIMER_RESET)
-		{
-			m_llBaseTime        = qwTime.QuadPart;
-			m_llLastElapsedTime = qwTime.QuadPart;
-			return 0.0f;
-		}
-
-		// Start the timer
-		if (command == TIMER_START)
-		{
-			m_llBaseTime        += qwTime.QuadPart - m_llStopTime;
-			m_llStopTime         = 0;
-			m_llLastElapsedTime  = qwTime.QuadPart;
-			return 0.0f;
-		}
-
-		// Stop the timer
-		if (command == TIMER_STOP)
-		{
-			m_llStopTime        = qwTime.QuadPart;
-			m_llLastElapsedTime = qwTime.QuadPart;
-			return 0.0f;
-		}
-
-		// Advance the timer by 1/10th second
-		if (command == TIMER_ADVANCE)
-		{
-			m_llStopTime += m_llQPFTicksPerSec / 10;
-			return 0.0f;
-		}
-
-		if (command == TIMER_GETABSOLUTETIME)
-		{
-			fTime = qwTime.QuadPart / (double) m_llQPFTicksPerSec;
-			return (FLOAT) fTime;
-		}
-
-		return -1.0f; // Invalid command specified
-	}
+	// Get either the current time or the stop time, depending
+	// on whether we're stopped and what command was sent
+	double fTime = 0.0;
+	if (s_fStopTime != 0.0 && command != TIMER_START && command != TIMER_GETABSOLUTETIME)
+		fTime = s_fStopTime;
 	else
+		fTime = PlatformTimeSeconds();
+
+	switch (command)
 	{
-		// Get the time using timeGetTime()
-		static double m_fLastElapsedTime = 0.0;
-		static double m_fBaseTime        = 0.0;
-		static double m_fStopTime        = 0.0;
-		double fTime = 0.0, fElapsedTime = 0.0;
-
-		// Get either the current time or the stop time, depending
-		// on whether we're stopped and what command was sent
-		if (m_fStopTime != 0.0 && command != TIMER_START && command != TIMER_GETABSOLUTETIME)
-			fTime = m_fStopTime;
-		else
-			fTime = timeGetTime() * 0.001;
-
 		// Return the elapsed time
-		if (command == TIMER_GETELAPSEDTIME)
+		case TIMER_GETELAPSEDTIME:
 		{
-			fElapsedTime       = (double) (fTime - m_fLastElapsedTime);
-			m_fLastElapsedTime = fTime;
-			return (FLOAT) fElapsedTime;
+			double fElapsedTime = fTime - s_fLastElapsedTime;
+			s_fLastElapsedTime  = fTime;
+			return (float) fElapsedTime;
 		}
 
 		// Return the current time
-		if (command == TIMER_GETAPPTIME)
-		{
-			return (FLOAT) (fTime - m_fBaseTime);
-		}
+		case TIMER_GETAPPTIME:
+			return (float) (fTime - s_fBaseTime);
 
 		// Reset the timer
-		if (command == TIMER_RESET)
-		{
-			m_fBaseTime        = fTime;
-			m_fLastElapsedTime = fTime;
+		case TIMER_RESET:
+			s_fBaseTime        = fTime;
+			s_fLastElapsedTime = fTime;
 			return 0.0f;
-		}
 
 		// Start the timer
-		if (command == TIMER_START)
-		{
-			m_fBaseTime        += fTime - m_fStopTime;
-			m_fStopTime         = 0.0f;
-			m_fLastElapsedTime  = fTime;
+		case TIMER_START:
+			s_fBaseTime        += fTime - s_fStopTime;
+			s_fStopTime         = 0.0;
+			s_fLastElapsedTime  = fTime;
 			return 0.0f;
-		}
 
 		// Stop the timer
-		if (command == TIMER_STOP)
-		{
-			m_fStopTime = fTime;
+		case TIMER_STOP:
+			s_fStopTime        = fTime;
+			s_fLastElapsedTime = fTime;
 			return 0.0f;
-		}
 
 		// Advance the timer by 1/10th second
-		if (command == TIMER_ADVANCE)
-		{
-			m_fStopTime += 0.1f;
+		case TIMER_ADVANCE:
+			s_fStopTime += 0.1;
 			return 0.0f;
-		}
 
-		if (command == TIMER_GETABSOLUTETIME)
-		{
-			return (FLOAT) fTime;
-		}
+		case TIMER_GETABSOLUTETIME:
+			return (float) fTime;
 
-		return -1.0f; // Invalid command specified
+		default:
+			return -1.0f; // Invalid command specified
 	}
 }
 
@@ -281,28 +189,40 @@ void CN3Base::PathSet(const std::string& szPath)
 		return;
 
 	// NOTE: this puts the entire string into lowercase characters
+#ifdef _WIN32
 	CharLower(&(s_szPath[0])); // make sure to give lowercase
+#else
+	StrLowerAscii(s_szPath);   // make sure to give lowercase
+#endif
 	if (s_szPath.size() > 1)
 	{
-		// NOTE: this checks if the last character is '\'; if not it will add it
+		// NOTE: this checks if the last character is the path separator; if not it will add it
+#ifdef _WIN32
 		if (s_szPath[s_szPath.size() - 1] != '\\')
 			s_szPath += '\\';
+#else
+		if (s_szPath[s_szPath.size() - 1] != '/')
+			s_szPath += '/';
+#endif
 	}
 }
 
 void CN3Base::RenderLines(const __Vector3* pvLines, int nCount, D3DCOLOR color)
 {
+	if (s_pRHIDev == nullptr)
+		return;
+
 	DWORD dwAlpha = 0, dwFog = 0, dwLight = 0;
-	s_lpD3DDev->GetRenderState(D3DRS_FOGENABLE, &dwFog);
-	s_lpD3DDev->GetRenderState(D3DRS_ALPHABLENDENABLE, &dwAlpha);
-	s_lpD3DDev->GetRenderState(D3DRS_LIGHTING, &dwLight);
+	RHIDevice()->GetRenderState(D3DRS_FOGENABLE, &dwFog);
+	RHIDevice()->GetRenderState(D3DRS_ALPHABLENDENABLE, &dwAlpha);
+	RHIDevice()->GetRenderState(D3DRS_LIGHTING, &dwLight);
 
 	if (dwFog)
-		s_lpD3DDev->SetRenderState(D3DRS_FOGENABLE, FALSE);
+		RHIDevice()->SetRenderState(D3DRS_FOGENABLE, FALSE);
 	if (dwAlpha)
-		s_lpD3DDev->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+		RHIDevice()->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
 	if (dwLight)
-		s_lpD3DDev->SetRenderState(D3DRS_LIGHTING, FALSE);
+		RHIDevice()->SetRenderState(D3DRS_LIGHTING, FALSE);
 
 	static __Material smtl;
 	static bool bInit = false;
@@ -312,11 +232,11 @@ void CN3Base::RenderLines(const __Vector3* pvLines, int nCount, D3DCOLOR color)
 		bInit = true;
 	}
 
-	s_lpD3DDev->SetTexture(0, nullptr);
+	RHIDevice()->SetTexture(0, nullptr);
 
 	static __VertexColor svLines[512];
 
-	s_lpD3DDev->SetFVF(FVF_CV);
+	RHIDevice()->SetFVF(FVF_CV);
 
 	int nRepeat = nCount / 512;
 	for (int i = 0; i < nRepeat; i++)
@@ -325,24 +245,27 @@ void CN3Base::RenderLines(const __Vector3* pvLines, int nCount, D3DCOLOR color)
 			svLines[j].Set(
 				pvLines[i * 512 + j].x, pvLines[i * 512 + j].y, pvLines[i * 512 + j].z, color);
 
-		s_lpD3DDev->DrawPrimitiveUP(D3DPT_LINESTRIP, 511, svLines, sizeof(__VertexColor));
+		RHIDevice()->DrawPrimitiveUP(D3DPT_LINESTRIP, 511, svLines, sizeof(__VertexColor));
 	}
 	int nPC = nCount % 512;
 	for (int j = 0; j < nPC + 1; j++)
 		svLines[j].Set(pvLines[nRepeat * 512 + j].x, pvLines[nRepeat * 512 + j].y,
 			pvLines[nRepeat * 512 + j].z, color);
-	s_lpD3DDev->DrawPrimitiveUP(D3DPT_LINESTRIP, nPC, svLines, sizeof(__VertexColor)); // Y
+	RHIDevice()->DrawPrimitiveUP(D3DPT_LINESTRIP, nPC, svLines, sizeof(__VertexColor)); // Y
 
 	if (dwFog)
-		s_lpD3DDev->SetRenderState(D3DRS_FOGENABLE, dwFog);
+		RHIDevice()->SetRenderState(D3DRS_FOGENABLE, dwFog);
 	if (dwAlpha)
-		s_lpD3DDev->SetRenderState(D3DRS_ALPHABLENDENABLE, dwAlpha);
+		RHIDevice()->SetRenderState(D3DRS_ALPHABLENDENABLE, dwAlpha);
 	if (dwLight)
-		s_lpD3DDev->SetRenderState(D3DRS_LIGHTING, dwLight);
+		RHIDevice()->SetRenderState(D3DRS_LIGHTING, dwLight);
 }
 
 void CN3Base::RenderLines(const RECT& rc, D3DCOLOR color)
 {
+	if (s_pRHIDev == nullptr)
+		return;
+
 	static __VertexTransformedColor vLines[5];
 
 	vLines[0].Set((float) rc.left, (float) rc.top, 0.9f, 1.0f, color);
@@ -353,69 +276,46 @@ void CN3Base::RenderLines(const RECT& rc, D3DCOLOR color)
 
 	DWORD dwZ = 0, dwFog = 0, dwAlpha = 0, dwCOP = 0, dwCA1 = 0, dwSrcBlend = 0, dwDestBlend = 0,
 		  dwVertexShader = 0, dwAOP = 0, dwAA1 = 0;
-	CN3Base::s_lpD3DDev->GetRenderState(D3DRS_ZENABLE, &dwZ);
-	CN3Base::s_lpD3DDev->GetRenderState(D3DRS_FOGENABLE, &dwFog);
-	CN3Base::s_lpD3DDev->GetRenderState(D3DRS_ALPHABLENDENABLE, &dwAlpha);
-	CN3Base::s_lpD3DDev->GetRenderState(D3DRS_SRCBLEND, &dwSrcBlend);
-	CN3Base::s_lpD3DDev->GetRenderState(D3DRS_DESTBLEND, &dwDestBlend);
-	CN3Base::s_lpD3DDev->GetTextureStageState(0, D3DTSS_COLOROP, &dwCOP);
-	CN3Base::s_lpD3DDev->GetTextureStageState(0, D3DTSS_COLORARG1, &dwCA1);
-	CN3Base::s_lpD3DDev->GetTextureStageState(0, D3DTSS_ALPHAOP, &dwAOP);
-	CN3Base::s_lpD3DDev->GetTextureStageState(0, D3DTSS_ALPHAARG1, &dwAA1);
-	CN3Base::s_lpD3DDev->GetFVF(&dwVertexShader);
+	CN3Base::RHIDevice()->GetRenderState(D3DRS_ZENABLE, &dwZ);
+	CN3Base::RHIDevice()->GetRenderState(D3DRS_FOGENABLE, &dwFog);
+	CN3Base::RHIDevice()->GetRenderState(D3DRS_ALPHABLENDENABLE, &dwAlpha);
+	CN3Base::RHIDevice()->GetRenderState(D3DRS_SRCBLEND, &dwSrcBlend);
+	CN3Base::RHIDevice()->GetRenderState(D3DRS_DESTBLEND, &dwDestBlend);
+	CN3Base::RHIDevice()->GetTextureStageState(0, D3DTSS_COLOROP, &dwCOP);
+	CN3Base::RHIDevice()->GetTextureStageState(0, D3DTSS_COLORARG1, &dwCA1);
+	CN3Base::RHIDevice()->GetTextureStageState(0, D3DTSS_ALPHAOP, &dwAOP);
+	CN3Base::RHIDevice()->GetTextureStageState(0, D3DTSS_ALPHAARG1, &dwAA1);
+	CN3Base::RHIDevice()->GetFVF(&dwVertexShader);
 
-	CN3Base::s_lpD3DDev->SetRenderState(D3DRS_ZENABLE, FALSE);
-	CN3Base::s_lpD3DDev->SetRenderState(D3DRS_FOGENABLE, FALSE);
-	CN3Base::s_lpD3DDev->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
-	CN3Base::s_lpD3DDev->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
-	CN3Base::s_lpD3DDev->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
-	CN3Base::s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
-	CN3Base::s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_DIFFUSE);
-	CN3Base::s_lpD3DDev->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
-	CN3Base::s_lpD3DDev->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_DIFFUSE);
+	CN3Base::RHIDevice()->SetRenderState(D3DRS_ZENABLE, FALSE);
+	CN3Base::RHIDevice()->SetRenderState(D3DRS_FOGENABLE, FALSE);
+	CN3Base::RHIDevice()->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+	CN3Base::RHIDevice()->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
+	CN3Base::RHIDevice()->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+	CN3Base::RHIDevice()->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
+	CN3Base::RHIDevice()->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_DIFFUSE);
+	CN3Base::RHIDevice()->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
+	CN3Base::RHIDevice()->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_DIFFUSE);
 
-	CN3Base::s_lpD3DDev->SetFVF(FVF_TRANSFORMEDCOLOR);
-	CN3Base::s_lpD3DDev->DrawPrimitiveUP(
+	CN3Base::RHIDevice()->SetFVF(FVF_TRANSFORMEDCOLOR);
+	CN3Base::RHIDevice()->DrawPrimitiveUP(
 		D3DPT_LINESTRIP, 4, vLines, sizeof(__VertexTransformedColor));
 
-	CN3Base::s_lpD3DDev->SetRenderState(D3DRS_ZENABLE, dwZ);
-	CN3Base::s_lpD3DDev->SetRenderState(D3DRS_FOGENABLE, dwFog);
-	CN3Base::s_lpD3DDev->SetRenderState(D3DRS_ALPHABLENDENABLE, dwAlpha);
-	CN3Base::s_lpD3DDev->SetRenderState(D3DRS_SRCBLEND, dwSrcBlend);
-	CN3Base::s_lpD3DDev->SetRenderState(D3DRS_DESTBLEND, dwDestBlend);
-	CN3Base::s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLOROP, dwCOP);
-	CN3Base::s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLORARG1, dwCA1);
-	CN3Base::s_lpD3DDev->SetTextureStageState(0, D3DTSS_ALPHAOP, dwAOP);
-	CN3Base::s_lpD3DDev->SetTextureStageState(0, D3DTSS_ALPHAARG1, dwAA1);
-	CN3Base::s_lpD3DDev->SetFVF(dwVertexShader);
+	CN3Base::RHIDevice()->SetRenderState(D3DRS_ZENABLE, dwZ);
+	CN3Base::RHIDevice()->SetRenderState(D3DRS_FOGENABLE, dwFog);
+	CN3Base::RHIDevice()->SetRenderState(D3DRS_ALPHABLENDENABLE, dwAlpha);
+	CN3Base::RHIDevice()->SetRenderState(D3DRS_SRCBLEND, dwSrcBlend);
+	CN3Base::RHIDevice()->SetRenderState(D3DRS_DESTBLEND, dwDestBlend);
+	CN3Base::RHIDevice()->SetTextureStageState(0, D3DTSS_COLOROP, dwCOP);
+	CN3Base::RHIDevice()->SetTextureStageState(0, D3DTSS_COLORARG1, dwCA1);
+	CN3Base::RHIDevice()->SetTextureStageState(0, D3DTSS_ALPHAOP, dwAOP);
+	CN3Base::RHIDevice()->SetTextureStageState(0, D3DTSS_ALPHAARG1, dwAA1);
+	CN3Base::RHIDevice()->SetFVF(dwVertexShader);
 }
 
 float CN3Base::TimeGet()
 {
-	static bool bInit       = false;
-	static bool bUseHWTimer = FALSE;
-	static LARGE_INTEGER nTime, nFrequency;
-
-	if (bInit == false)
-	{
-		if (TRUE == ::QueryPerformanceCounter(&nTime))
-		{
-			::QueryPerformanceFrequency(&nFrequency);
-			bUseHWTimer = TRUE;
-		}
-		else
-		{
-			bUseHWTimer = FALSE;
-		}
-
-		bInit = true;
-	}
-
-	if (bUseHWTimer)
-	{
-		::QueryPerformanceCounter(&nTime);
-		return (float) ((double) (nTime.QuadPart) / (double) nFrequency.QuadPart);
-	}
-
-	return (float) timeGetTime();
+	// Monotonic seconds since process start (formerly QueryPerformanceCounter
+	// with a timeGetTime() fallback). Callers only ever consume differences.
+	return (float) PlatformTimeSeconds();
 }

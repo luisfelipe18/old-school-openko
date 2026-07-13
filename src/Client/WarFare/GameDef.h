@@ -4,7 +4,11 @@
 #pragma once
 
 #include <string>
+#ifdef _WIN32
 #include <dinput.h>
+#else
+#include <Platform/DInputKeyCodes.h> // DIK_* stay the engine's canonical key codes
+#endif
 #include <cstdint>
 
 #include <shared/version.h>

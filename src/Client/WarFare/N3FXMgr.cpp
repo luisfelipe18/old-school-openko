@@ -1,4 +1,7 @@
 ﻿#include "StdAfx.h"
+#ifndef _WIN32
+#include <Platform/PlatformString.h> // _strlwr
+#endif
 #include "N3FXMgr.h"
 #include "GameBase.h"
 #include "GameProcMain.h"
@@ -652,18 +655,18 @@ void CN3FXMgr::Render()
 	DWORD dwLgt = 0, dwAlpha = 0, dwZEnable = 0;
 	DWORD dwSrcBlend = 0, dwDestBlend = 0;
 
-	s_lpD3DDev->GetRenderState(D3DRS_LIGHTING, &dwLgt);
-	s_lpD3DDev->GetRenderState(D3DRS_ALPHABLENDENABLE, &dwAlpha);
-	s_lpD3DDev->GetRenderState(D3DRS_SRCBLEND, &dwSrcBlend);
-	s_lpD3DDev->GetRenderState(D3DRS_DESTBLEND, &dwDestBlend);
-	s_lpD3DDev->GetRenderState(D3DRS_ZWRITEENABLE, &dwZEnable);
+	RHIDevice()->GetRenderState(D3DRS_LIGHTING, &dwLgt);
+	RHIDevice()->GetRenderState(D3DRS_ALPHABLENDENABLE, &dwAlpha);
+	RHIDevice()->GetRenderState(D3DRS_SRCBLEND, &dwSrcBlend);
+	RHIDevice()->GetRenderState(D3DRS_DESTBLEND, &dwDestBlend);
+	RHIDevice()->GetRenderState(D3DRS_ZWRITEENABLE, &dwZEnable);
 
-	s_lpD3DDev->SetRenderState(D3DRS_LIGHTING, FALSE);
-	s_lpD3DDev->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+	RHIDevice()->SetRenderState(D3DRS_LIGHTING, FALSE);
+	RHIDevice()->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
 
 	__Matrix44 mtx;
 	mtx.Identity();
-	s_lpD3DDev->SetTransform(D3DTS_WORLD, mtx.toD3D());
+	RHIDevice()->SetTransform(D3DTS_WORLD, mtx.toD3D());
 
 	stlLIST_BUNDLEGAME_IT itBegin = m_ListBundle.begin();
 	stlLIST_BUNDLEGAME_IT itEnd   = m_ListBundle.end();
@@ -672,11 +675,11 @@ void CN3FXMgr::Render()
 	for (it = itBegin; it != itEnd; it++)
 		(*it)->Render();
 
-	s_lpD3DDev->SetRenderState(D3DRS_LIGHTING, dwLgt);
-	s_lpD3DDev->SetRenderState(D3DRS_ALPHABLENDENABLE, dwAlpha);
-	s_lpD3DDev->SetRenderState(D3DRS_SRCBLEND, dwSrcBlend);
-	s_lpD3DDev->SetRenderState(D3DRS_DESTBLEND, dwDestBlend);
-	s_lpD3DDev->SetRenderState(D3DRS_ZWRITEENABLE, dwZEnable);
+	RHIDevice()->SetRenderState(D3DRS_LIGHTING, dwLgt);
+	RHIDevice()->SetRenderState(D3DRS_ALPHABLENDENABLE, dwAlpha);
+	RHIDevice()->SetRenderState(D3DRS_SRCBLEND, dwSrcBlend);
+	RHIDevice()->SetRenderState(D3DRS_DESTBLEND, dwDestBlend);
+	RHIDevice()->SetRenderState(D3DRS_ZWRITEENABLE, dwZEnable);
 }
 void CN3FXMgr::ClearAll()
 {

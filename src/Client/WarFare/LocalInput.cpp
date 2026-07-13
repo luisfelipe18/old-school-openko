@@ -4,6 +4,7 @@
 #include "StdAfx.h"
 #include "LocalInput.h"
 #include <mmsystem.h>
+#include <Platform/PlatformTime.h>
 
 #include "GameProcMain.h"
 #include "GameEng.h"
@@ -249,25 +250,25 @@ void CLocalInput::Tick()
 		if (m_nMouseFlag & MOUSE_LBCLICKED)           // 왼쪽 더블 클릭 감지
 		{
 			static DWORD dwCLicked = 0;
-			if (timeGetTime() < dwCLicked + dwDblClk)
+			if (PlatformTickMs() < dwCLicked + dwDblClk)
 				m_nMouseFlag |= MOUSE_LBDBLCLK;
-			dwCLicked = timeGetTime();
+			dwCLicked = PlatformTickMs();
 		}
 
 		if (m_nMouseFlag & MOUSE_MBCLICKED) // 왼쪽 더블 클릭 감지
 		{
 			static DWORD dwCLicked = 0;
-			if (timeGetTime() < dwCLicked + dwDblClk)
+			if (PlatformTickMs() < dwCLicked + dwDblClk)
 				m_nMouseFlag |= MOUSE_MBDBLCLK;
-			dwCLicked = timeGetTime();
+			dwCLicked = PlatformTickMs();
 		}
 
 		if (m_nMouseFlag & MOUSE_RBCLICKED) // 왼쪽 더블 클릭 감지
 		{
 			static DWORD dwCLicked = 0;
-			if (timeGetTime() < dwCLicked + dwDblClk)
+			if (PlatformTickMs() < dwCLicked + dwDblClk)
 				m_nMouseFlag |= MOUSE_RBDBLCLK;
-			dwCLicked = timeGetTime();
+			dwCLicked = PlatformTickMs();
 		}
 
 		// 드래그 영역 처리

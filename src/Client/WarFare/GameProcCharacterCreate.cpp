@@ -14,6 +14,7 @@
 #include "APISocket.h"
 #include "GameCursor.h"
 #include "text_resources.h"
+#include "NetworkEncoding.h"
 
 #include <N3Base/N3UIString.h>
 
@@ -71,7 +72,7 @@ void CGameProcCharacterCreate::Init()
 void CGameProcCharacterCreate::Render()
 {
 	s_pEng->Clear(0);                 // 클리어..
-	s_pEng->s_lpD3DDev->BeginScene(); // 씬 렌더 ㅅ작...
+	s_pEng->RHIDevice()->BeginScene(); // 씬 렌더 ㅅ작...
 
 	s_pUIMgr->Render();
 
@@ -81,7 +82,7 @@ void CGameProcCharacterCreate::Render()
 	if (s_pGameCursor)
 		s_pGameCursor->Render();
 
-	s_pEng->s_lpD3DDev->EndScene(); // 씬 렌더 시작...
+	s_pEng->RHIDevice()->EndScene(); // 씬 렌더 시작...
 	s_pEng->Present(CN3Base::s_hWndBase);
 }
 
@@ -248,15 +249,17 @@ bool CGameProcCharacterCreate::MsgSendCharacterCreate()
 
 		if (!bHasSpecialLetter)
 		{
-			__InfoPlayerBase* pInfoBase  = &s_pPlayer->m_InfoBase;
-			__InfoPlayerMySelf* pInfoExt = &s_pPlayer->m_InfoExt;
+			__InfoPlayerBase* pInfoBase   = &s_pPlayer->m_InfoBase;
+			__InfoPlayerMySelf* pInfoExt  = &s_pPlayer->m_InfoExt;
+
+			const std::string szIDWire    = LocalToNet(s_pPlayer->IDString());
 
 			uint8_t byBuff[64];
 			int iOffset = 0;
-			CAPISocket::MP_AddByte(byBuff, iOffset, WIZ_NEW_CHAR);                         // 커멘드.
-			CAPISocket::MP_AddByte(byBuff, iOffset, CGameProcedure::s_iChrSelectIndex);    // 캐릭터 인덱스 b
-			CAPISocket::MP_AddShort(byBuff, iOffset, static_cast<int16_t>(szID.length())); // Id 길이 s
-			CAPISocket::MP_AddString(byBuff, iOffset, s_pPlayer->IDString());              // ID 문자열 str
+			CAPISocket::MP_AddByte(byBuff, iOffset, WIZ_NEW_CHAR);                             // 커멘드.
+			CAPISocket::MP_AddByte(byBuff, iOffset, CGameProcedure::s_iChrSelectIndex);        // 캐릭터 인덱스 b
+			CAPISocket::MP_AddShort(byBuff, iOffset, static_cast<int16_t>(szIDWire.length())); // Id 길이 s
+			CAPISocket::MP_AddString(byBuff, iOffset, szIDWire);                               // ID 문자열 str
 			CAPISocket::MP_AddByte(byBuff, iOffset, pInfoBase->eRace);                     // 종족 b
 			CAPISocket::MP_AddShort(byBuff, iOffset, pInfoBase->eClass);                   // 직업 b
 			CAPISocket::MP_AddByte(byBuff, iOffset, pInfoExt->iFace);                      // 얼굴모양 b

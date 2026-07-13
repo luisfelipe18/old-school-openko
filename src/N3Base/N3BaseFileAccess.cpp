@@ -8,6 +8,10 @@
 #include <FileIO/FileReader.h>
 #include <FileIO/FileWriter.h>
 
+#ifndef _WIN32
+#include <Platform/PlatformString.h>
+#endif
+
 CN3BaseFileAccess::CN3BaseFileAccess()
 {
 	m_iFileFormatVersion  = N3FORMAT_VER_DEFAULT;
@@ -32,7 +36,13 @@ void CN3BaseFileAccess::FileNameSet(const std::string& szFileName)
 	std::string szTmpFN = szFileName;
 
 	if (!szTmpFN.empty())
+	{
+#ifdef _WIN32
 		CharLower(&szTmpFN[0]);          // 모두 소문자로 만든다..
+#else
+		StrLowerAscii(szTmpFN);          // 모두 소문자로 만든다..
+#endif
+	}
 
 	size_t pos = szTmpFN.find(s_szPath); // 문자열에 Base Path 와 일치하는 이름이 있는지 본다.
 	if (pos != std::string::npos)
@@ -140,7 +150,11 @@ bool CN3BaseFileAccess::SaveToFile()
 	if (m_szFileName.empty())
 	{
 		std::string szErr = m_szName + " Can't open file (write) - NULL String";
+#ifdef _WIN32
 		MessageBox(s_hWndBase, szErr.c_str(), "File Open Error", MB_OK);
+#else
+		TRACE("{}", szErr);
+#endif
 		return false;
 	}
 
@@ -165,7 +179,11 @@ bool CN3BaseFileAccess::SaveToFile()
 	if (!file.Create(szFullPath))
 	{
 		std::string szErr = szFullPath + " - Can't open file(write)";
+#ifdef _WIN32
 		MessageBox(s_hWndBase, szErr.c_str(), "File Handle error", MB_OK);
+#else
+		TRACE("{}", szErr);
+#endif
 		return false;
 	}
 

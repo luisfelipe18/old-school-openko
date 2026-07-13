@@ -1,5 +1,12 @@
 ﻿#include "StdAfx.h"
 
+#ifndef _WIN32
+#include <Platform/PlatformIni.h>    // GetPrivateProfileString/Int (Server.Ini)
+#include <Platform/PlatformString.h> // lstrcpy / lstrcat
+
+#include <spdlog/spdlog.h>
+#endif
+
 #if !defined(LOGIN_SCENE_VERSION) || LOGIN_SCENE_VERSION == 1298
 #include "GameProcLogIn_1298.h"
 #include "GameEng.h"
@@ -10,6 +17,7 @@
 #include "APISocket.h"
 #include "PacketDef.h"
 #include "text_resources.h"
+#include "NetworkEncoding.h"
 
 #include <N3Base/N3SndObj.h>
 #include <N3Base/N3SndMgr.h>
@@ -166,21 +174,21 @@ void CGameProcLogIn_1298::Render()
 {
 	D3DCOLOR crEnv = 0x00000000;
 	s_pEng->Clear(crEnv);     // background color black
-	s_lpD3DDev->BeginScene(); // scene render start
+	RHIDevice()->BeginScene(); // scene render start
 
 	D3DVIEWPORT9 vp;
-	s_lpD3DDev->GetViewport(&vp);
+	RHIDevice()->GetViewport(&vp);
 
 	DWORD dwZWrite = 0;
-	s_lpD3DDev->GetRenderState(D3DRS_ZWRITEENABLE, &dwZWrite);
-	s_lpD3DDev->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
-	s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
-	s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TEXTURE);
-	s_lpD3DDev->SetFVF(FVF_TRANSFORMED);
-	s_lpD3DDev->SetRenderState(D3DRS_ZWRITEENABLE, dwZWrite);
+	RHIDevice()->GetRenderState(D3DRS_ZWRITEENABLE, &dwZWrite);
+	RHIDevice()->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+	RHIDevice()->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
+	RHIDevice()->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TEXTURE);
+	RHIDevice()->SetFVF(FVF_TRANSFORMED);
+	RHIDevice()->SetRenderState(D3DRS_ZWRITEENABLE, dwZWrite);
 	CGameProcedure::Render(); // Render UI and other basic elements.
 
-	s_lpD3DDev->EndScene();   // Starting scene rendering...
+	RHIDevice()->EndScene();   // Starting scene rendering...
 
 	s_pEng->Present(CN3Base::s_hWndBase);
 }
@@ -207,13 +215,16 @@ bool CGameProcLogIn_1298::MsgSend_AccountLogIn(e_LogInClassification eLIC)
 	if (eLIC == LIC_MGAME)
 		byCmd = LS_MGAME_LOGIN;
 
-	CAPISocket::MP_AddByte(byBuff, iOffset, byCmd);                          // 커멘드.
-	CAPISocket::MP_AddShort(byBuff, iOffset, (int16_t) s_szAccount.size());  // 아이디 길이..
-	CAPISocket::MP_AddString(byBuff, iOffset, s_szAccount);                  // 실제 아이디..
-	CAPISocket::MP_AddShort(byBuff, iOffset, (int16_t) s_szPassWord.size()); // 패스워드 길이
-	CAPISocket::MP_AddString(byBuff, iOffset, s_szPassWord);                 // 실제 패스워드
+	const std::string szAccountWire = LocalToNet(s_szAccount);
+	const std::string szPassWire    = LocalToNet(s_szPassWord);
 
-	s_pSocket->Send(byBuff, iOffset);                                        // 보낸다
+	CAPISocket::MP_AddByte(byBuff, iOffset, byCmd);                             // 커멘드.
+	CAPISocket::MP_AddShort(byBuff, iOffset, (int16_t) szAccountWire.size());   // 아이디 길이..
+	CAPISocket::MP_AddString(byBuff, iOffset, szAccountWire);                   // 실제 아이디..
+	CAPISocket::MP_AddShort(byBuff, iOffset, (int16_t) szPassWire.size());      // 패스워드 길이
+	CAPISocket::MP_AddString(byBuff, iOffset, szPassWire);                      // 실제 패스워드
+
+	s_pSocket->Send(byBuff, iOffset);                                           // 보낸다
 
 	return true;
 }
@@ -246,6 +257,7 @@ void CGameProcLogIn_1298::MsgRecv_News(Packet& pkt)
 	// read content
 	std::string strContent;
 	pkt.readString(strContent, wSize);
+	strContent = NetToLocal(strContent);
 
 	m_pUILogIn->AddNews(strContent);
 }
@@ -261,6 +273,7 @@ void CGameProcLogIn_1298::MsgRecv_GameServerGroupList(Packet& pkt)
 		pkt.readString(GSI.szIP, iLen);
 		iLen = pkt.read<int16_t>();
 		pkt.readString(GSI.szName, iLen);
+		GSI.szName               = NetToLocal(GSI.szName);
 		GSI.iConcurrentUserCount = pkt.read<int16_t>(); // 현재 동시 접속자수..
 
 		m_pUILogIn->ServerInfoAdd(GSI);                 // ServerList
@@ -335,9 +348,10 @@ void CGameProcLogIn_1298::MsgRecv_AccountLogIn(int iCmd, Packet& pkt)
 					// 로그인 서버에서 받은 겜서버 주소로 접속해서 짤르라고 꼰지른다.
 					int iOffset2 = 0;
 					uint8_t Buff[32];
-					CAPISocket::MP_AddByte(Buff, iOffset2, WIZ_KICKOUT);   // Recv s1, str1(IP) s1(port) | Send s1, str1(ID)
-					CAPISocket::MP_AddShort(Buff, iOffset2, (int16_t) s_szAccount.size());
-					CAPISocket::MP_AddString(Buff, iOffset2, s_szAccount); // Recv s1, str1(IP) s1(port) | Send s1, str1(ID)
+					const std::string szKickAccountWire = LocalToNet(s_szAccount);
+					CAPISocket::MP_AddByte(Buff, iOffset2, WIZ_KICKOUT);        // Recv s1, str1(IP) s1(port) | Send s1, str1(ID)
+					CAPISocket::MP_AddShort(Buff, iOffset2, (int16_t) szKickAccountWire.size());
+					CAPISocket::MP_AddString(Buff, iOffset2, szKickAccountWire); // Recv s1, str1(IP) s1(port) | Send s1, str1(ID)
 
 					socketTmp->Send(Buff, iOffset2);
 					socketTmp->Disconnect();                               // 짜른다..
@@ -369,6 +383,12 @@ void CGameProcLogIn_1298::MsgRecv_AccountLogIn(int iCmd, Packet& pkt)
 int CGameProcLogIn_1298::MsgRecv_VersionCheck(Packet& pkt) // virtual
 {
 	int iVersion = CGameProcedure::MsgRecv_VersionCheck(pkt);
+
+#ifndef _WIN32
+	spdlog::info("game server version check answered: version={} (client expects {})",
+		iVersion, CURRENT_VERSION);
+#endif
+
 	if (iVersion == CURRENT_VERSION)
 	{
 		CGameProcedure::MsgSend_GameServerLogIn(); // 게임 서버에 로그인..
@@ -381,6 +401,10 @@ int CGameProcLogIn_1298::MsgRecv_VersionCheck(Packet& pkt) // virtual
 int CGameProcLogIn_1298::MsgRecv_GameServerLogIn(Packet& pkt)   // virtual - 국가번호를 리턴한다.
 {
 	int iNation = CGameProcedure::MsgRecv_GameServerLogIn(pkt); // 국가 - 0 없음 0xff - 실패..
+
+#ifndef _WIN32
+	spdlog::info("game server login answered: nation={}", iNation);
+#endif
 
 	if (0xff == iNation)
 	{
@@ -449,17 +473,37 @@ bool CGameProcLogIn_1298::ProcessPacket(Packet& pkt)
 void CGameProcLogIn_1298::ConnectToGameServer() // 고른 게임 서버에 접속
 {
 	if (m_fTimeUntilNextGameConnectionAttempt > 0.0f)
+	{
+#ifndef _WIN32
+		spdlog::debug("ConnectToGameServer throttled for another {:.1f}s",
+			m_fTimeUntilNextGameConnectionAttempt);
+#endif
 		return;
+	}
 
 	__GameServerInfo GSI;
 	if (!m_pUILogIn->ServerInfoGetCur(GSI))
+	{
+#ifndef _WIN32
+		spdlog::warn("ConnectToGameServer: no server selected in the list");
+#endif
 		return; // 서버를 고른다음..
+	}
 
 	int port                      = SOCKET_PORT_GAME;
+
+#ifndef _WIN32
+	spdlog::info("connecting to game server '{}' at {}:{}", GSI.szName, GSI.szIP, port);
+#endif
 
 	s_bNeedReportConnectionClosed = false;                                          // 서버접속이 끊어진걸 보고해야 하는지..
 	int iErr                      = s_pSocket->Connect(s_hWndBase, GSI.szIP, port); // 게임서버 소켓 연결
 	s_bNeedReportConnectionClosed = true;                                           // 서버접속이 끊어진걸 보고해야 하는지..
+
+#ifndef _WIN32
+	if (iErr != 0)
+		spdlog::error("game server connect failed: {}:{} (errorCode: {})", GSI.szIP, port, iErr);
+#endif
 
 	if (iErr != 0)
 	{

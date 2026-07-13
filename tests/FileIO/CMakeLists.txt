@@ -1,5 +1,6 @@
 add_executable(FileIO.Tests
   FileReader_test.cpp
+  PathResolver_test.cpp
   FileReaderSetup_test.cpp
   FileWriter_test.cpp
   FileWriterSetup_test.cpp)

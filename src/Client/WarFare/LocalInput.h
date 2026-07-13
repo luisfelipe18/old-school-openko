@@ -3,7 +3,11 @@
 
 #pragma once
 
+#ifdef _WIN32
 #include <dinput.h>
+#else
+#include <Platform/DInputKeyCodes.h>
+#endif
 
 #include <N3Base/My_3DStruct.h>
 
@@ -28,8 +32,10 @@ inline constexpr int MOUSE_MBDBLCLK  = 0x400;
 inline constexpr int MOUSE_RBDBLCLK  = 0x800;
 
 //////////////////////////////////////////////////////////////////////////////////
-// CLocalInput is a class wrapper for DirectInput and contains functions to receive
-// data from the mouse, keyboard
+// CLocalInput is a class wrapper for the local input devices (mouse, keyboard).
+// Keys are identified by DirectInput DIK_* scancodes on every platform; the
+// backend is DirectInput on Windows (LocalInput.cpp) and SDL on POSIX
+// platforms (LocalInputSDL.cpp), which maps SDL scancodes onto DIK_* codes.
 //////////////////////////////////////////////////////////////////////////////////
 class CLocalInput
 {
@@ -38,8 +44,12 @@ private:
 	void UnacquireKeyboard();
 
 protected:
+#ifdef _WIN32
 	LPDIRECTINPUT8 m_lpDI;
 	LPDIRECTINPUTDEVICE8 m_lpDIDKeyboard;
+#else
+	bool m_bKeyboardActive; // SetActiveDevices() state (DirectInput acquire/unacquire equivalent)
+#endif
 
 	HWND m_hWnd;
 
@@ -77,6 +87,17 @@ public:
 		{
 			m_byCurKeys[iIndex] = m_byOldKeys[iIndex] = m_bKeyPresses[iIndex] = m_bKeyPresseds[iIndex] = 0;
 		}
+	}
+
+	// Clears only the edge flags (just-pressed / just-released) for this frame,
+	// leaving the held-key state (cur/old) intact. Use this to "swallow" a
+	// frame's key presses so they don't reach later consumers, WITHOUT breaking
+	// next frame's edge detection - zeroing cur/old (KeyboardClearInput) makes a
+	// still-held key re-fire as a fresh press every frame.
+	void KeyboardClearPresses()
+	{
+		memset(m_bKeyPresses, 0, sizeof(m_bKeyPresses));
+		memset(m_bKeyPresseds, 0, sizeof(m_bKeyPresseds));
 	}
 
 	BOOL IsNoKeyDown() const

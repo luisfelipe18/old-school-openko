@@ -3,6 +3,9 @@
 //////////////////////////////////////////////////////////////////////
 
 #include "StdAfx.h"
+#ifndef _WIN32
+#include <Platform/PlatformPaths.h> // _splitpath / _MAX_*
+#endif
 #include "PvsMgr.h"
 #include "GameBase.h"
 #include "PlayerMySelf.h"

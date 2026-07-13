@@ -33,6 +33,143 @@ The following setups are tested by our GitHub workflows and are known to build:
  - macOS 15 **(only the server projects at this time)**
    - Apple Clang 15
 
+#### POSIX (macOS/Linux) client port
+
+The full client, plus the ported client tools (`Option`, `Launcher`), builds and
+runs on macOS/Linux; the roadmap and status live in
+[docs/PORT_POSIX_PLAN.md](docs/PORT_POSIX_PLAN.md). Configuration is opt-in via
+`-DOPENKO_CLIENT_POSIX_EXPERIMENTAL=ON` / `-DOPENKO_CLIENT_TOOLS_POSIX_EXPERIMENTAL=ON`,
+both preset in `CMakePresets.json`. The whole thing builds in three commands:
+
+```
+cmake --preset macos-arm64-release        # or linux-clang-release, *-debug, ...
+cmake --build --preset macos-arm64-release
+ctest --preset macos-arm64-debug          # test suites (debug presets)
+```
+
+`cmake --build` without `--target` builds everything configured: the game
+(`KnightOnLine`), the tools, and every test suite. The server projects need a
+system ODBC library (`apt: unixodbc-dev` / `brew: unixodbc`) and are skipped
+with a notice when it's missing. The `Client POSIX` CI jobs build all of this
+on Linux and macOS in Debug and Release on every push.
+
+Suggested packages:
+* macOS: `brew install cmake ninja sdl3 freetype`
+* Ubuntu/Debian: `apt install build-essential clang cmake ninja-build libfreetype-dev`
+  (SDL3 is fetched and built from source automatically when not installed system-wide;
+  FreeType uses the system package first, then falls back to the source build)
+
+##### Render backends
+
+The client renders through an RHI with three POSIX backends, selected by
+`Renderer=` under `[Screen]` in `Option.ini` or the `--renderer` CLI flag:
+
+* `GL` - OpenGL 3.3 core. The default everywhere for now.
+* `SDLGPU` - SDL_GPU: **Metal** on macOS, **Vulkan** on Linux. Fully validated
+  on Vulkan; on Metal the in-world workload currently shows rendering
+  corruption (under investigation), so it stays opt-in. Falls back to GL
+  automatically when no Metal/Vulkan driver exists.
+* `Null` - headless, for CI smoke runs.
+
+##### Sanitizer build (docs/PORT_POSIX_PLAN.md, F9)
+
+The `linux-asan` preset builds the client subset with
+`-fsanitize=address,undefined` for the stability pass:
+
+```
+cmake --preset linux-asan
+cmake --build build/linux-asan
+ctest --preset linux-asan
+```
+
+It defaults to gcc (whose sanitizer runtime ships with `g++`); pass
+`-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++` if your clang has
+`libclang_rt.asan` installed. Run the client smoke under the sanitizers
+with `ASAN_OPTIONS=detect_leaks=1 UBSAN_OPTIONS=print_stacktrace=1
+SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy ./KnightOnLine --smoke 30`.
+
+##### Packaging (docs/PORT_POSIX_PLAN.md, F8)
+
+After a successful build, `cmake --install <build-dir> --prefix <dest>`
+produces a distribution layout:
+
+* **Linux**: `bin/KnightOnLine` + the `.cur` cursor files as siblings +
+  `share/applications/openko-client.desktop`. The binary's rpath is
+  `$ORIGIN`, so vendored dependency shared libraries can ship in `bin/`
+  as well.
+* **macOS**: a `Knight OnLine.app` bundle. Info.plist ships with
+  `NSHighResolutionCapable`, category role-playing, and a minimum system
+  version of macOS 11. The `.cur` cursors live in
+  `Contents/Resources/`. For the app icon, drop a square PNG (ideally
+  1024x1024) at `src/Client/WarFare/AppIcon.png` - the build crops it and
+  generates a proper multi-resolution `KnightOnLine.icns` automatically
+  (`generate_macos_icon.sh`, via `sips`+`iconutil`). A committed
+  `KnightOnLine.icns` takes precedence if you'd rather hand-author one; a
+  low-res fallback from `WarFare_1298.ico` is used if neither exists. To
+  run an unsigned bundle locally, `codesign --force --deep -s - Knight\
+  OnLine.app` gives it an ad-hoc signature and Gatekeeper won't
+  quarantine it.
+
+  If the Dock/Get Info preview shows the new icon but Finder's list/icon
+  view still shows a generic one after rebuilding, that's Finder's icon
+  cache being stale (common after overwriting a `.app` in place) - not a
+  build problem. Force a refresh with:
+  ```
+  touch "Knight OnLine.app"
+  killall Finder Dock
+  ```
+  or, if that doesn't clear it, reset the whole icon cache:
+  ```
+  sudo rm -rf /Library/Caches/com.apple.iconservices.store
+  killall Finder Dock
+  ```
+
+Runtime data written by the game (`Log.txt`) lands under
+`~/Library/Application Support/OpenKO/` on macOS and
+`$XDG_CONFIG_HOME/openko` (or `~/.config/openko/`) on Linux, so a
+read-only install location is fine.
+
+##### Pointing the client at a game-data directory
+
+The client reads `Server.Ini`, `Data/`, `UI/` and the rest of the game
+assets from a "game data directory". The build system stages whatever
+you drop into `<repo>/assets/Client/` (Server.Ini, Data/, UI/, textures,
+...) into `GameData/` next to the built binary on Linux, or into
+`Contents/Resources/GameData/` inside the `.app` bundle on macOS - so a
+build produces a self-contained runtime out of the box. `assets/Client/`
+starts empty; drop your own client files there.
+
+If you'd rather point at a different directory, you can, in this
+precedence order:
+
+1. `./KnightOnLine --data /path/to/game-data ...` (explicit override).
+2. `OPENKO_GAME_DATA=/path/to/game-data ./KnightOnLine ...` (env var).
+3. Otherwise the client auto-discovers by looking, in order, at: the
+   current working directory, `<exe-dir>/GameData/`, the exe directory
+   itself, `Contents/Resources/GameData/` and `Contents/Resources/`
+   inside a macOS bundle, the bundle's parent, `~/GameData`, and
+   `~/Library/Application Support/OpenKO/GameData` (macOS) or
+   `~/.local/share/openko/GameData` (Linux). The first entry that
+   contains `Data/` or `Server.Ini` wins.
+
+The same `--data`/`OPENKO_GAME_DATA`/auto-discovery rules apply to the
+POSIX client tool ports (`Option`, ...; see below) via
+`Platform/GameDataDir.h`, so pointing one at your install points all of
+them at it.
+
+##### Boot mode
+
+The client boots straight into the login scene by default (the classic
+Knight OnLine presentation menu). CLI flags opt out for CI/dev:
+
+* `--diagnostics` runs a clear-color loop with input diagnostics.
+* `--test-scene` draws the RHI diagnostic scene (rotating triangle +
+  textured quad).
+* `--smoke <N>` pumps N frames headless and exits (implies
+  `--diagnostics`); this is what CI runs.
+* `--scene login` stays valid for backwards compatibility, but it's now
+  the default so passing it is redundant.
+
 ### Visual Studio solutions
 
 Solutions are available in the root directory:

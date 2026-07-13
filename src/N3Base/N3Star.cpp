@@ -63,14 +63,14 @@ void CN3Star::Render()
 		return;
 	__Matrix44 matWorld;
 	matWorld.Identity();
-	s_lpD3DDev->SetTransform(D3DTS_WORLD, matWorld.toD3D());
+	RHIDevice()->SetTransform(D3DTS_WORLD, matWorld.toD3D());
 
-	s_lpD3DDev->SetTexture(0, nullptr);
-	s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
-	s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_DIFFUSE);
+	RHIDevice()->SetTexture(0, nullptr);
+	RHIDevice()->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
+	RHIDevice()->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_DIFFUSE);
 
-	s_lpD3DDev->SetFVF(FVF_XYZCOLOR);
-	s_lpD3DDev->DrawPrimitiveUP(D3DPT_POINTLIST, m_iCurNumStar, m_Stars, sizeof(m_Stars[0]));
+	RHIDevice()->SetFVF(FVF_XYZCOLOR);
+	RHIDevice()->DrawPrimitiveUP(D3DPT_POINTLIST, m_iCurNumStar, m_Stars, sizeof(m_Stars[0]));
 }
 
 void CN3Star::Init()

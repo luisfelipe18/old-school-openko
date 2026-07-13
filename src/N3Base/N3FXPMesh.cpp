@@ -194,9 +194,12 @@ bool CN3FXPMesh::Load(File& file)
 			}
 		}
 
-#ifdef _DEBUG
+#if defined(_DEBUG) && defined(_WIN32)
 		if (bFixed)
 			::MessageBox(s_hWndBase, "잘못된 Progressive Mesh 수정", m_szName.c_str(), MB_OK);
+#elif defined(_DEBUG)
+		if (bFixed)
+			TRACE("잘못된 Progressive Mesh 수정: {}", m_szName);
 #endif
 	}
 
@@ -244,7 +247,7 @@ void CN3FXPMesh::Release()
 
 void CN3FXPMesh::Render()
 {
-	s_lpD3DDev->SetFVF(FVF_XYZCOLORT1);
+	RHIDevice()->SetFVF(FVF_XYZCOLORT1);
 
 	const int iPCToRender = 1000; // primitive count to render
 	if (m_iMaxNumIndices > 3)
@@ -255,14 +258,14 @@ void CN3FXPMesh::Render()
 		int i   = 0;
 		for (i = 0; i < iLC; ++i)
 		{
-			s_lpD3DDev->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, m_iMaxNumVertices,
+			RHIDevice()->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, m_iMaxNumVertices,
 				iPCToRender, m_pIndices + i * iPCToRender * 3, D3DFMT_INDEX16, m_pColorVertices,
 				sizeof(__VertexXyzColorT1));
 		}
 
 		int iRPC = iPC % iPCToRender;
 		if (iRPC > 0)
-			s_lpD3DDev->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, m_iMaxNumVertices, iRPC,
+			RHIDevice()->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, m_iMaxNumVertices, iRPC,
 				m_pIndices + i * iPCToRender * 3, D3DFMT_INDEX16, m_pColorVertices,
 				sizeof(__VertexXyzColorT1));
 	}

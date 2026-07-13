@@ -147,12 +147,44 @@ struct __Options
 	bool bWindowMode      = false;
 
 	bool bVSyncEnabled    = true;
+
+	// POSIX render backend selection (docs/PORT_POSIX_PLAN.md, T6.5/F6b):
+	// SDLGPU (Metal/Vulkan) and GL are the hardware backends, Null is the
+	// headless one for CI/smoke. Windows always renders through Direct3D 9
+	// and ignores this.
+	enum class PosixRenderer
+	{
+		Null,
+		GL,
+		SDLGPU,
+	};
+	PosixRenderer eRenderer = PosixRenderer::Null;
+
+	// Legacy alias for eRenderer == GL (pre-F6b call sites).
+	bool bPreferGLRenderer = false;
 };
+
+#include "RHI/RHIDevice.h"
 
 class CN3Base
 {
 public:
 	static LPDIRECT3DDEVICE9 s_lpD3DDev;     // Device 참조 포인터.. 멋대로 해제하면 안된다..
+
+	// Render backend (docs/PORT_POSIX_PLAN.md, phase 5): RHIDeviceD3D9 wraps
+	// s_lpD3DDev on Windows; other platforms install Null/GL backends.
+	// Render code migrates from s_lpD3DDev-> to RHIDevice()->.
+	static IRHIDevice* s_pRHIDev;
+
+	static IRHIDevice* RHIDevice()
+	{
+		return s_pRHIDev;
+	}
+
+	static void RHIDeviceSet(IRHIDevice* pDevice)
+	{
+		s_pRHIDev = pDevice;
+	}
 	static D3DPRESENT_PARAMETERS s_DevParam; // Device 생성 Present Parameter
 	static D3DCAPS9 s_DevCaps;               // Device 호환성...
 	static uint32_t s_dwTextureCaps;         // Texture 지원.. DXT1 ~ DXT5, Square Only

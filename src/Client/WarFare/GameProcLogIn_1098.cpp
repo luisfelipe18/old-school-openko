@@ -1,5 +1,10 @@
 ﻿#include "StdAfx.h"
 
+#ifndef _WIN32
+#include <Platform/PlatformIni.h>    // GetPrivateProfileString/Int (Server.Ini)
+#include <Platform/PlatformString.h> // lstrcpy / lstrcat
+#endif
+
 #if defined(LOGIN_SCENE_VERSION) && LOGIN_SCENE_VERSION == 1098
 #include "GameProcLogIn_1098.h"
 #include "GameEng.h"
@@ -10,6 +15,7 @@
 #include "APISocket.h"
 #include "PacketDef.h"
 #include "text_resources.h"
+#include "NetworkEncoding.h"
 
 #include <N3Base/N3Camera.h>
 #include <N3Base/N3Light.h>
@@ -223,14 +229,14 @@ void CGameProcLogIn_1098::Render()
 {
 	D3DCOLOR crEnv = 0x00000000;
 	s_pEng->Clear(crEnv);     // 배경은 검은색
-	s_lpD3DDev->BeginScene(); // 씬 렌더 ㅅ작...
+	RHIDevice()->BeginScene(); // 씬 렌더 ㅅ작...
 
 							  // 카메라 잡기..
 	m_pCamera->Tick();
 	m_pCamera->Apply();
 
 	for (int i = 0; i < 8; i++)
-		s_lpD3DDev->LightEnable(i, FALSE);
+		RHIDevice()->LightEnable(i, FALSE);
 
 	for (int i = 0; i < 3; i++)
 		m_pLights[i]->Apply();
@@ -238,7 +244,7 @@ void CGameProcLogIn_1098::Render()
 	////////////////////////////////////////////
 	// 달그리기..
 	D3DVIEWPORT9 vp;
-	s_lpD3DDev->GetViewport(&vp);
+	RHIDevice()->GetViewport(&vp);
 
 	float fMW  = (m_pTexBkg->Width() * vp.Width / 1024.0f) * 1.3f;
 	float fMH  = (m_pTexBkg->Height() * vp.Height / 768.0f) * 1.3f;
@@ -253,16 +259,16 @@ void CGameProcLogIn_1098::Render()
 	vMoon[3].Set(fX, fY + fMH, 0, fRHW, 0xffffffff, 0.0f, 1.0f);
 
 	DWORD dwZWrite;
-	s_lpD3DDev->GetRenderState(D3DRS_ZWRITEENABLE, &dwZWrite);
-	s_lpD3DDev->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+	RHIDevice()->GetRenderState(D3DRS_ZWRITEENABLE, &dwZWrite);
+	RHIDevice()->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
 
-	s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
-	s_lpD3DDev->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TEXTURE);
-	s_lpD3DDev->SetTexture(0, m_pTexBkg->Get());
-	s_lpD3DDev->SetFVF(FVF_TRANSFORMED);
-	s_lpD3DDev->DrawPrimitiveUP(D3DPT_TRIANGLEFAN, 2, vMoon, sizeof(__VertexTransformed));
+	RHIDevice()->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
+	RHIDevice()->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TEXTURE);
+	RHIDevice()->SetTexture(0, m_pTexBkg->Get());
+	RHIDevice()->SetFVF(FVF_TRANSFORMED);
+	RHIDevice()->DrawPrimitiveUP(D3DPT_TRIANGLEFAN, 2, vMoon, sizeof(__VertexTransformed));
 
-	s_lpD3DDev->SetRenderState(D3DRS_ZWRITEENABLE, dwZWrite);
+	RHIDevice()->SetRenderState(D3DRS_ZWRITEENABLE, dwZWrite);
 	// 달그리기..
 	////////////////////////////////////////////
 
@@ -270,7 +276,7 @@ void CGameProcLogIn_1098::Render()
 
 	CGameProcedure::Render();       // UI 나 그밖의 기본적인 것들 렌더링..
 
-	s_pEng->s_lpD3DDev->EndScene(); // 씬 렌더 시작...
+	s_pEng->RHIDevice()->EndScene(); // 씬 렌더 시작...
 	s_pEng->Present(CN3Base::s_hWndBase);
 }
 
@@ -296,13 +302,16 @@ bool CGameProcLogIn_1098::MsgSend_AccountLogIn(e_LogInClassification eLIC)
 	if (eLIC == LIC_MGAME)
 		byCmd = LS_MGAME_LOGIN;
 
-	CAPISocket::MP_AddByte(byBuff, iOffset, byCmd);                          // 커멘드.
-	CAPISocket::MP_AddShort(byBuff, iOffset, (int16_t) s_szAccount.size());  // 아이디 길이..
-	CAPISocket::MP_AddString(byBuff, iOffset, s_szAccount);                  // 실제 아이디..
-	CAPISocket::MP_AddShort(byBuff, iOffset, (int16_t) s_szPassWord.size()); // 패스워드 길이
-	CAPISocket::MP_AddString(byBuff, iOffset, s_szPassWord);                 // 실제 패스워드
+	const std::string szAccountWire = LocalToNet(s_szAccount);
+	const std::string szPassWire    = LocalToNet(s_szPassWord);
 
-	s_pSocket->Send(byBuff, iOffset);                                        // 보낸다
+	CAPISocket::MP_AddByte(byBuff, iOffset, byCmd);                             // 커멘드.
+	CAPISocket::MP_AddShort(byBuff, iOffset, (int16_t) szAccountWire.size());   // 아이디 길이..
+	CAPISocket::MP_AddString(byBuff, iOffset, szAccountWire);                   // 실제 아이디..
+	CAPISocket::MP_AddShort(byBuff, iOffset, (int16_t) szPassWire.size());      // 패스워드 길이
+	CAPISocket::MP_AddString(byBuff, iOffset, szPassWire);                      // 실제 패스워드
+
+	s_pSocket->Send(byBuff, iOffset);                                           // 보낸다
 
 	return true;
 }
@@ -318,6 +327,7 @@ void CGameProcLogIn_1098::MsgRecv_GameServerGroupList(Packet& pkt)
 		pkt.readString(GSI.szIP, iLen);
 		iLen = pkt.read<int16_t>();
 		pkt.readString(GSI.szName, iLen);
+		GSI.szName               = NetToLocal(GSI.szName);
 		GSI.iConcurrentUserCount = pkt.read<int16_t>(); // 현재 동시 접속자수..
 
 		m_pUILogIn->ServerInfoAdd(GSI);                 // ServerList
@@ -380,9 +390,11 @@ void CGameProcLogIn_1098::MsgRecv_AccountLogIn(int iCmd, Packet& pkt)
 				// 로그인 서버에서 받은 겜서버 주소로 접속해서 짤르라고 꼰지른다.
 				int iOffset2 = 0;
 				uint8_t Buff[32];
-				CAPISocket::MP_AddByte(Buff, iOffset2, WIZ_KICKOUT);   // Recv s1, str1(IP) s1(port) | Send s1, str1(ID)
-				CAPISocket::MP_AddShort(Buff, iOffset2, (int16_t) s_szAccount.size());
-				CAPISocket::MP_AddString(Buff, iOffset2, s_szAccount); // Recv s1, str1(IP) s1(port) | Send s1, str1(ID)
+				const std::string szKickAccountWire = LocalToNet(s_szAccount);
+
+				CAPISocket::MP_AddByte(Buff, iOffset2, WIZ_KICKOUT);        // Recv s1, str1(IP) s1(port) | Send s1, str1(ID)
+				CAPISocket::MP_AddShort(Buff, iOffset2, (int16_t) szKickAccountWire.size());
+				CAPISocket::MP_AddString(Buff, iOffset2, szKickAccountWire); // Recv s1, str1(IP) s1(port) | Send s1, str1(ID)
 
 				socketTmp.Send(Buff, iOffset2);
 				socketTmp.Disconnect();                                // 짜른다..

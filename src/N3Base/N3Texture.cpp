@@ -5,11 +5,160 @@
 #include "N3Texture.h"
 #include "WinCrypt.h"
 
+#ifdef _WIN32
+#include "RHI/RHIDeviceD3D9.h" // RHITextureD3D9 wrapper for the D3DX/tool paths
+#endif
+
 #ifdef _N3TOOL
 #include "BitmapFile.h"
+
+// Tool-only D3DX/surface work operates on the raw D3D texture. _N3TOOL implies
+// a Windows build, so the RHI texture is always a RHITextureD3D9 here.
+static inline LPDIRECT3DTEXTURE9 D3DTex(IRHITexture* pTexture)
+{
+	return pTexture ? static_cast<RHITextureD3D9*>(pTexture)->D3DTexture() : nullptr;
+}
 #endif // #ifdef _N3TOOL
 
 #include <FileIO/FileReader.h>
+
+#ifndef _WIN32
+#include <cstring>
+#include <vector>
+
+namespace
+{
+// Minimal Truevision TGA decoder (docs/PORT_POSIX_PLAN.md, F9): D3DX has no
+// POSIX equivalent, but the non-DXT assets the client actually ships (sky /
+// moon phases, some UI art) are plain 24/32bpp TGA - uncompressed or
+// RLE-compressed color images, image type 2 or 10. Palettised and grayscale
+// TGAs aren't handled since nothing in the asset set uses them; they log and
+// fail like any other unsupported format did before this.
+struct TgaHeader
+{
+	uint8_t idLength;
+	uint8_t colorMapType;
+	uint8_t imageType;
+	uint8_t colorMapSpec[5];
+	uint16_t xOrigin;
+	uint16_t yOrigin;
+	uint16_t width;
+	uint16_t height;
+	uint8_t bitsPerPixel;
+	uint8_t imageDescriptor;
+};
+
+// Decodes into top-down BGRA (matches D3DFMT_A8R8G8B8 memory order, which is
+// what the TGA pixel bytes already are for 24/32bpp true-color images - so a
+// per-row copy is all that's needed once the vertical origin is normalized).
+bool DecodeTga(const uint8_t* data, size_t size, std::vector<uint8_t>& outBgra, int& outWidth, int& outHeight)
+{
+	if (data == nullptr || size < sizeof(TgaHeader))
+		return false;
+
+	TgaHeader hdr {};
+	std::memcpy(&hdr, data, sizeof(hdr));
+
+	const bool bRle = (hdr.imageType == 10);
+	if ((hdr.imageType != 2 && !bRle) || hdr.colorMapType != 0
+		|| (hdr.bitsPerPixel != 24 && hdr.bitsPerPixel != 32))
+		return false;
+
+	const int width  = hdr.width;
+	const int height = hdr.height;
+	if (width <= 0 || height <= 0)
+		return false;
+
+	const size_t srcBpp   = hdr.bitsPerPixel / 8;
+	const bool bTopOrigin = (hdr.imageDescriptor & 0x20) != 0; // bit 5
+
+	size_t offset = sizeof(TgaHeader) + hdr.idLength;
+	if (offset > size)
+		return false;
+
+	outBgra.resize(static_cast<size_t>(width) * static_cast<size_t>(height) * 4);
+
+	// Row storage order in the file is bottom-up unless the top-origin bit is
+	// set; outBgra is always top-down, so pick the destination row accordingly.
+	auto writePixel = [&](int col, int row, const uint8_t* px) {
+		const int dstRow      = bTopOrigin ? row : (height - 1 - row);
+		uint8_t* dst          = &outBgra[(static_cast<size_t>(dstRow) * width + col) * 4];
+		dst[0]                = px[0]; // B
+		dst[1]                = px[1]; // G
+		dst[2]                = px[2]; // R
+		dst[3]                = (srcBpp == 4) ? px[3] : 0xff;
+	};
+
+	if (!bRle)
+	{
+		const size_t needed = static_cast<size_t>(width) * height * srcBpp;
+		if (offset + needed > size)
+			return false;
+
+		for (int row = 0; row < height; ++row)
+		{
+			for (int col = 0; col < width; ++col)
+			{
+				writePixel(col, row, data + offset);
+				offset += srcBpp;
+			}
+		}
+	}
+	else
+	{
+		int col = 0, row = 0;
+		while (row < height)
+		{
+			if (offset >= size)
+				return false;
+
+			const uint8_t packet = data[offset++];
+			const int count      = (packet & 0x7f) + 1;
+
+			if (packet & 0x80) // RLE packet: one pixel repeated `count` times
+			{
+				if (offset + srcBpp > size)
+					return false;
+				const uint8_t* px = data + offset;
+				offset            += srcBpp;
+				for (int i = 0; i < count; ++i)
+				{
+					writePixel(col, row, px);
+					if (++col >= width)
+					{
+						col = 0;
+						++row;
+						if (row >= height)
+							break;
+					}
+				}
+			}
+			else // Raw packet: `count` distinct pixels
+			{
+				if (offset + static_cast<size_t>(count) * srcBpp > size)
+					return false;
+				for (int i = 0; i < count; ++i)
+				{
+					writePixel(col, row, data + offset);
+					offset += srcBpp;
+					if (++col >= width)
+					{
+						col = 0;
+						++row;
+						if (row >= height)
+							break;
+					}
+				}
+			}
+		}
+	}
+
+	outWidth  = width;
+	outHeight = height;
+	return true;
+}
+} // namespace
+#endif // !_WIN32
 
 static inline uint32_t GetTextureSize(const D3DSURFACE_DESC& sd)
 {
@@ -114,8 +263,8 @@ bool CN3Texture::Create(int nWidth, int nHeight, D3DFORMAT Format, BOOL bGenerat
 			nMMC++;
 	}
 
-	HRESULT rval = s_lpD3DDev->CreateTexture(
-		nWidth, nHeight, nMMC, 0, Format, D3DPOOL_MANAGED, &m_lpTexture, nullptr);
+	HRESULT rval = RHIDevice()->CreateTexture(
+		nWidth, nHeight, nMMC, 0, Format, D3DPOOL_MANAGED, &m_lpTexture);
 
 #ifdef _N3GAME
 	if (rval == D3DERR_INVALIDCALL)
@@ -236,13 +385,17 @@ bool CN3Texture::LoadFromFile(const std::string& szFileName)
 	}
 	else
 	{
+#ifdef _WIN32
 		D3DXIMAGE_INFO ImgInfo;
+		LPDIRECT3DTEXTURE9 lpD3DTexture = nullptr;
 		HRESULT rval = D3DXCreateTextureFromFileEx(s_lpD3DDev, szFullPath.c_str(), D3DX_DEFAULT,
 			D3DX_DEFAULT, D3DX_DEFAULT, 0, D3DFMT_UNKNOWN, D3DPOOL_MANAGED,
 			D3DX_FILTER_TRIANGLE | D3DX_FILTER_MIRROR, D3DX_FILTER_TRIANGLE | D3DX_FILTER_MIRROR, 0,
-			&ImgInfo, nullptr, &m_lpTexture);
+			&ImgInfo, nullptr, &lpD3DTexture);
 		if (rval == D3D_OK)
 		{
+			m_lpTexture = new RHITextureD3D9(lpD3DTexture);
+
 			D3DSURFACE_DESC sd;
 			m_lpTexture->GetLevelDesc(0, &sd);
 
@@ -256,6 +409,54 @@ bool CN3Texture::LoadFromFile(const std::string& szFileName)
 			CLogWriter::Write("N3Texture - Failed to load texture({})", szFullPath);
 #endif
 		}
+#else  // _WIN32
+		// Non-DXT image formats go through D3DX on Windows, which has no POSIX
+		// equivalent; TGA - the only non-DXT format the shipped assets
+		// actually use (sky/moon phases, some UI art) - is decoded directly
+		// instead of pulling in a general-purpose image library (T6.2 scope,
+		// narrowed to what's really needed).
+		FileReader tgaFile;
+		if (!tgaFile.OpenExisting(szFullPath))
+		{
+			CLogWriter::Write("N3Texture - Can't open texture file({})", szFullPath);
+		}
+		else
+		{
+			std::vector<uint8_t> pixelsBgra;
+			int nTgaWidth = 0, nTgaHeight = 0;
+			if (!DecodeTga(static_cast<const uint8_t*>(tgaFile.Memory()),
+					static_cast<size_t>(tgaFile.Size()), pixelsBgra, nTgaWidth, nTgaHeight))
+			{
+				CLogWriter::Write("N3Texture - unsupported or corrupt TGA ({})", szFullPath);
+			}
+			else
+			{
+				HRESULT rval = RHIDevice()->CreateTexture(static_cast<UINT>(nTgaWidth),
+					static_cast<UINT>(nTgaHeight), 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_MANAGED,
+					&m_lpTexture);
+				if (rval == D3D_OK && m_lpTexture != nullptr)
+				{
+					D3DLOCKED_RECT LR;
+					m_lpTexture->LockRect(0, &LR, nullptr, 0);
+					for (int row = 0; row < nTgaHeight; ++row)
+					{
+						std::memcpy(static_cast<uint8_t*>(LR.pBits) + static_cast<size_t>(row) * LR.Pitch,
+							&pixelsBgra[static_cast<size_t>(row) * nTgaWidth * 4],
+							static_cast<size_t>(nTgaWidth) * 4);
+					}
+					m_lpTexture->UnlockRect(0);
+
+					m_Header.nWidth  = nTgaWidth;
+					m_Header.nHeight = nTgaHeight;
+					m_Header.Format  = D3DFMT_A8R8G8B8;
+				}
+				else
+				{
+					CLogWriter::Write("N3Texture - CreateTexture failed for TGA ({})", szFullPath);
+				}
+			}
+		}
+#endif // _WIN32
 
 		if (32 == m_Header.nWidth && 32 == m_Header.nHeight)
 			s_ResrcInfo.nTexture_Loaded_32X32++;
@@ -772,7 +973,7 @@ bool CN3Texture::Save(File& file)
 		for (int i = 0; i < nMMC2; i++)
 		{
 			m_lpTexture->GetLevelDesc(i, &sd);
-			m_lpTexture->GetSurfaceLevel(i, &lpSurfSrc);
+			D3DTex(m_lpTexture)->GetSurfaceLevel(i, &lpSurfSrc);
 			int nW = sd.Width / 2, nH = sd.Height / 2;
 			s_lpD3DDev->CreateOffscreenPlainSurface(
 				nW, nH, fmtExtra, D3DPOOL_DEFAULT, &lpSurfDest, nullptr);
@@ -794,7 +995,7 @@ bool CN3Texture::Save(File& file)
 		if (nMMC == 1 && m_Header.nWidth >= 1024) // 부두를 위해 256 * 256 짜리 하나 더 저장해준다..
 		{
 			m_lpTexture->GetLevelDesc(0, &sd);
-			m_lpTexture->GetSurfaceLevel(0, &lpSurfSrc);
+			D3DTex(m_lpTexture)->GetSurfaceLevel(0, &lpSurfSrc);
 			int nW = 256, nH = 256;
 			s_lpD3DDev->CreateOffscreenPlainSurface(
 				nW, nH, fmtExtra, D3DPOOL_DEFAULT, &lpSurfDest, nullptr);
@@ -843,7 +1044,7 @@ bool CN3Texture::Save(File& file)
 			LPDIRECT3DSURFACE9 lpSurfSrc = nullptr, lpSurfDest = nullptr;
 
 			m_lpTexture->GetLevelDesc(0, &sd);
-			m_lpTexture->GetSurfaceLevel(0, &lpSurfSrc);
+			D3DTex(m_lpTexture)->GetSurfaceLevel(0, &lpSurfSrc);
 			int nW = 256, nH = 256;
 			s_lpD3DDev->CreateOffscreenPlainSurface(
 				nW, nH, sd.Format, D3DPOOL_DEFAULT, &lpSurfDest, nullptr);
@@ -880,7 +1081,7 @@ bool CN3Texture::Convert(D3DFORMAT Format, int nWidth, int nHeight, BOOL bGenera
 		nHeight = dsd.Height;
 	}
 
-	LPDIRECT3DTEXTURE9 lpTexOld = m_lpTexture;
+	IRHITexture* lpTexOld = m_lpTexture;
 
 	m_lpTexture                 = nullptr;
 	if (this->Create(nWidth, nHeight, Format, bGenerateMipMap) == false)
@@ -888,7 +1089,7 @@ bool CN3Texture::Convert(D3DFORMAT Format, int nWidth, int nHeight, BOOL bGenera
 	if (bGenerateMipMap)
 	{
 		LPDIRECT3DSURFACE9 lpTSOld;
-		lpTexOld->GetSurfaceLevel(0, &lpTSOld);
+		D3DTex(lpTexOld)->GetSurfaceLevel(0, &lpTSOld);
 		this->GenerateMipMap(lpTSOld); // MipMap 생성
 		lpTSOld->Release();
 	}
@@ -896,8 +1097,8 @@ bool CN3Texture::Convert(D3DFORMAT Format, int nWidth, int nHeight, BOOL bGenera
 	{
 		LPDIRECT3DSURFACE9 lpTSNew;
 		LPDIRECT3DSURFACE9 lpTSOld;
-		m_lpTexture->GetSurfaceLevel(0, &lpTSNew);
-		lpTexOld->GetSurfaceLevel(0, &lpTSOld);
+		D3DTex(m_lpTexture)->GetSurfaceLevel(0, &lpTSNew);
+		D3DTex(lpTexOld)->GetSurfaceLevel(0, &lpTSOld);
 		D3DXLoadSurfaceFromSurface(lpTSNew, nullptr, nullptr, lpTSOld, nullptr, nullptr,
 			D3DX_FILTER_NONE, 0); // 첫번재 레벨 서피스 복사.
 		lpTSOld->Release();
@@ -927,14 +1128,14 @@ bool CN3Texture::GenerateMipMap(LPDIRECT3DSURFACE9 lpSurfSrc)
 	if (nullptr == lpSurfSrc)
 	{
 		bNeedReleaseSurf = true;
-		if (D3D_OK != m_lpTexture->GetSurfaceLevel(0, &lpSurfSrc))
+		if (D3D_OK != D3DTex(m_lpTexture)->GetSurfaceLevel(0, &lpSurfSrc))
 			return false;
 	}
 
 	HRESULT rval = D3D_OK;
 	if (nMMC < nMMC2) // 적으면 새로 생성..
 	{
-		LPDIRECT3DTEXTURE9 lpTexOld = m_lpTexture;
+		IRHITexture* lpTexOld = m_lpTexture;
 		m_lpTexture                 = nullptr;
 
 		bool created                = CreateFromSurface(lpSurfSrc, m_Header.Format, TRUE);
@@ -960,7 +1161,7 @@ bool CN3Texture::GenerateMipMap(LPDIRECT3DSURFACE9 lpSurfSrc)
 		if (false == bNeedReleaseSurf) // 다른 서피스에서 복사해야 되는 거면 0 레벨도 복사..
 		{
 			LPDIRECT3DSURFACE9 lpSurfDest;
-			m_lpTexture->GetSurfaceLevel(0, &lpSurfDest);
+			D3DTex(m_lpTexture)->GetSurfaceLevel(0, &lpSurfDest);
 			uint32_t dwFilter = D3DX_FILTER_TRIANGLE; // 기본 필터는 없다..
 			HRESULT rval      = D3DXLoadSurfaceFromSurface(lpSurfDest, nullptr, nullptr, lpSurfSrc,
 					 nullptr, nullptr, dwFilter, 0);  // 작은 맵 체인에 서피스 이미지 축소 복사
@@ -971,8 +1172,8 @@ bool CN3Texture::GenerateMipMap(LPDIRECT3DSURFACE9 lpSurfSrc)
 		for (int i = 1; i < nMMC2; i++)
 		{
 			LPDIRECT3DSURFACE9 lpSurfDest, lpSurfUp;
-			m_lpTexture->GetSurfaceLevel(i - 1, &lpSurfUp);
-			m_lpTexture->GetSurfaceLevel(i, &lpSurfDest);
+			D3DTex(m_lpTexture)->GetSurfaceLevel(i - 1, &lpSurfUp);
+			D3DTex(m_lpTexture)->GetSurfaceLevel(i, &lpSurfDest);
 			uint32_t dwFilter = D3DX_FILTER_TRIANGLE; // 기본 필터는 없다..
 			HRESULT rval      = D3DXLoadSurfaceFromSurface(lpSurfDest, nullptr, nullptr, lpSurfUp,
 					 nullptr, nullptr, dwFilter, 0);  // 작은 맵 체인에 서피스 이미지 축소 복사
@@ -1003,6 +1204,13 @@ void CN3Texture::UpdateRenderInfo()
 {
 }
 
+#ifdef _WIN32
+LPDIRECT3DTEXTURE9 CN3Texture::GetRawD3D()
+{
+	return m_lpTexture ? static_cast<RHITextureD3D9*>(m_lpTexture)->D3DTexture() : nullptr;
+}
+#endif
+
 #ifdef _N3TOOL
 bool CN3Texture::SaveToBitmapFile(const std::string& szFN)
 {
@@ -1012,7 +1220,7 @@ bool CN3Texture::SaveToBitmapFile(const std::string& szFN)
 		return false;
 
 	LPDIRECT3DSURFACE9 lpSurfSrc = nullptr;
-	m_lpTexture->GetSurfaceLevel(0, &lpSurfSrc);
+	D3DTex(m_lpTexture)->GetSurfaceLevel(0, &lpSurfSrc);
 
 	if (nullptr == lpSurfSrc)
 		return false;

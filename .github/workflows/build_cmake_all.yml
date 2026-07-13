@@ -9,6 +9,7 @@ on:
   push:
     branches:
     - master
+    - feature/port-posix
 
     # This specifically builds when anything relating to a build changes.
     # Everything else can be ignored.
@@ -24,6 +25,7 @@ on:
   pull_request:
     branches:
     - master
+    - feature/port-posix
 
     # This specifically builds when anything relating to a build changes.
     # Everything else can be ignored.
@@ -148,6 +150,67 @@ jobs:
         working-directory: build-${{ matrix.COMPILER }}-${{ matrix.BUILD_CONFIGURATION }}
         run: |
           ctest -C "${{ matrix.BUILD_CONFIGURATION }}" --verbose
+
+  # POSIX client port (see docs/PORT_POSIX_PLAN.md): the full client plus
+  # the ported tools (Option, Launcher) build and their test suites run on
+  # Linux and macOS, in both configurations. Headless smokes exercise the
+  # SDL entry points end-to-end on the dummy video driver (Null backend;
+  # the GPU integration tests skip cleanly without a display).
+  build_client_posix:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        BUILD_CONFIGURATION: [Debug, Release]
+
+    runs-on: ${{ matrix.os }}
+
+    name: "Client POSIX - ${{ matrix.BUILD_CONFIGURATION }} (${{ matrix.os }})"
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: 'false'
+
+      - uses: lukka/get-cmake@latest
+
+      - name: Configure CMake
+        env:
+          CC: clang
+          CXX: clang++
+        run: |
+          cmake -S . \
+            -B build-client-posix \
+            -G "Ninja" \
+            -DCMAKE_BUILD_TYPE=${{ matrix.BUILD_CONFIGURATION }} \
+            -DOPENKO_CLIENT_POSIX_EXPERIMENTAL=ON \
+            -DOPENKO_CLIENT_TOOLS_POSIX_EXPERIMENTAL=ON \
+            -DOPENKO_BUILD_SERVERS=FALSE \
+            -DOPENKO_FETCH_CLIENT_ASSETS=FALSE
+
+      - name: Build everything
+        run: |
+          cmake \
+            --build build-client-posix \
+            --parallel
+
+      - name: Run tests
+        working-directory: build-client-posix
+        run: |
+          ctest --output-on-failure
+
+      # Headless end-to-end checks of the SDL entry points: window creation,
+      # event pump, input sampling and clean shutdown on the dummy driver.
+      - name: Smoke-run the SDL client and tools
+        working-directory: build-client-posix/bin/${{ matrix.BUILD_CONFIGURATION }}
+        run: |
+          SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy ./KnightOnLine --smoke 30
+          SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy ./Option --smoke 1
+          SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy ./Launcher --smoke
+          # AssetExplorer headless index smoke over the repo tree (which has
+          # .bmp/.tga assets). The offscreen 3D render smoke (--smoke-render)
+          # needs a real GL context, so it's a local/Xvfb guard, not run here.
+          SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy ./AssetExplorer --smoke "$GITHUB_WORKSPACE/src"
 
   build_macos:
     runs-on: macos-latest

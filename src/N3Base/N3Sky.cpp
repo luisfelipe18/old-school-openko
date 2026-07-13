@@ -51,16 +51,16 @@ void CN3Sky::Render()
 		matWorld.RotationY(-atanf(vDir.z / vDir.x) - (__PI * 0.5f));
 	else
 		matWorld.RotationY(-atanf(vDir.z / vDir.x) + (__PI * 0.5f));
-	s_lpD3DDev->SetTransform(D3DTS_WORLD, matWorld.toD3D());
+	RHIDevice()->SetTransform(D3DTS_WORLD, matWorld.toD3D());
 
-	s_lpD3DDev->SetTexture(
+	RHIDevice()->SetTexture(
 		0, nullptr); // Do not set a texture as we want to create an illusion of distance fog.
-	s_lpD3DDev->SetFVF(
+	RHIDevice()->SetFVF(
 		FVF_XYZCOLOR); // D3DFVF_XYZ | D3DFVF_DIFFUSE - Spreads the texture around the x, y, z vertices.
 
 	// Draws the front and bottom billboard.
-	s_lpD3DDev->DrawPrimitiveUP(D3DPT_TRIANGLEFAN, 2, m_Bottom, sizeof(m_Bottom[0]));
-	s_lpD3DDev->DrawPrimitiveUP(D3DPT_TRIANGLEFAN, 2, m_vFronts, sizeof(m_vFronts[0]));
+	RHIDevice()->DrawPrimitiveUP(D3DPT_TRIANGLEFAN, 2, m_Bottom, sizeof(m_Bottom[0]));
+	RHIDevice()->DrawPrimitiveUP(D3DPT_TRIANGLEFAN, 2, m_vFronts, sizeof(m_vFronts[0]));
 }
 
 void CN3Sky::Init()

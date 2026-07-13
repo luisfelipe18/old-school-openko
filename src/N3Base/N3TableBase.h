@@ -13,6 +13,12 @@
 #include "My_3DStruct.h" // _ASSERT
 #include "N3TableBaseImpl.h"
 
+// glibc's <sys/mman.h> (pulled in via boost::interprocess) leaks a MAP_TYPE
+// object-like macro that would mangle the alias below.
+#ifdef MAP_TYPE
+#undef MAP_TYPE
+#endif
+
 template <typename Type>
 class CN3TableBase : public CN3TableBaseImpl
 {

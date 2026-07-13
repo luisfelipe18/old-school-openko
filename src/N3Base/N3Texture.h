@@ -4,6 +4,7 @@
 #pragma once
 
 #include "N3BaseFileAccess.h"
+#include "RHI/RHIDevice.h"
 #include <string>
 
 class CN3Texture : public CN3BaseFileAccess
@@ -20,7 +21,7 @@ public:
 
 protected:
 	__DXT_HEADER m_Header;
-	LPDIRECT3DTEXTURE9 m_lpTexture;
+	IRHITexture* m_lpTexture;
 
 public:
 	void UpdateRenderInfo();
@@ -56,20 +57,26 @@ public:
 	{
 		if (nullptr == m_lpTexture)
 			return 0;
-		else
-			return m_lpTexture->GetLevelCount();
+		return m_lpTexture->GetLevelCount();
 	}
 
 	bool Create(
 		int nWidth, int nHeight, D3DFORMAT Format, BOOL bGenerateMipMap); // 장치에 맞게 생성
-	LPDIRECT3DTEXTURE9 Get()
+	IRHITexture* Get()
 	{
 		return m_lpTexture;
 	}
-	operator LPDIRECT3DTEXTURE9()
+	operator IRHITexture*()
 	{
 		return m_lpTexture;
 	}
+
+#ifdef _WIN32
+	// Raw D3D texture for the Windows-only editor/tool paths that still bind
+	// through the D3D9 device (or D3DX) directly. Defined in N3Texture.cpp,
+	// where the RHITextureD3D9 wrapper is visible.
+	LPDIRECT3DTEXTURE9 GetRawD3D();
+#endif
 
 	void Release() override;
 	CN3Texture();

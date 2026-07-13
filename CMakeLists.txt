@@ -42,6 +42,8 @@ option(OPENKO_BUILD_SERVERS "Build the server projects (default on)" ON)
 option(OPENKO_BUILD_TESTS "Build the test projects (default on)" ON)
 option(OPENKO_COMPILE_WARNINGS_AS_ERROR "Enable treating warnings as errors (default on)" ON)
 option(OPENKO_FETCH_CLIENT_ASSETS "Enable fetching client assets (default on)" ON)
+option(OPENKO_CLIENT_POSIX_EXPERIMENTAL "Experimental: allow enabling the client build on POSIX platforms (macOS/Linux) while the port is in progress - see docs/PORT_POSIX_PLAN.md (default off)" OFF)
+option(OPENKO_CLIENT_TOOLS_POSIX_EXPERIMENTAL "Experimental: allow enabling the client tool ports (Option, KscViewer, Launcher - reimplemented on Dear ImGui instead of MFC) on POSIX platforms while they're being ported - see docs/PORT_POSIX_PLAN.md (default off)" OFF)
 
 # Define the bin directory; defaults to repo/bin
 set(OPENKO_BIN_DIR "${CMAKE_BINARY_DIR}/bin" CACHE PATH "Directory for final binaries")
@@ -57,8 +59,19 @@ if(WIN32)
   endif()
 else()
   # Client & tool projects are currently only supported on Windows.
-  set(OPENKO_BUILD_CLIENT OFF)
-  set(OPENKO_BUILD_CLIENT_TOOLS OFF)
+  # The client is being ported to POSIX platforms (see docs/PORT_POSIX_PLAN.md);
+  # configuring it there can be opted into with -DOPENKO_CLIENT_POSIX_EXPERIMENTAL=ON.
+  # NOTE: only a subset of the client targets currently builds on these platforms.
+  if(OPENKO_CLIENT_POSIX_EXPERIMENTAL)
+    message(STATUS "OpenKO: OPENKO_CLIENT_POSIX_EXPERIMENTAL is ON - keeping OPENKO_BUILD_CLIENT=${OPENKO_BUILD_CLIENT} on this platform (work-in-progress port)")
+  else()
+    set(OPENKO_BUILD_CLIENT OFF)
+  endif()
+  if(OPENKO_CLIENT_TOOLS_POSIX_EXPERIMENTAL)
+    message(STATUS "OpenKO: OPENKO_CLIENT_TOOLS_POSIX_EXPERIMENTAL is ON - keeping OPENKO_BUILD_CLIENT_TOOLS=${OPENKO_BUILD_CLIENT_TOOLS} on this platform (work-in-progress port)")
+  else()
+    set(OPENKO_BUILD_CLIENT_TOOLS OFF)
+  endif()
   set(OPENKO_BUILD_TOOLS OFF)
 endif()
 
@@ -69,6 +82,8 @@ message(STATUS "OpenKO feature: OPENKO_BUILD_SERVERS - ${OPENKO_BUILD_SERVERS}")
 message(STATUS "OpenKO feature: OPENKO_BUILD_TESTS - ${OPENKO_BUILD_TESTS}")
 message(STATUS "OpenKO feature: OPENKO_COMPILE_WARNINGS_AS_ERROR - ${OPENKO_COMPILE_WARNINGS_AS_ERROR}")
 message(STATUS "OpenKO feature: OPENKO_FETCH_CLIENT_ASSETS - ${OPENKO_FETCH_CLIENT_ASSETS}")
+message(STATUS "OpenKO feature: OPENKO_CLIENT_POSIX_EXPERIMENTAL - ${OPENKO_CLIENT_POSIX_EXPERIMENTAL}")
+message(STATUS "OpenKO feature: OPENKO_CLIENT_TOOLS_POSIX_EXPERIMENTAL - ${OPENKO_CLIENT_TOOLS_POSIX_EXPERIMENTAL}")
 message(STATUS "OpenKO feature: OPENKO_BIN_DIR - ${OPENKO_BIN_DIR}")
 
 if(WIN32)
@@ -101,6 +116,30 @@ endif()
 add_compile_definitions("$<$<CONFIG:Debug>:DEBUG;_DEBUG>")
 
 set(OPENKO_CLIENT_DIR "${CMAKE_BINARY_DIR}/ClientData" CACHE STRING "Client path")
+
+# Install/packaging layout (docs/PORT_POSIX_PLAN.md, Hito E). Every client
+# component (WarFare/KnightOnLine, Launcher, Option, KscViewer) ships in ONE
+# folder as siblings - the classic Windows game-folder layout, and what the
+# Launcher/Option sibling-executable discovery (Platform/ProcessLaunch.h) needs.
+#   Linux   -> bin/            (tarball rooted at prefix)
+#   Windows -> .               (flat game folder in the zip)
+#   macOS   -> Applications/   (KnightOnLine.app + the plain tool binaries beside
+#                               it, so FindSiblingExecutable resolves the bundle)
+# The server components share their own single folder (OPENKO_SERVER_INSTALL_DIR).
+if(APPLE)
+  set(OPENKO_CLIENT_INSTALL_DIR "Applications")
+elseif(WIN32)
+  set(OPENKO_CLIENT_INSTALL_DIR ".")
+else()
+  set(OPENKO_CLIENT_INSTALL_DIR "bin")
+endif()
+set(OPENKO_SERVER_INSTALL_DIR "server")
+
+# CPack components: everything installed from here on lands in the "Client"
+# component unless an install() overrides it (the server block sets "Server").
+# This lets `cpack` emit a separate client and server archive.
+set(CMAKE_INSTALL_DEFAULT_COMPONENT_NAME "Client")
+
 set(OPENKO_SERVER_MAP_SRC_DIR "${CMAKE_SOURCE_DIR}/assets/Server/MAP")
 set(OPENKO_SERVER_MAP_DST_DIR "${OPENKO_BIN_DIR}/MAP")
 set(OPENKO_SERVER_QUESTS_SRC_DIR "${CMAKE_SOURCE_DIR}/assets/Server/QUESTS")
@@ -128,17 +167,29 @@ set(CMAKE_FOLDER) # reset so shared is placed in the root
 add_subdirectory(src/shared)
 add_subdirectory(src/FileIO)
 add_subdirectory(src/MathUtils)
+add_subdirectory(src/Platform)
 
 if(OPENKO_BUILD_CLIENT OR OPENKO_BUILD_TOOLS)
   # Dependencies
-  set(CMAKE_FOLDER "N3Base/_deps")
-  require_config_package(dx9sdk)
+  if(WIN32)
+    # The DirectX 9 SDK only applies to Windows; the POSIX client port
+    # renders through the RHI backends instead (see docs/PORT_POSIX_PLAN.md).
+    set(CMAKE_FOLDER "N3Base/_deps")
+    require_config_package(dx9sdk)
+  endif()
 
   set(CMAKE_FOLDER "N3Base/_deps/mpg123")
   require_package(Mpg123)
 
   set(CMAKE_FOLDER "N3Base/_deps/openal-soft")
   require_package(OpenALSoft)
+
+  if(NOT WIN32)
+    # POSIX port (T7.1): FreeType rasterizes the DFont glyph atlas; Windows
+    # keeps the GDI text path.
+    set(CMAKE_FOLDER "N3Base/_deps/freetype")
+    require_package(FreetypeFont)
+  endif()
 
   set(CMAKE_FOLDER "N3Base")
   add_subdirectory(src/N3Base)
@@ -158,6 +209,13 @@ endif()
 if(OPENKO_BUILD_CLIENT)
   message(STATUS "OpenKO: Preparing to configure client...")
 
+  if(NOT WIN32)
+    # POSIX port (experimental): SDL3 provides the windowing/input/GPU layer.
+    # Prefers a system/package-manager SDL3; falls back to building from source.
+    set(CMAKE_FOLDER "Client/_deps")
+    require_package(SDL3)
+  endif()
+
   set(CMAKE_FOLDER "Client")
   add_subdirectory(src/Client/WarFare)
 endif()
@@ -165,14 +223,30 @@ endif()
 if(OPENKO_BUILD_CLIENT_TOOLS)
   message(STATUS "OpenKO: Preparing to configure client tools...")
 
-  set(CMAKE_FOLDER "Client tools/_deps")
-  require_package(Zlib)
-  add_subdirectory(src/Client/ZipArchive)
+  if(NOT WIN32)
+    # POSIX ports (experimental, docs/PORT_POSIX_PLAN.md): the MFC dialogs
+    # are reimplemented on Dear ImGui, reusing the SDL3 windowing stack the
+    # WarFare client already brought in.
+    set(CMAKE_FOLDER "Client tools/_deps")
+    require_package(SDL3)
+    require_package(ImGui)
+  endif()
+
+  if(WIN32)
+    # ZipArchive is MFC-only. Launcher's Windows build needs it for patch
+    # extraction.
+    set(CMAKE_FOLDER "Client tools/_deps")
+    require_package(Zlib)
+    add_subdirectory(src/Client/ZipArchive)
+  endif()
 
   set(CMAKE_FOLDER "Client tools")
-  add_subdirectory(src/Client/KscViewer)
-  add_subdirectory(src/Client/Launcher)
   add_subdirectory(src/Client/Option)
+  add_subdirectory(src/Client/Launcher)
+  add_subdirectory(src/Client/KscViewer)
+  if(NOT WIN32)
+    add_subdirectory(src/Client/AssetExplorer)
+  endif()
 endif()
 
 if(OPENKO_BUILD_TOOLS)
@@ -187,6 +261,20 @@ if(OPENKO_BUILD_TOOLS)
   add_subdirectory(src/Tools/SkyViewer)
   add_subdirectory(src/Tools/TblEditor)
   add_subdirectory(src/Tools/UIE)
+endif()
+
+if(OPENKO_BUILD_SERVERS AND NOT WIN32)
+  # The servers need a system ODBC library (unixODBC on Linux, unixodbc or
+  # iODBC from Homebrew on macOS). Rather than letting the "all" build fail
+  # at link time on client-only development machines, detect it up front
+  # and skip the server projects with a clear notice.
+  find_library(OPENKO_ODBC_LIBRARY NAMES odbc iodbc)
+  if(NOT OPENKO_ODBC_LIBRARY)
+    message(STATUS "OpenKO: no ODBC library found (unixODBC/iODBC) - skipping the server "
+                   "projects. Install it (apt: unixodbc-dev / brew: unixodbc) and "
+                   "reconfigure to build them.")
+    set(OPENKO_BUILD_SERVERS OFF)
+  endif()
 endif()
 
 if(OPENKO_BUILD_SERVERS)
@@ -219,6 +307,21 @@ if(OPENKO_BUILD_SERVERS)
   add_subdirectory(src/Server/Ebenezer)
   add_subdirectory(src/Server/ItemManager)
   add_subdirectory(src/Server/VersionManager)
+
+  # Packaging (docs/PORT_POSIX_PLAN.md, Hito E): the five server daemons run
+  # together and share the MAP/QUESTS data, so ship them in one folder (the
+  # "Server" package component). They link only static/system libraries
+  # (unixODBC is a runtime dependency the admin installs), so no vendored .so
+  # needs bundling. Game/config data beyond MAP+QUESTS (the DB, *.ini) is the
+  # admin's to provide.
+  install(TARGETS Ebenezer AIServer Aujard ItemManager VersionManager
+    RUNTIME DESTINATION "${OPENKO_SERVER_INSTALL_DIR}" COMPONENT Server)
+  install(DIRECTORY "${OPENKO_SERVER_MAP_SRC_DIR}/"
+    DESTINATION "${OPENKO_SERVER_INSTALL_DIR}/MAP" COMPONENT Server)
+  install(DIRECTORY "${OPENKO_SERVER_QUESTS_SRC_DIR}/"
+    DESTINATION "${OPENKO_SERVER_INSTALL_DIR}/QUESTS" COMPONENT Server)
+  install(FILES "${CMAKE_SOURCE_DIR}/src/Server/PACKAGING_README.md"
+    DESTINATION "${OPENKO_SERVER_INSTALL_DIR}" COMPONENT Server OPTIONAL)
 endif()
 
 if(OPENKO_BUILD_TESTS)
@@ -230,8 +333,75 @@ if(OPENKO_BUILD_TESTS)
   set(CMAKE_FOLDER "Tests")
   add_subdirectory(tests/FileIO)
   add_subdirectory(tests/MathUtils)
-  
+  add_subdirectory(tests/Platform)
+
+  if(OPENKO_BUILD_CLIENT)
+    add_subdirectory(tests/N3Base)
+    add_subdirectory(tests/WarFare)
+  endif()
+
+  if(OPENKO_BUILD_CLIENT_TOOLS)
+    add_subdirectory(tests/Option)
+    add_subdirectory(tests/Launcher)
+    add_subdirectory(tests/KscViewer)
+    if(NOT WIN32)
+      add_subdirectory(tests/AssetExplorer)
+    endif()
+  endif()
+
   if(OPENKO_BUILD_SERVERS)
     add_subdirectory(tests/Server/Ebenezer)
-  endif() 
+  endif()
+endif()
+
+# ---------------------------------------------------------------------------
+# Distributable packaging (docs/PORT_POSIX_PLAN.md, Hito E).
+#
+# Produces a self-contained client artifact via `cpack`:
+#   Linux -> OpenKO-Client-<ver>-Linux-<arch>.tar.gz  (binary + vendored .so +
+#            cursors + .desktop, run bin/KnightOnLine)
+#   macOS -> OpenKO-Client-<ver>-Darwin-<arch>.dmg    (KnightOnLine.app, drag to
+#            /Applications; sign + notarize separately - see PACKAGING_README)
+#
+# Game DATA (Data/, UI/, Server.Ini) is intentionally NOT packaged: it is the
+# proprietary Knight OnLine content the user supplies. `include(CPack)` must
+# come after every install() rule, hence its place at the very end of the file.
+# ---------------------------------------------------------------------------
+if(OPENKO_BUILD_CLIENT OR OPENKO_BUILD_SERVERS)
+  set(CPACK_PACKAGE_NAME               "OpenKO")
+  set(CPACK_PACKAGE_VENDOR             "OpenKO contributors")
+  set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "OpenKO (Knight OnLine) client + servers for macOS/Linux")
+  set(CPACK_PACKAGE_VERSION_MAJOR      "0")
+  set(CPACK_PACKAGE_VERSION_MINOR      "1")
+  set(CPACK_PACKAGE_VERSION_PATCH      "0")
+  set(CPACK_VERBATIM_VARIABLES         ON)
+  set(CPACK_STRIP_FILES                ON)
+
+  # One archive per component: OpenKO-Client-... and OpenKO-Server-...
+  # Restrict to our components so third-party install rules (googletest's
+  # gtest/gmock, etc.) don't each spawn their own stray archive.
+  set(CPACK_ARCHIVE_COMPONENT_INSTALL  ON)
+  set(CPACK_COMPONENTS_ALL             Client Server)
+  # Wrap each archive in a top-level folder so extraction doesn't splatter
+  # bin/ or server/ into the current directory.
+  set(CPACK_COMPONENT_INCLUDE_TOPLEVEL_DIRECTORY ON)
+  set(_ver "${CPACK_PACKAGE_VERSION_MAJOR}.${CPACK_PACKAGE_VERSION_MINOR}.${CPACK_PACKAGE_VERSION_PATCH}")
+  set(CPACK_ARCHIVE_CLIENT_FILE_NAME "OpenKO-Client-${_ver}-${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}")
+  set(CPACK_ARCHIVE_SERVER_FILE_NAME "OpenKO-Server-${_ver}-${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}")
+  set(CPACK_DMG_CLIENT_FILE_NAME     "OpenKO-Client-${_ver}-${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}")
+
+  if(APPLE)
+    # DMG for the client (self-contained .app via fixup_bundle); the server
+    # daemons ride a plain tar.gz even on macOS - run `cpack -G TGZ` for them.
+    set(CPACK_GENERATOR "DragNDrop")
+  elseif(WIN32)
+    # A flat .zip per component (exe + DLLs + resources).
+    set(CPACK_GENERATOR "ZIP")
+  else()
+    # Relocatable tar.gz per component, rooted at the install prefix.
+    set(CPACK_GENERATOR "TGZ")
+    set(CPACK_PACKAGING_INSTALL_PREFIX "/")
+  endif()
+
+  include(CPack)
 endif()
