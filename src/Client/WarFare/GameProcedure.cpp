@@ -37,6 +37,7 @@
 #include <N3Base/N3UIEdit.h>
 #include <N3Base/N3SndObj.h>
 #include <N3Base/N3FXBundle.h>
+#include <N3Base/DFont.h>
 
 #ifdef _WIN32
 #include <N3Base/BitMapFile.h> // Win32 GDI DIB path, screen capture only
@@ -79,7 +80,11 @@ CUIMessageBoxManager* CGameProcedure::s_pMsgBoxMgr               = nullptr; // M
 CGameProcedure* CGameProcedure::s_pProcPrev                      = nullptr;
 CGameProcedure* CGameProcedure::s_pProcActive                    = nullptr;
 
-CGameProcLogIn* CGameProcedure::s_pProcLogIn                     = nullptr;
+CGameProcedure* CGameProcedure::s_pProcLogIn                     = nullptr;
+CGameProcLogIn_1098* CGameProcedure::s_pProcLogIn_1098           = nullptr;
+CGameProcLogIn_1298* CGameProcedure::s_pProcLogIn_1298           = nullptr;
+bool CGameProcedure::s_bUseClassicLoginUI                        = false;
+CDFont* CGameProcedure::s_pLoginVariantToggleFont                = nullptr;
 CGameProcNationSelect* CGameProcedure::s_pProcNationSelect       = nullptr;
 CGameProcCharacterCreate* CGameProcedure::s_pProcCharacterCreate = nullptr;
 CGameProcCharacterSelect* CGameProcedure::s_pProcCharacterSelect = nullptr;
@@ -233,7 +238,14 @@ void CGameProcedure::StaticMemberInit(HINSTANCE hInstance, HWND hWndMain)
 
 	//////////////////////////////////////////////////////////////////////////////////////////
 	// 각 프로시저들 생성
-	s_pProcLogIn           = new CGameProcLogIn();           // 로그인 프로시져
+	// Both login scene variants are instantiated so the bottom-left toggle
+	// (ToggleLoginVariant) can switch between them at runtime; the build's
+	// LOGIN_SCENE_VERSION only picks which one is active on startup.
+	s_pProcLogIn_1098    = new CGameProcLogIn_1098();
+	s_pProcLogIn_1298    = new CGameProcLogIn_1298();
+	s_bUseClassicLoginUI = (LOGIN_SCENE_VERSION == 1098);
+	s_pProcLogIn         = s_bUseClassicLoginUI ? static_cast<CGameProcedure*>(s_pProcLogIn_1098)
+												: static_cast<CGameProcedure*>(s_pProcLogIn_1298); // 로그인 프로시져
 	s_pProcNationSelect    = new CGameProcNationSelect();    // 나라 선택
 	s_pProcCharacterSelect = new CGameProcCharacterSelect(); // 캐릭터 선택
 	s_pProcCharacterCreate = new CGameProcCharacterCreate(); // 캐릭터 만들기
@@ -314,7 +326,14 @@ void CGameProcedure::StaticMemberInit(HINSTANCE /*hInstance*/, HWND /*hWndMain*/
 	// login hands off to nation/character select via ProcActiveSet(), which
 	// silently no-ops on a null procedure and would leave the player stuck on
 	// the login scene after picking a server.
-	s_pProcLogIn           = new CGameProcLogIn();           // 로그인 프로시져
+	// Both login scene variants are instantiated so the bottom-left toggle
+	// (ToggleLoginVariant) can switch between them at runtime; the build's
+	// LOGIN_SCENE_VERSION only picks which one is active on startup.
+	s_pProcLogIn_1098    = new CGameProcLogIn_1098();
+	s_pProcLogIn_1298    = new CGameProcLogIn_1298();
+	s_bUseClassicLoginUI = (LOGIN_SCENE_VERSION == 1098);
+	s_pProcLogIn         = s_bUseClassicLoginUI ? static_cast<CGameProcedure*>(s_pProcLogIn_1098)
+												: static_cast<CGameProcedure*>(s_pProcLogIn_1298); // 로그인 프로시져
 	s_pProcNationSelect    = new CGameProcNationSelect();    // 나라 선택
 	s_pProcCharacterSelect = new CGameProcCharacterSelect(); // 캐릭터 선택
 	s_pProcCharacterCreate = new CGameProcCharacterCreate(); // 캐릭터 만들기
@@ -406,8 +425,13 @@ void CGameProcedure::StaticMemberRelease()
 	}
 
 	// 각 프로시저들
-	delete s_pProcLogIn;
-	s_pProcLogIn = nullptr;           // 로그인 프로시져
+	delete s_pProcLogIn_1098;
+	s_pProcLogIn_1098 = nullptr;
+	delete s_pProcLogIn_1298;
+	s_pProcLogIn_1298 = nullptr;
+	delete s_pLoginVariantToggleFont;
+	s_pLoginVariantToggleFont = nullptr;
+	s_pProcLogIn              = nullptr; // 로그인 프로시져
 	delete s_pProcNationSelect;
 	s_pProcNationSelect = nullptr;    // 나라 선택
 	delete s_pProcCharacterSelect;
@@ -681,6 +705,69 @@ void CGameProcedure::ProcActiveSet(CGameProcedure* pProc)
 
 	s_pProcPrev   = s_pProcActive;          // 전의 것 포인터 기억..
 	s_pProcActive = pProc;
+}
+
+namespace
+{
+// Bottom-left toggle drawn directly on the two login scenes (no .ksc asset -
+// it only exists here). RenderLines/DFont are the same primitives the rest
+// of the engine uses for screen-space overlays (see CUICmdList's selection
+// border and CPlayerOther's clan nametag).
+RECT LoginVariantToggleRect()
+{
+	constexpr int W = 190, H = 22, MARGIN = 10;
+	const int y = static_cast<int>(CN3Base::s_CameraData.vp.Height) - H - MARGIN;
+	RECT rc { MARGIN, y, MARGIN + W, y + H };
+	return rc;
+}
+} // namespace
+
+void CGameProcedure::ToggleLoginVariant()
+{
+	// Only meaningful while actually on one of the two login scenes.
+	if (s_pProcActive != static_cast<CGameProcedure*>(s_pProcLogIn_1098)
+		&& s_pProcActive != static_cast<CGameProcedure*>(s_pProcLogIn_1298))
+		return;
+
+	s_bUseClassicLoginUI = !s_bUseClassicLoginUI;
+	s_pProcLogIn         = s_bUseClassicLoginUI ? static_cast<CGameProcedure*>(s_pProcLogIn_1098)
+												: static_cast<CGameProcedure*>(s_pProcLogIn_1298);
+	ProcActiveSet(s_pProcLogIn);
+}
+
+void CGameProcedure::TickLoginVariantToggle()
+{
+	if (s_pLocalInput == nullptr)
+		return;
+
+	const uint32_t dwMouseFlags = s_pLocalInput->MouseGetFlag();
+	if (!(dwMouseFlags & MOUSE_LBCLICK))
+		return;
+
+	const POINT ptCur = s_pLocalInput->MouseGetPos();
+	RECT rc           = LoginVariantToggleRect();
+	if (PtInRect(&rc, ptCur))
+		ToggleLoginVariant();
+}
+
+void CGameProcedure::RenderLoginVariantToggle()
+{
+	if (s_pLoginVariantToggleFont == nullptr)
+	{
+		std::string szFontID      = fmt::format_text_resource(IDS_FONT_ID);
+		s_pLoginVariantToggleFont = new CDFont(szFontID, 12);
+		s_pLoginVariantToggleFont->InitDeviceObjects(s_lpD3DDev);
+		s_pLoginVariantToggleFont->RestoreDeviceObjects();
+	}
+
+	const RECT rc          = LoginVariantToggleRect();
+	const D3DCOLOR crState = s_bUseClassicLoginUI ? D3DCOLOR_XRGB(120, 230, 140) : D3DCOLOR_XRGB(190, 190, 190);
+	RenderLines(rc, crState);
+
+	const std::string szLabel = s_bUseClassicLoginUI ? "Classic login: ON" : "Classic login: OFF";
+	s_pLoginVariantToggleFont->SetText(szLabel);
+	s_pLoginVariantToggleFont->DrawText(
+		static_cast<float>(rc.left) + 8.0f, static_cast<float>(rc.top) + 3.0f, crState, 0);
 }
 
 void CGameProcedure::ReConnect()

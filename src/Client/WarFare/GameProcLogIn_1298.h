@@ -3,8 +3,9 @@
 
 #pragma once
 
-#if !defined(LOGIN_SCENE_VERSION) || LOGIN_SCENE_VERSION == 1298
-
+// Always compiled in (regardless of the LOGIN_SCENE_VERSION default): the
+// login-scene toggle (CGameProcedure::ToggleLoginVariant) needs both login
+// variants available at runtime, not just the one picked at build time.
 #include "GameProcedure.h"
 
 class CUILogIn_1298;
@@ -19,7 +20,7 @@ public:
 	float m_fTimeUntilNextGameConnectionAttempt;
 
 public:
-	inline void ResetGameConnectionAttemptTimer()
+	void ResetGameConnectionAttemptTimer() override
 	{
 		m_fTimeUntilNextGameConnectionAttempt = 0.0f;
 	}
@@ -46,11 +47,5 @@ public:
 	CGameProcLogIn_1298();
 	~CGameProcLogIn_1298() override;
 };
-
-class CGameProcLogIn : public CGameProcLogIn_1298
-{
-};
-
-#endif
 
 #endif // CLIENT_WARFARE_GAMEPROCLOGIN_1298_H

@@ -1,6 +1,5 @@
 ﻿#include "StdAfx.h"
 
-#if !defined(LOGIN_SCENE_VERSION) || LOGIN_SCENE_VERSION == 1298
 #include "UILogin_1298.h"
 #include "GameProcLogIn_1298.h"
 #include "UIMessageBoxManager.h"
@@ -82,7 +81,7 @@ bool CUILogIn_1298::ReceiveMessage(CN3UIBase* pSender, uint32_t dwMsg)
 	{
 		if (pSender == m_pBtn_LogIn && m_pEdit_id != nullptr && m_pEdit_pw != nullptr)
 		{
-			CGameProcedure::s_pProcLogIn->MsgSend_AccountLogIn(LIC_KNIGHTONLINE);
+			CGameProcedure::s_pProcLogIn_1298->MsgSend_AccountLogIn(LIC_KNIGHTONLINE);
 			return true;
 		}
 		else if (pSender == m_pBtn_Connect)
@@ -90,7 +89,7 @@ bool CUILogIn_1298::ReceiveMessage(CN3UIBase* pSender, uint32_t dwMsg)
 #ifndef _WIN32
 			spdlog::info("server list: Connect button clicked");
 #endif
-			CGameProcedure::s_pProcLogIn->ConnectToGameServer(); // 고른 게임 서버에 접속
+			CGameProcedure::s_pProcLogIn_1298->ConnectToGameServer(); // 고른 게임 서버에 접속
 			return true;
 		}
 		else if (pSender == m_pBtn_Cancel)
@@ -106,10 +105,10 @@ bool CUILogIn_1298::ReceiveMessage(CN3UIBase* pSender, uint32_t dwMsg)
 		}
 		else if (pSender == m_pBtn_Join)
 		{
-			if (!CGameProcedure::s_pProcLogIn->m_szRegistrationSite.empty())
+			if (!CGameProcedure::s_pProcLogIn_1298->m_szRegistrationSite.empty())
 			{
 #ifdef _WIN32
-				ShellExecute(nullptr, "open", CGameProcedure::s_pProcLogIn->m_szRegistrationSite.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+				ShellExecute(nullptr, "open", CGameProcedure::s_pProcLogIn_1298->m_szRegistrationSite.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
 #endif
 				// POSIX: opening the registration site in a browser lands with a
 				// later phase (SDL_OpenURL).
@@ -137,7 +136,7 @@ bool CUILogIn_1298::ReceiveMessage(CN3UIBase* pSender, uint32_t dwMsg)
 				spdlog::info("server list: double-click on server row {}", i);
 #endif
 				SelectServer(i);
-				CGameProcedure::s_pProcLogIn->ConnectToGameServer();
+				CGameProcedure::s_pProcLogIn_1298->ConnectToGameServer();
 				return true;
 			}
 		}
@@ -166,7 +165,7 @@ bool CUILogIn_1298::ReceiveMessage(CN3UIBase* pSender, uint32_t dwMsg)
 		{
 			CN3UIBase* pMsgBox = CGameProcedure::s_pMsgBoxMgr->GetFocusMsgBox();
 			if (!(pMsgBox && pMsgBox->IsVisible()))
-				CGameProcedure::s_pProcLogIn->MsgSend_AccountLogIn(LIC_KNIGHTONLINE);
+				CGameProcedure::s_pProcLogIn_1298->MsgSend_AccountLogIn(LIC_KNIGHTONLINE);
 		}
 		else
 		{
@@ -598,7 +597,7 @@ bool CUILogIn_1298::OnKeyPress(int iKey)
 
 				// case DIK_NUMPADENTER:
 				// case DIK_RETURN:
-				//	CGameProcedure::s_pProcLogIn->MsgSend_AccountLogIn(LIC_KNIGHTONLINE);
+				//	CGameProcedure::s_pProcLogIn_1298->MsgSend_AccountLogIn(LIC_KNIGHTONLINE);
 				//	return true;
 
 			default:
@@ -671,4 +670,3 @@ void CUILogIn_1298::SelectServer(int iServerListIndex)
 			m_pList_Group[i]->SetColor(D3DCOLOR_XRGB(255, 255, 255)); // white
 	}
 }
-#endif

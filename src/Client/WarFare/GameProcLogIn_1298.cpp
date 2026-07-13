@@ -7,7 +7,6 @@
 #include <spdlog/spdlog.h>
 #endif
 
-#if !defined(LOGIN_SCENE_VERSION) || LOGIN_SCENE_VERSION == 1298
 #include "GameProcLogIn_1298.h"
 #include "GameEng.h"
 #include "UILogin_1298.h"
@@ -168,6 +167,8 @@ void CGameProcLogIn_1298::Tick()
 		if (m_fTimeUntilNextGameConnectionAttempt < 0.0f)
 			m_fTimeUntilNextGameConnectionAttempt = 0.0f;
 	}
+
+	TickLoginVariantToggle();
 }
 
 void CGameProcLogIn_1298::Render()
@@ -187,6 +188,7 @@ void CGameProcLogIn_1298::Render()
 	RHIDevice()->SetFVF(FVF_TRANSFORMED);
 	RHIDevice()->SetRenderState(D3DRS_ZWRITEENABLE, dwZWrite);
 	CGameProcedure::Render(); // Render UI and other basic elements.
+	RenderLoginVariantToggle();
 
 	RHIDevice()->EndScene();   // Starting scene rendering...
 
@@ -526,4 +528,3 @@ void CGameProcLogIn_1298::ConnectToGameServer() // 고른 게임 서버에 접�
 		MsgSend_VersionCheck();
 	}
 }
-#endif
