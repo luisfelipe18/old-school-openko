@@ -254,6 +254,44 @@ void CN3CPart::Render(int nLOD)
 		RHIDevice()->SetRenderState(D3DRS_FOGENABLE, TRUE); // 안개 사용하지 않는다..
 	if ((m_Mtl.nRenderFlags & RF_DOUBLESIDED) && D3DCULL_NONE != dwCull)
 		RHIDevice()->SetRenderState(D3DRS_CULLMODE, dwCull);
+
+	if (m_iGlowLevel >= 7)
+	{
+		float fIntensity = 0.0f;
+		bool  bPulse     = false;
+		switch (m_iGlowLevel)
+		{
+			case 7:  fIntensity = 0.25f; bPulse = true;  break;
+			case 8:  fIntensity = 0.45f; break;
+			case 9:  fIntensity = 0.65f; break;
+			default: fIntensity = 0.85f; break;
+		}
+		if (bPulse)
+		{
+			float t     = CN3Base::TimeGet();
+			fIntensity *= 0.5f + 0.5f * sinf(t * 4.0f);
+		}
+
+		_D3DMATERIAL9 mtlGlow = {};
+		mtlGlow.Diffuse  = { 0.0f, 0.0f, 0.0f, fIntensity };
+		mtlGlow.Emissive = { fIntensity, fIntensity, fIntensity * 0.9f, 1.0f };
+		RHIDevice()->SetMaterial(&mtlGlow);
+
+		RHIDevice()->SetTextureStageState(0, D3DTSS_COLOROP,   D3DTOP_SELECTARG1);
+		RHIDevice()->SetTextureStageState(0, D3DTSS_COLORARG1,  D3DTA_DIFFUSE);
+		RHIDevice()->SetTexture(0, nullptr);
+
+		RHIDevice()->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+		RHIDevice()->SetRenderState(D3DRS_SRCBLEND,  D3DBLEND_SRCALPHA);
+		RHIDevice()->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ONE);
+		RHIDevice()->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+
+		m_pSkinsRef->m_Skins[nLOD].Render(false);
+
+		RHIDevice()->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
+		RHIDevice()->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+		RHIDevice()->SetMaterial(&m_Mtl);
+	}
 }
 
 CN3Texture* CN3CPart::TexOverlapSet(const std::string& szFN)
@@ -435,6 +473,44 @@ void CN3CPlugBase::Render(const __Matrix44& mtxParent, const __Matrix44& mtxJoin
 	{
 		RHIDevice()->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
 		RHIDevice()->SetTexture(1, nullptr);
+	}
+
+	if (m_iGlowLevel >= 7)
+	{
+		float fIntensity = 0.0f;
+		bool  bPulse     = false;
+		switch (m_iGlowLevel)
+		{
+			case 7:  fIntensity = 0.25f; bPulse = true;  break;
+			case 8:  fIntensity = 0.45f; break;
+			case 9:  fIntensity = 0.65f; break;
+			default: fIntensity = 0.85f; break;
+		}
+		if (bPulse)
+		{
+			float t     = CN3Base::TimeGet();
+			fIntensity *= 0.5f + 0.5f * sinf(t * 4.0f);
+		}
+
+		_D3DMATERIAL9 mtlGlow = {};
+		mtlGlow.Diffuse  = { 0.0f, 0.0f, 0.0f, fIntensity };
+		mtlGlow.Emissive = { fIntensity, fIntensity, fIntensity * 0.9f, 1.0f };
+		RHIDevice()->SetMaterial(&mtlGlow);
+
+		RHIDevice()->SetTextureStageState(0, D3DTSS_COLOROP,   D3DTOP_SELECTARG1);
+		RHIDevice()->SetTextureStageState(0, D3DTSS_COLORARG1,  D3DTA_DIFFUSE);
+		RHIDevice()->SetTexture(0, nullptr);
+
+		RHIDevice()->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+		RHIDevice()->SetRenderState(D3DRS_SRCBLEND,  D3DBLEND_SRCALPHA);
+		RHIDevice()->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ONE);
+		RHIDevice()->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+
+		m_PMeshInst.Render();
+
+		RHIDevice()->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
+		RHIDevice()->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+		RHIDevice()->SetMaterial(&m_Mtl);
 	}
 }
 

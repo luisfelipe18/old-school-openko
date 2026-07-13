@@ -688,6 +688,17 @@ void CGameProcCharacterSelect::AddChrPart(
 		else
 			pPart->TexOverlapSet("");
 	}
+
+	if (pPart)
+	{
+		pPart->m_iGlowLevel = 0;
+		if (pItemExt && pItemExt->dwID >= 7
+			&& (pItemExt->byMagicOrRare == ITEM_ATTRIB_UNIQUE || pItemExt->byMagicOrRare == ITEM_ATTRIB_UPGRADE))
+		{
+			int iLevel          = static_cast<int>(pItemExt->dwID);
+			pPart->m_iGlowLevel = (iLevel > 10) ? 10 : iLevel;
+		}
+	}
 }
 
 void CGameProcCharacterSelect::MsgRecv_DeleteChr(Packet& pkt)
