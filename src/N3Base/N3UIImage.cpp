@@ -102,13 +102,17 @@ void CN3UIImage::SetVB()
 
 		float fRHW = 1.0f;
 		// -0.5f를 해주지 않으면 가끔 이미지가 한 돗트씩 밀리는 경우가 있다.(왜 그런지는 확실하게 모르겠음)
-		pVertices[0].Set((float) m_rcRegion.left - 0.5f, (float) m_rcRegion.top - 0.5f,
+		// The -0.5 is D3D9's half-pixel convention; GL/SDL_GPU map integer coords
+		// to pixel centres already, where it would shift the UI ~1px and leave a
+		// faint edge seam. Only apply it on backends that need it.
+		const float fOfs = (RHIDevice() != nullptr && RHIDevice()->NeedsHalfPixelOffset()) ? 0.5f : 0.0f;
+		pVertices[0].Set((float) m_rcRegion.left - fOfs, (float) m_rcRegion.top - fOfs,
 			UI_DEFAULT_Z, fRHW, m_Color, m_frcUVRect.left, m_frcUVRect.top);
-		pVertices[1].Set((float) m_rcRegion.right - 0.5f, (float) m_rcRegion.top - 0.5f,
+		pVertices[1].Set((float) m_rcRegion.right - fOfs, (float) m_rcRegion.top - fOfs,
 			UI_DEFAULT_Z, fRHW, m_Color, m_frcUVRect.right, m_frcUVRect.top);
-		pVertices[2].Set((float) m_rcRegion.right - 0.5f, (float) m_rcRegion.bottom - 0.5f,
+		pVertices[2].Set((float) m_rcRegion.right - fOfs, (float) m_rcRegion.bottom - fOfs,
 			UI_DEFAULT_Z, fRHW, m_Color, m_frcUVRect.right, m_frcUVRect.bottom);
-		pVertices[3].Set((float) m_rcRegion.left - 0.5f, (float) m_rcRegion.bottom - 0.5f,
+		pVertices[3].Set((float) m_rcRegion.left - fOfs, (float) m_rcRegion.bottom - fOfs,
 			UI_DEFAULT_Z, fRHW, m_Color, m_frcUVRect.left, m_frcUVRect.bottom);
 
 		m_pVB->Unlock();

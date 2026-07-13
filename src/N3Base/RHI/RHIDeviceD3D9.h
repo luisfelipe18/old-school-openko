@@ -161,6 +161,9 @@ public:
 	{
 	}
 
+	// D3D9 needs the classic -0.5 screen-space half-pixel offset (see IRHIDevice).
+	bool NeedsHalfPixelOffset() const override { return true; }
+
 	HRESULT Clear(DWORD flags, D3DCOLOR color, float z, DWORD stencil) override
 	{
 		return m_pDevice->Clear(0, nullptr, flags, color, z, stencil);

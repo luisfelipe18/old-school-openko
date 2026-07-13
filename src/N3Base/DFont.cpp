@@ -414,6 +414,11 @@ void CDFont::Make2DVertex(const int iFontHeight, const std::string& szText)
 	if (szText.empty())
 		return;
 
+	// D3D9's -0.5 half-pixel offset; GL/SDL_GPU map integer coords to pixel
+	// centres already (see IRHIDevice::NeedsHalfPixelOffset). Kept consistent
+	// with N3UIImage so text stays aligned to its backgrounds on every backend.
+	const float fHP = (RHIDevice() != nullptr && RHIDevice()->NeedsHalfPixelOffset()) ? 0.5f : 0.0f;
+
 	int iStrLen                    = static_cast<int>(szText.size());
 
 	// lock vertex buffer
@@ -457,10 +462,10 @@ void CDFont::Make2DVertex(const int iFontHeight, const std::string& szText)
 				if (dwNumTriangles + 2 >= MAX_NUM_VERTICES)
 					break;
 
-				FLOAT fLeft   = vtx_sx + 0 - 0.5f;
-				FLOAT fRight  = vtx_sx + w - 0.5f;
-				FLOAT fTop    = vtx_sy + 0 - 0.5f;
-				FLOAT fBottom = vtx_sy + h - 0.5f;
+				FLOAT fLeft   = vtx_sx + 0 - fHP;
+				FLOAT fRight  = vtx_sx + w - fHP;
+				FLOAT fTop    = vtx_sy + 0 - fHP;
+				FLOAT fBottom = vtx_sy + h - fHP;
 				pVertices->Set(fLeft, fBottom, Z_DEFAULT, RHW_DEFAULT, dwColor, tx1, ty2);
 				++pVertices;
 				pVertices->Set(fLeft, fTop, Z_DEFAULT, RHW_DEFAULT, dwColor, tx1, ty1);
@@ -519,10 +524,10 @@ void CDFont::Make2DVertex(const int iFontHeight, const std::string& szText)
 				if (dwNumTriangles + 2 >= MAX_NUM_VERTICES)
 					break;
 
-				FLOAT fLeft   = vtx_sx + 0 - 0.5f;
-				FLOAT fRight  = vtx_sx + w - 0.5f;
-				FLOAT fTop    = vtx_sy + 0 - 0.5f;
-				FLOAT fBottom = vtx_sy + h - 0.5f;
+				FLOAT fLeft   = vtx_sx + 0 - fHP;
+				FLOAT fRight  = vtx_sx + w - fHP;
+				FLOAT fTop    = vtx_sy + 0 - fHP;
+				FLOAT fBottom = vtx_sy + h - fHP;
 				pVertices->Set(fLeft, fBottom, Z_DEFAULT, RHW_DEFAULT, dwColor, tx1, ty2);
 				++pVertices;
 				pVertices->Set(fLeft, fTop, Z_DEFAULT, RHW_DEFAULT, dwColor, tx1, ty1);
@@ -573,10 +578,10 @@ void CDFont::Make2DVertex(const int iFontHeight, const std::string& szText)
 
 		__ASSERT(dwNumTriangles + 2 < MAX_NUM_VERTICES, "??"); // Vertex buffer가 모자란다.
 
-		FLOAT fLeft   = vtx_sx + 0 - 0.5f;
-		FLOAT fRight  = vtx_sx + w - 0.5f;
-		FLOAT fTop    = vtx_sy + 0 - 0.5f;
-		FLOAT fBottom = vtx_sy + h - 0.5f;
+		FLOAT fLeft   = vtx_sx + 0 - fHP;
+		FLOAT fRight  = vtx_sx + w - fHP;
+		FLOAT fTop    = vtx_sy + 0 - fHP;
+		FLOAT fBottom = vtx_sy + h - fHP;
 		pVertices->Set(fLeft, fBottom, Z_DEFAULT, RHW_DEFAULT, dwColor, tx1, ty2);
 		++pVertices;
 		pVertices->Set(fLeft, fTop, Z_DEFAULT, RHW_DEFAULT, dwColor, tx1, ty1);
@@ -1306,10 +1311,12 @@ HRESULT CDFont::SetText(const std::string& szText, uint32_t dwFlags)
 		const float w       = (tx2 - tx1) * m_dwTexWidth;
 		const float h       = (ty2 - ty1) * m_dwTexHeight;
 
-		const float fLeft   = vtx_sx + 0 - 0.5f;
-		const float fRight  = vtx_sx + w - 0.5f;
-		const float fTop    = vtx_sy + 0 - 0.5f;
-		const float fBottom = vtx_sy + h - 0.5f;
+		// D3D9-only half-pixel offset (see IRHIDevice::NeedsHalfPixelOffset).
+		const float fHP     = (RHIDevice() != nullptr && RHIDevice()->NeedsHalfPixelOffset()) ? 0.5f : 0.0f;
+		const float fLeft   = vtx_sx + 0 - fHP;
+		const float fRight  = vtx_sx + w - fHP;
+		const float fTop    = vtx_sy + 0 - fHP;
+		const float fBottom = vtx_sy + h - fHP;
 
 		__VertexTransformed v {};
 		v.Set(fLeft, fBottom, Z_DEFAULT, RHW_DEFAULT, dwColor, tx1, ty2);

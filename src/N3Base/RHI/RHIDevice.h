@@ -118,6 +118,15 @@ struct IRHIDevice
 	}
 	virtual void BeginRenderTarget(IRHIRenderTarget* /*pTarget*/) {}
 	virtual void EndRenderTarget() {}
+
+	// --- Pixel-coordinate convention ------------------------------------------
+	// D3D9 maps a pre-transformed (XYZRHW) vertex at integer coordinate N to the
+	// CORNER between pixels N-1 and N, so the engine subtracts 0.5 from screen-
+	// space UI/text vertices to land POINT-sampled texels on pixel centres (see
+	// N3UIImage / DFont). GL, SDL_GPU and the Null backend already map N to the
+	// pixel centre, so that -0.5 shifts everything ~1px and misaligns quad edges
+	// (a faint seam plus a slightly-offset HUD). Only the D3D9 backend needs it.
+	virtual bool NeedsHalfPixelOffset() const { return false; }
 };
 
 #ifndef D3D_OK
