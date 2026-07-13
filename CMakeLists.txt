@@ -312,5 +312,43 @@ if(OPENKO_BUILD_TESTS)
 
   if(OPENKO_BUILD_SERVERS)
     add_subdirectory(tests/Server/Ebenezer)
-  endif() 
+  endif()
+endif()
+
+# ---------------------------------------------------------------------------
+# Distributable packaging (docs/PORT_POSIX_PLAN.md, Hito E).
+#
+# Produces a self-contained client artifact via `cpack`:
+#   Linux -> OpenKO-Client-<ver>-Linux-<arch>.tar.gz  (binary + vendored .so +
+#            cursors + .desktop, run bin/KnightOnLine)
+#   macOS -> OpenKO-Client-<ver>-Darwin-<arch>.dmg    (KnightOnLine.app, drag to
+#            /Applications; sign + notarize separately - see PACKAGING_README)
+#
+# Game DATA (Data/, UI/, Server.Ini) is intentionally NOT packaged: it is the
+# proprietary Knight OnLine content the user supplies. `include(CPack)` must
+# come after every install() rule, hence its place at the very end of the file.
+# ---------------------------------------------------------------------------
+if(NOT WIN32 AND OPENKO_BUILD_CLIENT)
+  set(CPACK_PACKAGE_NAME               "OpenKO-Client")
+  set(CPACK_PACKAGE_VENDOR             "OpenKO contributors")
+  set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "OpenKO WarFare client (Knight OnLine) for macOS/Linux")
+  set(CPACK_PACKAGE_VERSION_MAJOR      "0")
+  set(CPACK_PACKAGE_VERSION_MINOR      "1")
+  set(CPACK_PACKAGE_VERSION_PATCH      "0")
+  set(CPACK_PACKAGE_FILE_NAME
+    "OpenKO-Client-${CPACK_PACKAGE_VERSION_MAJOR}.${CPACK_PACKAGE_VERSION_MINOR}.${CPACK_PACKAGE_VERSION_PATCH}-${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}")
+  set(CPACK_VERBATIM_VARIABLES         ON)
+  set(CPACK_STRIP_FILES                ON)
+
+  if(APPLE)
+    # A DMG holding KnightOnLine.app; fixup_bundle (WarFare/CMakeLists.txt) has
+    # already made the .app self-contained at install time.
+    set(CPACK_GENERATOR "DragNDrop")
+  else()
+    # A relocatable tar.gz rooted at the install prefix (bin/, share/).
+    set(CPACK_GENERATOR "TGZ")
+    set(CPACK_PACKAGING_INSTALL_PREFIX "/")
+  endif()
+
+  include(CPack)
 endif()

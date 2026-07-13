@@ -641,5 +641,40 @@ if(NOT WIN32)
     install(FILES ${WARFARE_CLIENT_RESOURCES} DESTINATION bin)
     install(FILES "${CMAKE_CURRENT_BINARY_DIR}/openko-client.desktop"
       DESTINATION share/applications OPTIONAL)
+
+    # Distributable packaging (docs/PORT_POSIX_PLAN.md, Hito E): a couple of the
+    # linked libraries are vendored (FetchContent) and are NOT present on a
+    # target machine - openal-soft, and libjpeg v9 (a different soname from the
+    # system's turbo libjpeg.so.8). Ship them next to the binary; the $ORIGIN
+    # install rpath set above finds them without LD_LIBRARY_PATH. System libs
+    # (freetype, libpng, ...) are expected to be present and are documented in
+    # the packaging README.
+    # "libjpeg" is an INTERFACE wrapper (cmake/FindJpeg.cmake); the real shared
+    # target on POSIX is "jpeg". Install both the versioned real file
+    # (TARGET_FILE, e.g. libopenal.so.1.25.0) and the soname symlink the binary
+    # actually links against (TARGET_SONAME_FILE, e.g. libopenal.so.1) so the
+    # symlink resolves inside the package. (For libjpeg the two are the same
+    # file, installed once.)
+    install(FILES
+      "$<TARGET_FILE:OpenAL>"
+      "$<TARGET_SONAME_FILE:OpenAL>"
+      "$<TARGET_FILE:jpeg>"
+      "$<TARGET_SONAME_FILE:jpeg>"
+      DESTINATION bin)
+
+    # A short "how to run / where to put your game data" note in the package.
+    install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/PACKAGING_README.md"
+      DESTINATION bin OPTIONAL)
+  else()
+    # macOS: pull every non-system dylib the binary links (openal, libjpeg, ...)
+    # into the .app's Contents/Frameworks and rewrite the load commands so the
+    # bundle is self-contained and relocatable. BundleUtilities::fixup_bundle is
+    # the canonical tool for this. Runs at install time, after the bundle target
+    # is staged.
+    install(CODE [[
+      include(BundleUtilities)
+      set(BU_CHMOD_BUNDLE_ITEMS TRUE)
+      fixup_bundle("${CMAKE_INSTALL_PREFIX}/Applications/KnightOnLine.app" "" "")
+    ]])
   endif()
 endif()
