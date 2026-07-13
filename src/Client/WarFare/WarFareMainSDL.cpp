@@ -388,10 +388,11 @@ int main(int argc, char* argv[])
 
 	// 메인 윈도우를 만들고..
 	// The game engine works in logical pixel coordinates throughout (UI layout,
-	// XYZRHW vertices, viewport). HIGH_PIXEL_DENSITY would give us a 2x
-	// framebuffer on Retina displays, mismatching all those coordinates.
-	// Omitting it keeps framebuffer == logical size, matching D3D9 behaviour.
-	SDL_WindowFlags windowFlags = 0;
+	// XYZRHW vertices, viewport). HIGH_PIXEL_DENSITY gives us the display's
+	// native framebuffer (2x on Retina); the RHI backends scale the logical
+	// coordinates by CN3Base::s_fPixelDensity so the 3D scene and text render
+	// at full physical resolution while the game logic stays logical.
+	SDL_WindowFlags windowFlags = SDL_WINDOW_HIGH_PIXEL_DENSITY;
 	if (!CN3Base::s_Options.bWindowMode)
 		windowFlags |= SDL_WINDOW_FULLSCREEN;
 
@@ -460,9 +461,11 @@ int main(int argc, char* argv[])
 	// camera projection, mouse hit-testing - keys off s_Options, so adopt
 	// the real size before any of that starts; a silent mismatch here is
 	// exactly the "game drawn wrong for my screen resolution" failure mode.
+	// s_Options stays in LOGICAL units (window points); the physical
+	// framebuffer may be larger on HiDPI displays (see s_fPixelDensity).
 	{
 		int actualW = 0, actualH = 0;
-		SDL_GetWindowSizeInPixels(g_pWindow, &actualW, &actualH);
+		SDL_GetWindowSize(g_pWindow, &actualW, &actualH);
 		if (actualW > 0 && actualH > 0
 			&& (actualW != CN3Base::s_Options.iViewWidth
 				|| actualH != CN3Base::s_Options.iViewHeight))
@@ -472,6 +475,13 @@ int main(int argc, char* argv[])
 			CN3Base::s_Options.iViewWidth  = actualW;
 			CN3Base::s_Options.iViewHeight = actualH;
 		}
+
+		int pixelW = 0, pixelH = 0;
+		SDL_GetWindowSizeInPixels(g_pWindow, &pixelW, &pixelH);
+		if (actualW > 0 && pixelW > 0)
+			CN3Base::s_fPixelDensity = static_cast<float>(pixelW) / static_cast<float>(actualW);
+		spdlog::info("HiDPI: logical {}x{}, framebuffer {}x{}, pixel density {:.2f}", actualW,
+			actualH, pixelW, pixelH, CN3Base::s_fPixelDensity);
 	}
 
 	SetupWindowCursor();
@@ -619,9 +629,10 @@ int main(int argc, char* argv[])
 			pRHIDevice->Clear(D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, 0xFF102040, 1.0f, 0);
 			if (bTestScene)
 			{
-				int pixelW = 0, pixelH = 0;
-				SDL_GetWindowSizeInPixels(g_pWindow, &pixelW, &pixelH);
-				TestSceneTick(pRHIDevice.get(), static_cast<float>(frame) * 0.02f, pixelW, pixelH);
+				// Logical size: XYZRHW coordinates are logical units under HiDPI.
+				int logicalW = 0, logicalH = 0;
+				SDL_GetWindowSize(g_pWindow, &logicalW, &logicalH);
+				TestSceneTick(pRHIDevice.get(), static_cast<float>(frame) * 0.02f, logicalW, logicalH);
 			}
 			pRHIDevice->EndScene();
 			pRHIDevice->Present();
@@ -663,9 +674,9 @@ int main(int argc, char* argv[])
 		pGL->Clear(D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, 0xFF102040, 1.0f, 0);
 		if (bTestScene)
 		{
-			int pixelW = 0, pixelH = 0;
-			SDL_GetWindowSizeInPixels(g_pWindow, &pixelW, &pixelH);
-			TestSceneTick(pRHIDevice.get(), static_cast<float>(frame) * 0.02f, pixelW, pixelH);
+			int logicalW = 0, logicalH = 0;
+			SDL_GetWindowSize(g_pWindow, &logicalW, &logicalH);
+			TestSceneTick(pRHIDevice.get(), static_cast<float>(frame) * 0.02f, logicalW, logicalH);
 		}
 		pGL->EndScene();
 
@@ -682,9 +693,9 @@ int main(int argc, char* argv[])
 		pGPU->Clear(D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, 0xFF102040, 1.0f, 0);
 		if (bTestScene)
 		{
-			int pixelW = 0, pixelH = 0;
-			SDL_GetWindowSizeInPixels(g_pWindow, &pixelW, &pixelH);
-			TestSceneTick(pRHIDevice.get(), static_cast<float>(frame) * 0.02f, pixelW, pixelH);
+			int logicalW = 0, logicalH = 0;
+			SDL_GetWindowSize(g_pWindow, &logicalW, &logicalH);
+			TestSceneTick(pRHIDevice.get(), static_cast<float>(frame) * 0.02f, logicalW, logicalH);
 		}
 		pGPU->EndScene();
 		pGPU->Present(); // flush the recorded frame into the offscreen target

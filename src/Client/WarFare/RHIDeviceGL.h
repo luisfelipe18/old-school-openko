@@ -183,6 +183,17 @@ private:
 	int m_iWinPixelW      = 0;
 	int m_iWinPixelH      = 0;
 
+	// HiDPI: framebuffer pixels per logical unit (SDL_WINDOW_HIGH_PIXEL_DENSITY).
+	// Engine coordinates (viewport, scissor, XYZRHW) are logical; drawing to
+	// the window scales them by this. Render-to-texture is untouched (density
+	// 1): target coordinates are already texture pixels.
+	float m_fPixelDensity = 1.0f;
+
+	float TargetDensity() const
+	{
+		return m_bRenderTargetBound ? 1.0f : m_fPixelDensity;
+	}
+
 	gl::Uint m_uVAO      = 0;
 	gl::Uint m_uProgram  = 0;
 	gl::Uint m_uStreamVB = 0; // Draw*UP staging

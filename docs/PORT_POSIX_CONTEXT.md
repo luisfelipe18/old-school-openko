@@ -121,6 +121,14 @@ Selección de fuentes por plataforma: `src/N3Base/CMakeLists.txt` →
   hilo — conecta un cliente dummy para desbloquearlo (ver `APISocket_test`).
 - El clang de CI (ubuntu-latest) y AppleClang difieren; si CI de macOS falla
   y Linux no, suele ser `-Wunused`/orden de includes.
+- HiDPI/Retina: el motor entero trabaja en unidades LÓGICAS (s_Options, UI,
+  XYZRHW, viewport, scissor, mouse); la ventana se crea con
+  `SDL_WINDOW_HIGH_PIXEL_DENSITY` y los backends RHI escalan al framebuffer
+  físico con `CN3Base::s_fPixelDensity` (GL: `TargetDensity()`; SDL_GPU:
+  `m_fPixelDensity` en el replay). Render-to-texture NO se escala (density 1).
+  DFont rasteriza el atlas a densidad física y encoge los quads
+  (`m_fTextScale`). Si agregas un camino nuevo de coordenadas de pantalla,
+  decide en qué unidad está y escala en el MISMO lugar que los existentes.
 - Verifica siempre con: build completo + `ctest` + smoke (`--smoke 30`).
 
 ## 6. Qué NO hacer

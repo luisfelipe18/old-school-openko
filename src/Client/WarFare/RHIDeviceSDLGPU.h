@@ -245,6 +245,11 @@ private:
 	uint32_t m_uTargetW = 0, m_uTargetH = 0;
 	int m_iDepthFormat = 0; // SDL_GPUTextureFormat
 
+	// HiDPI: framebuffer pixels per logical unit (SDL_WINDOW_HIGH_PIXEL_DENSITY).
+	// Engine coordinates (viewport, scissor, XYZRHW) are logical; the replay in
+	// Flush scales them to the physical target. Refreshed per frame.
+	float m_fPixelDensity = 1.0f;
+
 	// 1x1 opaque white: bound to unbound stages (SDL_GPU requires every
 	// declared sampler slot to be bound; the shader ignores them via flags).
 	SDL_GPUTexture* m_pWhiteTexture = nullptr;
