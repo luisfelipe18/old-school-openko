@@ -90,3 +90,15 @@ endif()
 add_custom_command(TARGET KscViewer POST_BUILD
   COMMAND "${CMAKE_COMMAND}" -E echo "$<TARGET_FILE:KscViewer> has been built"
 )
+
+# Ship next to the other client components (docs/PORT_POSIX_PLAN.md, Hito E).
+# KscViewer links the vendored libjpeg, which ships next to the binaries; the
+# install rpath makes it findable from the package without LD_LIBRARY_PATH.
+if(APPLE)
+  set_target_properties(KscViewer PROPERTIES INSTALL_RPATH "@executable_path")
+elseif(NOT WIN32)
+  set_target_properties(KscViewer PROPERTIES INSTALL_RPATH "$ORIGIN")
+endif()
+install(TARGETS KscViewer RUNTIME DESTINATION "${OPENKO_CLIENT_INSTALL_DIR}")
+install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/res/KscViewer.ico"
+  DESTINATION "${OPENKO_CLIENT_INSTALL_DIR}" OPTIONAL)

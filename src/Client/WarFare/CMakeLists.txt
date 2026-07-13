@@ -635,10 +635,10 @@ if(NOT WIN32)
   #   ${prefix}/Applications/KnightOnLine.app on macOS (bundle target)
   #   ${prefix}/share/applications/openko-client.desktop on Linux
   install(TARGETS WarFare
-    RUNTIME  DESTINATION bin
-    BUNDLE   DESTINATION Applications)
+    RUNTIME  DESTINATION "${OPENKO_CLIENT_INSTALL_DIR}"
+    BUNDLE   DESTINATION "${OPENKO_CLIENT_INSTALL_DIR}")
   if(NOT APPLE)
-    install(FILES ${WARFARE_CLIENT_RESOURCES} DESTINATION bin)
+    install(FILES ${WARFARE_CLIENT_RESOURCES} DESTINATION "${OPENKO_CLIENT_INSTALL_DIR}")
     install(FILES "${CMAKE_CURRENT_BINARY_DIR}/openko-client.desktop"
       DESTINATION share/applications OPTIONAL)
 
@@ -660,11 +660,11 @@ if(NOT WIN32)
       "$<TARGET_SONAME_FILE:OpenAL>"
       "$<TARGET_FILE:jpeg>"
       "$<TARGET_SONAME_FILE:jpeg>"
-      DESTINATION bin)
+      DESTINATION "${OPENKO_CLIENT_INSTALL_DIR}")
 
     # A short "how to run / where to put your game data" note in the package.
     install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/PACKAGING_README.md"
-      DESTINATION bin OPTIONAL)
+      DESTINATION "${OPENKO_CLIENT_INSTALL_DIR}" OPTIONAL)
   else()
     # macOS: pull every non-system dylib the binary links (openal, libjpeg, ...)
     # into the .app's Contents/Frameworks and rewrite the load commands so the

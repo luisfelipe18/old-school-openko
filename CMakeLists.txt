@@ -116,6 +116,25 @@ endif()
 add_compile_definitions("$<$<CONFIG:Debug>:DEBUG;_DEBUG>")
 
 set(OPENKO_CLIENT_DIR "${CMAKE_BINARY_DIR}/ClientData" CACHE STRING "Client path")
+
+# Install/packaging layout (docs/PORT_POSIX_PLAN.md, Hito E). Every client
+# component (WarFare/KnightOnLine, Launcher, Option, KscViewer) ships in ONE
+# folder as siblings - the classic Windows game-folder layout, and what the
+# Launcher/Option sibling-executable discovery (Platform/ProcessLaunch.h) needs.
+#   Linux   -> bin/            (tarball rooted at prefix)
+#   Windows -> .               (flat game folder in the zip)
+#   macOS   -> Applications/   (KnightOnLine.app + the plain tool binaries beside
+#                               it, so FindSiblingExecutable resolves the bundle)
+# The server components share their own single folder (OPENKO_SERVER_INSTALL_DIR).
+if(APPLE)
+  set(OPENKO_CLIENT_INSTALL_DIR "Applications")
+elseif(WIN32)
+  set(OPENKO_CLIENT_INSTALL_DIR ".")
+else()
+  set(OPENKO_CLIENT_INSTALL_DIR "bin")
+endif()
+set(OPENKO_SERVER_INSTALL_DIR "server")
+
 set(OPENKO_SERVER_MAP_SRC_DIR "${CMAKE_SOURCE_DIR}/assets/Server/MAP")
 set(OPENKO_SERVER_MAP_DST_DIR "${OPENKO_BIN_DIR}/MAP")
 set(OPENKO_SERVER_QUESTS_SRC_DIR "${CMAKE_SOURCE_DIR}/assets/Server/QUESTS")

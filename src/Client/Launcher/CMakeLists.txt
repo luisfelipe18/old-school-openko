@@ -138,3 +138,15 @@ endif()
 add_custom_command(TARGET Launcher POST_BUILD
   COMMAND "${CMAKE_COMMAND}" -E echo "$<TARGET_FILE:Launcher> has been built"
 )
+
+# Ship next to the other client components (docs/PORT_POSIX_PLAN.md, Hito E).
+if(APPLE)
+  set_target_properties(Launcher PROPERTIES INSTALL_RPATH "@executable_path")
+elseif(NOT WIN32)
+  set_target_properties(Launcher PROPERTIES INSTALL_RPATH "$ORIGIN")
+endif()
+install(TARGETS Launcher RUNTIME DESTINATION "${OPENKO_CLIENT_INSTALL_DIR}")
+install(FILES
+  "${CMAKE_CURRENT_SOURCE_DIR}/res/Launcher.ico"
+  "${CMAKE_CURRENT_SOURCE_DIR}/res/Bkg.bmp"
+  DESTINATION "${OPENKO_CLIENT_INSTALL_DIR}" OPTIONAL)

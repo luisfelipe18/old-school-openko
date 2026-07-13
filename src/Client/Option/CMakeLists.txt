@@ -79,6 +79,17 @@ if(MSVC)
   )
 endif()
 
+# Ship next to the other client components (docs/PORT_POSIX_PLAN.md, Hito E):
+# the Launcher / in-game menu find it as a sibling executable.
+if(APPLE)
+  set_target_properties(Option PROPERTIES INSTALL_RPATH "@executable_path")
+elseif(NOT WIN32)
+  set_target_properties(Option PROPERTIES INSTALL_RPATH "$ORIGIN")
+endif()
+install(TARGETS Option RUNTIME DESTINATION "${OPENKO_CLIENT_INSTALL_DIR}")
+install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/res/Option.ico"
+  DESTINATION "${OPENKO_CLIENT_INSTALL_DIR}" OPTIONAL)
+
 add_custom_command(TARGET Option POST_BUILD
   COMMAND "${CMAKE_COMMAND}" -E echo "$<TARGET_FILE:Option> has been built"
 )
