@@ -1763,13 +1763,7 @@ CN3CPlugBase* CPlayerBase::PlugSet(e_PlugPosition ePos, const std::string& szFN,
 	if (pPlug && nullptr == pItemBasic && nullptr == pItemExt)
 		pPlug->TexOverlapSet(""); // 기본 착용이면..
 
-	pPlug->m_iGlowLevel = 0;
-	if (pItemExt && pItemExt->dwID >= 7
-		&& (pItemExt->byMagicOrRare == ITEM_ATTRIB_UNIQUE || pItemExt->byMagicOrRare == ITEM_ATTRIB_UPGRADE))
-	{
-		int iLevel          = static_cast<int>(pItemExt->dwID);
-		pPlug->m_iGlowLevel = (iLevel > 10) ? 10 : iLevel;
-	}
+	pPlug->m_iGlowLevel = ItemUpgradeGlowLevel(pItemExt);
 
 	//////////////////////////////////////////////////////////////////////////////////////////////////////////
 	//
@@ -1947,15 +1941,7 @@ CN3CPart* CPlayerBase::PartSet(e_PartPosition ePos, const std::string& szFN, __T
 		pPart->TexOverlapSet(""); // 기본 착용이면..
 
 	if (pPart)
-	{
-		pPart->m_iGlowLevel = 0;
-		if (pItemExt && pItemExt->dwID >= 7
-			&& (pItemExt->byMagicOrRare == ITEM_ATTRIB_UNIQUE || pItemExt->byMagicOrRare == ITEM_ATTRIB_UPGRADE))
-		{
-			int iLevel          = static_cast<int>(pItemExt->dwID);
-			pPart->m_iGlowLevel = (iLevel > 10) ? 10 : iLevel;
-		}
-	}
+		pPart->m_iGlowLevel = ItemUpgradeGlowLevel(pItemExt);
 
 	return pPart;
 }

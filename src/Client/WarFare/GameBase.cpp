@@ -409,6 +409,21 @@ bool CGameBase::GetTextByAttrib(e_ItemAttrib eAttrib, std::string& szAttrib)
 	return true;
 }
 
+int CGameBase::ItemUpgradeGlowLevel(const __TABLE_ITEM_EXT* pItemExt)
+{
+	if (pItemExt == nullptr || pItemExt->byMagicOrRare != ITEM_ATTRIB_UPGRADE || pItemExt->dwID == 0)
+		return 0;
+
+	// The visible plus level is dwID % 10 (extension keys repeat per variant
+	// family in decades - see the tooltip item naming); a non-zero key that is
+	// a multiple of 10 is a +10.
+	int iLevel = static_cast<int>(pItemExt->dwID % 10);
+	if (iLevel == 0)
+		iLevel = 10;
+
+	return (iLevel >= 7) ? iLevel : 0;
+}
+
 e_Class_Represent CGameBase::GetRepresentClass(e_Class eClass)
 {
 	switch (eClass)

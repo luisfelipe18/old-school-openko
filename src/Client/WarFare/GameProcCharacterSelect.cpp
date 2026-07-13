@@ -690,15 +690,7 @@ void CGameProcCharacterSelect::AddChrPart(
 	}
 
 	if (pPart)
-	{
-		pPart->m_iGlowLevel = 0;
-		if (pItemExt && pItemExt->dwID >= 7
-			&& (pItemExt->byMagicOrRare == ITEM_ATTRIB_UNIQUE || pItemExt->byMagicOrRare == ITEM_ATTRIB_UPGRADE))
-		{
-			int iLevel          = static_cast<int>(pItemExt->dwID);
-			pPart->m_iGlowLevel = (iLevel > 10) ? 10 : iLevel;
-		}
-	}
+		pPart->m_iGlowLevel = ItemUpgradeGlowLevel(pItemExt);
 }
 
 void CGameProcCharacterSelect::MsgRecv_DeleteChr(Packet& pkt)

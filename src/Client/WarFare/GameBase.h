@@ -55,6 +55,11 @@ public:
 	static e_ItemType MakeResrcFileNameForUPC(__TABLE_ITEM_BASIC* pItem, __TABLE_ITEM_EXT* pItemExt, std::string* szResrcFN,
 		std::string* szIconFN, e_PartPosition& ePartPosition, e_PlugPosition& ePlugPosition, e_Race eRace = RACE_UNKNOWN);
 
+	// Upgrade glow level (0 = no glow, 7..10 = glow). Only ITEM_ATTRIB_UPGRADE
+	// extension rows encode a visible plus level; the elemental weapon FX
+	// (fire/ice/lightning/poison) is handled separately in PlugSet().
+	static int ItemUpgradeGlowLevel(const __TABLE_ITEM_EXT* pItemExt);
+
 	class CPlayerBase* CharacterGetByID(int iID, bool bFromAlive);
 	bool IsValidCharacter(CPlayerBase* pCharacter);
 	static std::string FormatNumber(int iNumber);
