@@ -10,6 +10,7 @@
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 
@@ -220,10 +221,17 @@ RHIDeviceSDLGPU::RHIDeviceSDLGPU(SDL_Window* pWindow, bool bVSync) : m_pWindow(p
 
 	// Default viewport: the whole window (what D3D gives a fresh device) -
 	// same bootstrap the GL backend does; flows that never call SetViewport
-	// (e.g. the test scene) rasterize into a 0x0 viewport otherwise.
+	// (e.g. the test scene) rasterize into a 0x0 viewport otherwise. The
+	// recorded viewport is LOGICAL, like every game SetViewport call; the
+	// physical framebuffer may be larger on HiDPI displays.
 	{
 		int w = 0, h = 0;
-		SDL_GetWindowSizeInPixels(pWindow, &w, &h);
+		SDL_GetWindowSize(pWindow, &w, &h);
+		int pixelW = 0, pixelH = 0;
+		SDL_GetWindowSizeInPixels(pWindow, &pixelW, &pixelH);
+		if (w > 0 && pixelW > 0)
+			m_fPixelDensity = static_cast<float>(pixelW) / static_cast<float>(w);
+
 		D3DVIEWPORT9 viewport = {};
 		viewport.Width        = static_cast<DWORD>(w);
 		viewport.Height       = static_cast<DWORD>(h);
@@ -376,10 +384,15 @@ void RHIDeviceSDLGPU::SnapshotUniforms(const gltr::FVFLayout& layout, VSUniforms
 	{
 		D3DVIEWPORT9 vp = {};
 		GetViewport(&vp);
-		// XYZRHW positions are in render-target pixels: map through the full
-		// target, matching RHIDeviceGL::ApplyViewport.
-		vs.viewportSize[0] = static_cast<float>(m_uTargetW ? m_uTargetW : vp.Width);
-		vs.viewportSize[1] = static_cast<float>(m_uTargetH ? m_uTargetH : vp.Height);
+		// XYZRHW positions are in LOGICAL units: the shader divides by the
+		// logical size while the pass viewport covers the whole physical
+		// target, which is exactly the HiDPI upscale (matches
+		// RHIDeviceGL::ApplyViewport). The recorded D3D viewport is logical
+		// already; the physical target size is divided back by the density.
+		vs.viewportSize[0] = m_uTargetW ? (static_cast<float>(m_uTargetW) / m_fPixelDensity)
+										: static_cast<float>(vp.Width);
+		vs.viewportSize[1] = m_uTargetH ? (static_cast<float>(m_uTargetH) / m_fPixelDensity)
+										: static_cast<float>(vp.Height);
 		vs.viewportSize[2] = 1.0f;
 	}
 	else
@@ -1096,6 +1109,14 @@ HRESULT RHIDeviceSDLGPU::Present()
 
 	UploadFrameResources(pCmd);
 
+	// HiDPI: refresh the density each frame (window resizes, display moves).
+	{
+		int wPoints = 0, hPoints = 0;
+		SDL_GetWindowSize(m_pWindow, &wPoints, &hPoints);
+		if (wPoints > 0 && swapW > 0)
+			m_fPixelDensity = static_cast<float>(swapW) / static_cast<float>(wPoints);
+	}
+
 	// --- Replay ---
 	SDL_GPURenderPass* pPass = nullptr;
 
@@ -1179,10 +1200,11 @@ HRESULT RHIDeviceSDLGPU::Present()
 		}
 		else
 		{
-			viewport.x         = static_cast<float>(draw.viewport.X);
-			viewport.y         = static_cast<float>(draw.viewport.Y);
-			viewport.w         = static_cast<float>(draw.viewport.Width);
-			viewport.h         = static_cast<float>(draw.viewport.Height);
+			// Recorded viewports are logical; the target is physical (HiDPI).
+			viewport.x         = static_cast<float>(draw.viewport.X) * m_fPixelDensity;
+			viewport.y         = static_cast<float>(draw.viewport.Y) * m_fPixelDensity;
+			viewport.w         = static_cast<float>(draw.viewport.Width) * m_fPixelDensity;
+			viewport.h         = static_cast<float>(draw.viewport.Height) * m_fPixelDensity;
 			viewport.min_depth = draw.viewport.MinZ;
 			viewport.max_depth = draw.viewport.MaxZ;
 		}
@@ -1191,10 +1213,15 @@ HRESULT RHIDeviceSDLGPU::Present()
 		SDL_Rect scissor = {};
 		if (draw.bScissor)
 		{
-			scissor.x = draw.scissor.left;
-			scissor.y = draw.scissor.top;
-			scissor.w = draw.scissor.right - draw.scissor.left;
-			scissor.h = draw.scissor.bottom - draw.scissor.top;
+			// Scissor rects come from the engine in logical units too.
+			const auto iLeft   = static_cast<int>(std::lround(draw.scissor.left * m_fPixelDensity));
+			const auto iTop    = static_cast<int>(std::lround(draw.scissor.top * m_fPixelDensity));
+			const auto iRight  = static_cast<int>(std::lround(draw.scissor.right * m_fPixelDensity));
+			const auto iBottom = static_cast<int>(std::lround(draw.scissor.bottom * m_fPixelDensity));
+			scissor.x = iLeft;
+			scissor.y = iTop;
+			scissor.w = iRight - iLeft;
+			scissor.h = iBottom - iTop;
 		}
 		else
 		{
