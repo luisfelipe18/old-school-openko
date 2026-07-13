@@ -55,12 +55,10 @@ public:
 	static e_ItemType MakeResrcFileNameForUPC(__TABLE_ITEM_BASIC* pItem, __TABLE_ITEM_EXT* pItemExt, std::string* szResrcFN,
 		std::string* szIconFN, e_PartPosition& ePartPosition, e_PlugPosition& ePlugPosition, e_Race eRace = RACE_UNKNOWN);
 
-	// Upgrade glow level (0 = no glow, 7..10 = glow). Weapon plus levels are
-	// encoded on ITEM_ATTRIB_UPGRADE rows only (unique weapon keys mean
-	// something else); armor upgrade rows are also marked ITEM_ATTRIB_UNIQUE
-	// in the tables. The elemental weapon FX (fire/ice/lightning/poison) is
-	// handled separately in PlugSet().
-	static int ItemUpgradeGlowLevel(const __TABLE_ITEM_EXT* pItemExt, bool bIsWeapon);
+	// Upgrade glow level (0 = no glow, 7..10 = glow), derived purely from the
+	// item's upgrade state (extension key). The elemental weapon FX
+	// (fire/ice/lightning/poison) is handled separately in PlugSet().
+	static int ItemUpgradeGlowLevel(const __TABLE_ITEM_EXT* pItemExt);
 
 	class CPlayerBase* CharacterGetByID(int iID, bool bFromAlive);
 	bool IsValidCharacter(CPlayerBase* pCharacter);
