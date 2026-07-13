@@ -135,6 +135,11 @@ else()
 endif()
 set(OPENKO_SERVER_INSTALL_DIR "server")
 
+# CPack components: everything installed from here on lands in the "Client"
+# component unless an install() overrides it (the server block sets "Server").
+# This lets `cpack` emit a separate client and server archive.
+set(CMAKE_INSTALL_DEFAULT_COMPONENT_NAME "Client")
+
 set(OPENKO_SERVER_MAP_SRC_DIR "${CMAKE_SOURCE_DIR}/assets/Server/MAP")
 set(OPENKO_SERVER_MAP_DST_DIR "${OPENKO_BIN_DIR}/MAP")
 set(OPENKO_SERVER_QUESTS_SRC_DIR "${CMAKE_SOURCE_DIR}/assets/Server/QUESTS")
@@ -302,6 +307,21 @@ if(OPENKO_BUILD_SERVERS)
   add_subdirectory(src/Server/Ebenezer)
   add_subdirectory(src/Server/ItemManager)
   add_subdirectory(src/Server/VersionManager)
+
+  # Packaging (docs/PORT_POSIX_PLAN.md, Hito E): the five server daemons run
+  # together and share the MAP/QUESTS data, so ship them in one folder (the
+  # "Server" package component). They link only static/system libraries
+  # (unixODBC is a runtime dependency the admin installs), so no vendored .so
+  # needs bundling. Game/config data beyond MAP+QUESTS (the DB, *.ini) is the
+  # admin's to provide.
+  install(TARGETS Ebenezer AIServer Aujard ItemManager VersionManager
+    RUNTIME DESTINATION "${OPENKO_SERVER_INSTALL_DIR}" COMPONENT Server)
+  install(DIRECTORY "${OPENKO_SERVER_MAP_SRC_DIR}/"
+    DESTINATION "${OPENKO_SERVER_INSTALL_DIR}/MAP" COMPONENT Server)
+  install(DIRECTORY "${OPENKO_SERVER_QUESTS_SRC_DIR}/"
+    DESTINATION "${OPENKO_SERVER_INSTALL_DIR}/QUESTS" COMPONENT Server)
+  install(FILES "${CMAKE_SOURCE_DIR}/src/Server/PACKAGING_README.md"
+    DESTINATION "${OPENKO_SERVER_INSTALL_DIR}" COMPONENT Server OPTIONAL)
 endif()
 
 if(OPENKO_BUILD_TESTS)
@@ -347,24 +367,35 @@ endif()
 # proprietary Knight OnLine content the user supplies. `include(CPack)` must
 # come after every install() rule, hence its place at the very end of the file.
 # ---------------------------------------------------------------------------
-if(NOT WIN32 AND OPENKO_BUILD_CLIENT)
-  set(CPACK_PACKAGE_NAME               "OpenKO-Client")
+if(NOT WIN32 AND (OPENKO_BUILD_CLIENT OR OPENKO_BUILD_SERVERS))
+  set(CPACK_PACKAGE_NAME               "OpenKO")
   set(CPACK_PACKAGE_VENDOR             "OpenKO contributors")
-  set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "OpenKO WarFare client (Knight OnLine) for macOS/Linux")
+  set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "OpenKO (Knight OnLine) client + servers for macOS/Linux")
   set(CPACK_PACKAGE_VERSION_MAJOR      "0")
   set(CPACK_PACKAGE_VERSION_MINOR      "1")
   set(CPACK_PACKAGE_VERSION_PATCH      "0")
-  set(CPACK_PACKAGE_FILE_NAME
-    "OpenKO-Client-${CPACK_PACKAGE_VERSION_MAJOR}.${CPACK_PACKAGE_VERSION_MINOR}.${CPACK_PACKAGE_VERSION_PATCH}-${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}")
   set(CPACK_VERBATIM_VARIABLES         ON)
   set(CPACK_STRIP_FILES                ON)
 
+  # One archive per component: OpenKO-Client-... and OpenKO-Server-...
+  # Restrict to our components so third-party install rules (googletest's
+  # gtest/gmock, etc.) don't each spawn their own stray archive.
+  set(CPACK_ARCHIVE_COMPONENT_INSTALL  ON)
+  set(CPACK_COMPONENTS_ALL             Client Server)
+  # Wrap each archive in a top-level folder so extraction doesn't splatter
+  # bin/ or server/ into the current directory.
+  set(CPACK_COMPONENT_INCLUDE_TOPLEVEL_DIRECTORY ON)
+  set(_ver "${CPACK_PACKAGE_VERSION_MAJOR}.${CPACK_PACKAGE_VERSION_MINOR}.${CPACK_PACKAGE_VERSION_PATCH}")
+  set(CPACK_ARCHIVE_CLIENT_FILE_NAME "OpenKO-Client-${_ver}-${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}")
+  set(CPACK_ARCHIVE_SERVER_FILE_NAME "OpenKO-Server-${_ver}-${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}")
+  set(CPACK_DMG_CLIENT_FILE_NAME     "OpenKO-Client-${_ver}-${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}")
+
   if(APPLE)
-    # A DMG holding KnightOnLine.app; fixup_bundle (WarFare/CMakeLists.txt) has
-    # already made the .app self-contained at install time.
+    # DMG for the client (self-contained .app via fixup_bundle); the server
+    # daemons ride a plain tar.gz even on macOS - run `cpack -G TGZ` for them.
     set(CPACK_GENERATOR "DragNDrop")
   else()
-    # A relocatable tar.gz rooted at the install prefix (bin/, share/).
+    # Relocatable tar.gz per component, rooted at the install prefix.
     set(CPACK_GENERATOR "TGZ")
     set(CPACK_PACKAGING_INSTALL_PREFIX "/")
   endif()
