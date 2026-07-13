@@ -1079,11 +1079,13 @@ std::u32string DecodeGameText(std::string_view szText)
 	return codepoints;
 }
 
+// Unhinted metrics to match the unhinted rasterization below; the fractional
+// advance is rounded (not truncated) so long runs don't squeeze together.
 int GlyphAdvance(FT_Face pFace, char32_t cp)
 {
-	if (FT_Load_Char(pFace, cp, FT_LOAD_DEFAULT) != 0)
+	if (FT_Load_Char(pFace, cp, FT_LOAD_DEFAULT | FT_LOAD_NO_HINTING) != 0)
 		return 0;
-	return static_cast<int>(pFace->glyph->advance.x >> 6);
+	return static_cast<int>((pFace->glyph->advance.x + 32) >> 6);
 }
 
 // Extent of the text as one line with '\n' stripped - the exact measure GDI's
@@ -1275,7 +1277,7 @@ HRESULT CDFont::SetText(const std::string& szText, uint32_t dwFlags)
 	if (m_pTexture == nullptr)
 	{
 		const HRESULT hr = RHIDevice()->CreateTexture(m_dwTexWidth, m_dwTexHeight, 1, 0,
-			D3DFMT_A4R4G4B4, D3DPOOL_MANAGED, &m_pTexture);
+			D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, &m_pTexture);
 		if (FAILED(hr))
 			return hr;
 	}
@@ -1363,7 +1365,9 @@ HRESULT CDFont::SetText(const std::string& szText, uint32_t dwFlags)
 		}
 
 		// Rasterize the glyph at the pen, clipped to the texture.
-		if (FT_Load_Char(pFace, cp, FT_LOAD_RENDER) == 0)
+		// Unhinted rendering: keeps the glyph's true outline (macOS-style
+		// smoothing) instead of snapping stems to the pixel grid.
+		if (FT_Load_Char(pFace, cp, FT_LOAD_RENDER | FT_LOAD_NO_HINTING) == 0)
 		{
 			const FT_GlyphSlot pGlyph = pFace->glyph;
 			const FT_Bitmap& bitmap   = pGlyph->bitmap;
@@ -1391,20 +1395,21 @@ HRESULT CDFont::SetText(const std::string& szText, uint32_t dwFlags)
 	}
 	EmitRun();
 
-	// Upload: 4-bit alpha, white RGB - the exact A4R4G4B4 packing GDI used.
+	// Upload: full 8-bit alpha, white RGB (A8R8G8B8). The historical GDI path
+	// packed A4R4G4B4 (16 alpha levels), which visibly banded the AA edges.
 	D3DLOCKED_RECT lr {};
 	if (SUCCEEDED(m_pTexture->LockRect(0, &lr, nullptr, 0)))
 	{
 		for (uint32_t row = 0; row < m_dwTexHeight; ++row)
 		{
-			auto* pDst16 = reinterpret_cast<uint16_t*>(static_cast<uint8_t*>(lr.pBits)
+			auto* pDst32 = reinterpret_cast<uint32_t*>(static_cast<uint8_t*>(lr.pBits)
 													   + static_cast<size_t>(row) * lr.Pitch);
 			for (uint32_t col = 0; col < m_dwTexWidth; ++col)
 			{
-				const uint8_t byAlpha = alphaMap[static_cast<size_t>(row) * m_dwTexWidth + col]
-										>> 4;
-				pDst16[col] = (byAlpha > 0) ? static_cast<uint16_t>((byAlpha << 12) | 0x0fff)
-											: static_cast<uint16_t>(0);
+				const uint8_t byAlpha = alphaMap[static_cast<size_t>(row) * m_dwTexWidth + col];
+				pDst32[col] = (byAlpha > 0)
+								  ? ((static_cast<uint32_t>(byAlpha) << 24) | 0x00ffffffu)
+								  : 0u;
 			}
 		}
 		m_pTexture->UnlockRect(0);
