@@ -409,9 +409,13 @@ bool CGameBase::GetTextByAttrib(e_ItemAttrib eAttrib, std::string& szAttrib)
 	return true;
 }
 
-int CGameBase::ItemUpgradeGlowLevel(const __TABLE_ITEM_EXT* pItemExt)
+int CGameBase::ItemUpgradeGlowLevel(const __TABLE_ITEM_EXT* pItemExt, bool bIsWeapon)
 {
-	if (pItemExt == nullptr || pItemExt->byMagicOrRare != ITEM_ATTRIB_UPGRADE || pItemExt->dwID == 0)
+	if (pItemExt == nullptr || pItemExt->dwID == 0)
+		return 0;
+
+	if (pItemExt->byMagicOrRare != ITEM_ATTRIB_UPGRADE
+		&& (bIsWeapon || pItemExt->byMagicOrRare != ITEM_ATTRIB_UNIQUE))
 		return 0;
 
 	// The visible plus level is dwID % 10 (extension keys repeat per variant

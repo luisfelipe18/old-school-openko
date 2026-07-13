@@ -35,11 +35,11 @@ static float GlowEmissiveBoost(int iGlowLevel)
 		case 7: // blinks, up to +10% brightness
 			fBoost = 0.05f * (0.5f + 0.5f * sinf(CN3Base::TimeGet() * 4.0f));
 			break;
-		case 8: // steady +20%
-			fBoost = 0.10f;
-			break;
-		case 9: // steady +35%
+		case 8: // steady +35%
 			fBoost = 0.175f;
+			break;
+		case 9: // steady +70%
+			fBoost = 0.35f;
 			break;
 		default: // +10: steady +110%
 			fBoost = (iGlowLevel >= 10) ? 0.55f : 0.0f;
