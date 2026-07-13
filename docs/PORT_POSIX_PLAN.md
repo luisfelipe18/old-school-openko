@@ -4,8 +4,8 @@
 > Mac real contra un servidor Ebenezer local, y **Hito E** (empaquetado
 > distribuible cliente+servidor + workflow de release) completado y verificado
 > en Linux. Fases 0-8 completas; F9 en curso — quedan solo ítems que requieren
-> la máquina/servidor del usuario (perfilado, ASan login→mundo con assets, y la
-> confirmación visual de la línea vertical/HUD, ya instrumentada). Ver checklist.
+> la máquina/servidor del usuario (perfilado y ASan login→mundo con assets; la
+> línea vertical/HUD quedó resuelta con el fix de half-pixel). Ver checklist.
 > **Rama:** `feature/port-posix`
 > **Para agentes nuevos:** leer primero `docs/PORT_POSIX_CONTEXT.md` (reglas,
 > gotchas, build/test). Las fases 6+ están subdivididas en tareas `T*`
@@ -902,17 +902,15 @@ la validación end-to-end en un Mac real queda como paso del usuario.)*
       tests de humo (`build_cmake_all.yml`; smokes headless con el driver de
       video "dummy").
 * [x] Actualizar README y wiki (setup macOS/Linux del cliente).
-* [~] Diagnosticar la "línea vertical casi imperceptible" y el desfase del HUD
+* [x] Diagnosticar la "línea vertical casi imperceptible" y el desfase del HUD
       (ver el punto 4 de la validación end-to-end, arriba). *Descartada la
       causa de DPI por análisis de código: el cliente NO usa
       `SDL_WINDOW_HIGH_PIXEL_DENSITY`, así que framebuffer == tamaño lógico
       (`WarFareMainSDL`); `RHIDeviceGL` alimenta `uViewportSize` con el mismo
-      tamaño en píxeles que el viewport GL, sin desajuste de escala. Como el
-      síntoma solo se ve en un Mac real con assets, se añadió logging POSIX de
-      una sola vez en el init de `RHIDeviceGL` (resolución de Option vs. tamaño
-      lógico en puntos vs. framebuffer en píxeles vs. displayScale/pixelDensity)
-      para capturar cualquier discrepancia desde el log del cliente del usuario.
-      Pendiente: reproducir en el Mac y leer ese log.*
+      tamaño en píxeles que el viewport GL, sin desajuste de escala. La causa
+      real era el redondeo de medio píxel en la proyección 2D (corregido en la
+      pasada de half-pixel de UI); **verificado como resuelto en el Mac del
+      usuario**.*
 * [x] **Hito E — empaquetado distribuible.** CPack por componente: cliente
       (WarFare + Launcher + Option + KscViewer juntos) y servidor (los 5
       daemons + MAP/QUESTS) en tarball (Linux), `.dmg`/tarball (macOS) y `.zip`
