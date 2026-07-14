@@ -40,6 +40,7 @@ void CN3Cloud::Release()
 	{
 		s_MngTex.Delete(&m_pTextures[i]);
 		m_szTextures[i].clear();
+		m_bTexLoadFailed[i] = false;
 	}
 
 	m_Color1.ChangeColor(0xffffffff);
@@ -171,15 +172,21 @@ void CN3Cloud::Render()
 	D3DCOLOR color2 = m_Color2.GetCurColor();
 	__ASSERT(CLOUD_NONE != m_eCloud1 && CLOUD_NONE != m_eCloud2, "no cloud texture type");
 
+	// A cloud layer with no usable texture would sample opaque white and blank
+	// the sky, so each draw below is guarded by its texture being present.
+
 	// render cloud 1
 	int i = 0;
 	for (; i < 4; ++i)
 		m_pVertices[i].color = color1 & 0x00ffffff;
 	for (i = 4; i < NUM_CLOUD_VERTEX; ++i)
 		m_pVertices[i].color = color1;
-	RHIDevice()->SetTexture(0, GetTex(m_eCloud1));
-	RHIDevice()->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, 8, 10, CloudIndex, D3DFMT_INDEX16,
-		m_pVertices, sizeof(__VertexXyzColorT2));
+	if (IRHITexture* pTex1 = GetTex(m_eCloud1))
+	{
+		RHIDevice()->SetTexture(0, pTex1);
+		RHIDevice()->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, 8, 10, CloudIndex, D3DFMT_INDEX16,
+			m_pVertices, sizeof(__VertexXyzColorT2));
+	}
 
 	RHIDevice()->SetTextureStageState(0, D3DTSS_TEXCOORDINDEX, 1);
 	if (CLOUD_NONE != m_eCloud3)
@@ -197,17 +204,23 @@ void CN3Cloud::Render()
 		for (i = 4; i < NUM_CLOUD_VERTEX; ++i)
 			m_pVertices[i].color = color2;
 
-		RHIDevice()->SetTexture(0, GetTex(m_eCloud2));
-		RHIDevice()->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, 8, 10, CloudIndex, D3DFMT_INDEX16,
-			m_pVertices, sizeof(__VertexXyzColorT2));
+		if (IRHITexture* pTex2 = GetTex(m_eCloud2))
+		{
+			RHIDevice()->SetTexture(0, pTex2);
+			RHIDevice()->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, 8, 10, CloudIndex,
+				D3DFMT_INDEX16, m_pVertices, sizeof(__VertexXyzColorT2));
+		}
 		// render cloud 3
 		D3DCOLOR color3 = ((0xff - (color2 >> 24)) << 24)
 						  | (color2 & 0x00ffffff); // color2의 alpha값을 0xff에서 뺀 값으로 바꿈
 		for (i = 4; i < NUM_CLOUD_VERTEX; ++i)
 			m_pVertices[i].color = color3;
-		RHIDevice()->SetTexture(0, GetTex(m_eCloud3));
-		RHIDevice()->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, 8, 10, CloudIndex, D3DFMT_INDEX16,
-			m_pVertices, sizeof(__VertexXyzColorT2));
+		if (IRHITexture* pTex3 = GetTex(m_eCloud3))
+		{
+			RHIDevice()->SetTexture(0, pTex3);
+			RHIDevice()->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, 8, 10, CloudIndex,
+				D3DFMT_INDEX16, m_pVertices, sizeof(__VertexXyzColorT2));
+		}
 	}
 	else
 	{
@@ -216,9 +229,12 @@ void CN3Cloud::Render()
 			m_pVertices[i].color = color2 & 0x00ffffff;
 		for (i = 4; i < NUM_CLOUD_VERTEX; ++i)
 			m_pVertices[i].color = color2;
-		RHIDevice()->SetTexture(0, GetTex(m_eCloud2));
-		RHIDevice()->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, 8, 10, CloudIndex, D3DFMT_INDEX16,
-			m_pVertices, sizeof(__VertexXyzColorT2));
+		if (IRHITexture* pTex2 = GetTex(m_eCloud2))
+		{
+			RHIDevice()->SetTexture(0, pTex2);
+			RHIDevice()->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, 8, 10, CloudIndex,
+				D3DFMT_INDEX16, m_pVertices, sizeof(__VertexXyzColorT2));
+		}
 	}
 	RHIDevice()->SetTextureStageState(0, D3DTSS_TEXCOORDINDEX, 0);
 
@@ -233,11 +249,26 @@ void CN3Cloud::Render()
 
 IRHITexture* CN3Cloud::GetTex(e_CLOUDTEX tex)
 {
+	if (tex >= NUM_CLOUD)
+		return nullptr;
+
 	if (nullptr == m_pTextures[tex])
 	{
+		// Don't hammer the file system every frame for a texture that already
+		// failed once (a missing/unsupported cloud .tga) - remember it and bail.
+		if (m_bTexLoadFailed[tex])
+			return nullptr;
+
 		m_pTextures[tex] = s_MngTex.Get(m_szTextures[tex]);
 		if (nullptr == m_pTextures[tex])
+		{
+			m_bTexLoadFailed[tex] = true;
+#ifdef _N3GAME
+			CLogWriter::Write(
+				"CN3Cloud - cloud texture failed to load, layer skipped ({})", m_szTextures[tex]);
+#endif
 			return nullptr;
+		}
 	}
 
 	return m_pTextures[tex]->Get();

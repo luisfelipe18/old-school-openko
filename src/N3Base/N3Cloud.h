@@ -38,6 +38,12 @@ protected:
 	__VertexXyzColorT2 m_pVertices[NUM_CLOUD_VERTEX]; // 구름층의 버텍스
 	CN3Texture* m_pTextures[NUM_CLOUD];               // 텍스쳐들..
 	std::string m_szTextures[NUM_CLOUD];              // 텍스처 파일 이름들...
+	// A cloud slot whose texture cannot be loaded must not be drawn: with no
+	// texture bound, the stage samples opaque white, which paints the whole
+	// cloud dome as a flat white sheet ("sky won't load"). Remember the failure
+	// so the layer is skipped instead of blanking the sky, and so we only retry
+	// (and log) once rather than every frame.
+	bool m_bTexLoadFailed[NUM_CLOUD] = {};            // 텍스처 로딩 실패한 슬롯
 
 	CN3ColorChange m_Color1;                          // 구름 색1
 	CN3ColorChange m_Color2;                          // 구름 색2
