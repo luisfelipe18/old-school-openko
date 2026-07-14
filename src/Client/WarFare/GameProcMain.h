@@ -95,6 +95,14 @@ public:
 	class CDFont* m_pViewDistFont = nullptr;
 	bool m_bViewDistDragging      = false;
 
+	// GM-mode toggle ("+gm" in chat). m_iRealAuthority is the authority the
+	// server actually granted us and is NEVER overwritten by the toggle, so a
+	// real GM can always switch back. m_bGMModeSuppressed flips a real GM
+	// between GM tools and behaving like a normal user; the effective value
+	// (s_pPlayer->m_InfoBase.iAuthority) is recomputed from these two.
+	int m_iRealAuthority     = AUTHORITY_USER;
+	bool m_bGMModeSuppressed = false;
+
 	//..
 	BOOL m_bLoadComplete;         // 로딩이 완료되었나??
 
@@ -356,6 +364,15 @@ public:
 	void ViewDistPanelHandleInput(); // slider drag while F10/help is open (from Tick)
 	void ViewDistPanelRender();      // draw the view-distance slider (from Render)
 	void GMPanelTeleportTo(int iNpcID);
+
+	// Recompute s_pPlayer->m_InfoBase.iAuthority from m_iRealAuthority +
+	// m_bGMModeSuppressed. Call after the server sends our authority or after
+	// the +gm toggle flips.
+	void ApplyEffectiveAuthority();
+	// Handle the "+gm" chat command (case-insensitive). Returns true if the
+	// input was the command (and was consumed), false to let it flow on as
+	// normal chat.
+	bool ToggleGMModeCommand(const std::string& szInput);
 
 	void Init() override;    // UI 와 UI 리소스등을 읽는다.
 	void Release() override; // Release..

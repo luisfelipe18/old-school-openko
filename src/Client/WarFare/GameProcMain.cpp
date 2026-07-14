@@ -1203,6 +1203,52 @@ void CGameProcMain::ViewDistPanelRender()
 	CUIManager::RenderStateRestore();
 }
 
+// ---------------------------------------------------------------------------
+// GM-mode toggle ("+gm"): flips a real GM between GM tools and behaving like a
+// normal user. The real authority (m_iRealAuthority, set from the server) is
+// never overwritten, so the switch is always reversible.
+// ---------------------------------------------------------------------------
+void CGameProcMain::ApplyEffectiveAuthority()
+{
+	if (s_pPlayer == nullptr)
+		return;
+
+	// Only a real GM can be suppressed; everyone else always reflects the real
+	// authority verbatim.
+	const bool bSuppress = (m_iRealAuthority == AUTHORITY_MANAGER) && m_bGMModeSuppressed;
+	s_pPlayer->m_InfoBase.iAuthority =
+		bSuppress ? static_cast<int>(AUTHORITY_USER) : m_iRealAuthority;
+}
+
+bool CGameProcMain::ToggleGMModeCommand(const std::string& szInput)
+{
+	// Case-insensitive match of exactly "+gm" (ignoring surrounding spaces).
+	std::string s = szInput;
+	s.erase(0, s.find_first_not_of(" \t"));
+	s.erase(s.find_last_not_of(" \t") + 1);
+	std::transform(s.begin(), s.end(), s.begin(),
+		[](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+	if (s != "+gm")
+		return false;
+
+	if (m_iRealAuthority != AUTHORITY_MANAGER)
+	{
+		// Not a GM: swallow the command (so it is never broadcast) and say so.
+		MsgOutput("You do not have GM authority.", 0xffff8080);
+		return true;
+	}
+
+	m_bGMModeSuppressed = !m_bGMModeSuppressed;
+	ApplyEffectiveAuthority();
+
+	if (m_bGMModeSuppressed)
+		MsgOutput("GM mode OFF - acting as a normal user (type +gm to restore).", 0xffffff80);
+	else
+		MsgOutput("GM mode ON.", 0xff80ff80);
+
+	return true;
+}
+
 void CGameProcMain::RenderTarget()
 {
 	if (nullptr == m_pTargetSymbol)
@@ -2457,6 +2503,12 @@ bool CGameProcMain::MsgRecv_MyInfo_All(Packet& pkt)
 
 	s_pPlayer->m_InfoExt.iGold               = pkt.read<uint32_t>();
 	s_pPlayer->m_InfoBase.iAuthority         = pkt.read<uint8_t>(); //권한..
+
+	// Remember the authority the server actually granted (the "real" one), then
+	// re-apply the +gm suppression on top of it. This is what lets a GM toggle
+	// to normal-user mode without ever losing the ability to become GM again.
+	m_iRealAuthority = s_pPlayer->m_InfoBase.iAuthority;
+	ApplyEffectiveAuthority();
 
 	/*uint8_t bKnightsRank                   =*/pkt.read<uint8_t>();
 	/*uint8_t bPersonalRank                  =*/pkt.read<uint8_t>();

@@ -179,7 +179,15 @@ bool CUIChat::ReceiveMessage(CN3UIBase* pSender, uint32_t dwMsg)
 		int iStrLen = static_cast<int>(m_szString.size());
 		if (iStrLen > 0)
 		{
-			if (iStrLen > 1 && '/' == m_szString[0])
+			// Client-side GM-mode toggle. "+gm" flips a real GM between GM tools
+			// and behaving like a normal user, without ever losing the real
+			// authority. Consumed here so it is never broadcast as chat.
+			if (CGameProcedure::s_pProcMain != nullptr
+				&& CGameProcedure::s_pProcMain->ToggleGMModeCommand(m_szString))
+			{
+				// handled
+			}
+			else if (iStrLen > 1 && '/' == m_szString[0])
 			{
 				CGameProcedure::s_pProcMain->ParseChattingCommand(m_szString);
 			}
