@@ -1,5 +1,6 @@
 add_executable(N3Base.Tests
   DFontFT_test.cpp
+  N3TextureBmp_test.cpp
   N3TextureTga_test.cpp
   RHIBuffers_test.cpp
   RHIDeviceNull_test.cpp

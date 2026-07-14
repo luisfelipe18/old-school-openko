@@ -157,6 +157,108 @@ bool DecodeTga(const uint8_t* data, size_t size, std::vector<uint8_t>& outBgra, 
 	outHeight = height;
 	return true;
 }
+
+// Minimal Windows BMP decoder (docs/PORT_POSIX_PLAN.md, F9): the sky's sun
+// disk/glow/flare ship as uncompressed BMPs (8-bit palettized or 24/32bpp
+// true-color) rather than TGA. D3DX loaded these transparently on Windows; on
+// POSIX an undecoded BMP left the sun's texture stage unbound, which under the
+// sun's additive (ONE/ONE) blend paints a blown-out white quad instead of the
+// sun. Only BI_RGB (uncompressed) is handled - nothing in the asset set is
+// RLE-compressed; those log and fail like any other unsupported format.
+bool DecodeBmp(const uint8_t* data, size_t size, std::vector<uint8_t>& outBgra, int& outWidth, int& outHeight)
+{
+	// BITMAPFILEHEADER (14) + BITMAPINFOHEADER (40).
+	if (data == nullptr || size < 54)
+		return false;
+	if (data[0] != 'B' || data[1] != 'M')
+		return false;
+
+	auto rd32 = [&](size_t o) {
+		return static_cast<uint32_t>(data[o]) | (static_cast<uint32_t>(data[o + 1]) << 8)
+			 | (static_cast<uint32_t>(data[o + 2]) << 16) | (static_cast<uint32_t>(data[o + 3]) << 24);
+	};
+	auto rd16 = [&](size_t o) {
+		return static_cast<uint16_t>(data[o] | (data[o + 1] << 8));
+	};
+
+	const uint32_t offBits    = rd32(10);
+	const uint32_t dibSize    = rd32(14);
+	if (dibSize < 40) // only BITMAPINFOHEADER-or-newer layouts are handled
+		return false;
+
+	const int32_t widthS      = static_cast<int32_t>(rd32(18));
+	const int32_t heightS     = static_cast<int32_t>(rd32(22));
+	const uint16_t bpp        = rd16(28);
+	const uint32_t compression = rd32(30);
+	uint32_t clrUsed          = rd32(46);
+
+	if (compression != 0) // BI_RGB only
+		return false;
+	if (widthS <= 0 || heightS == 0)
+		return false;
+	if (bpp != 8 && bpp != 24 && bpp != 32)
+		return false;
+
+	const int width       = widthS;
+	const bool bTopOrigin = (heightS < 0); // negative height = top-down rows
+	const int height      = bTopOrigin ? -heightS : heightS;
+
+	// Palette (8bpp): sits right after the DIB header, 4 bytes each (B,G,R,0).
+	const uint8_t* palette = data + 14 + dibSize;
+	if (bpp == 8)
+	{
+		if (clrUsed == 0)
+			clrUsed = 256;
+		if (14 + dibSize + static_cast<size_t>(clrUsed) * 4 > size)
+			return false;
+	}
+
+	const size_t srcBpp   = bpp / 8;
+	const size_t rowBytes = (static_cast<size_t>(width) * srcBpp + 3) & ~size_t(3); // 4-byte aligned
+	if (offBits + rowBytes * height > size)
+		return false;
+
+	outBgra.resize(static_cast<size_t>(width) * static_cast<size_t>(height) * 4);
+
+	for (int row = 0; row < height; ++row)
+	{
+		const int dstRow    = bTopOrigin ? row : (height - 1 - row);
+		const uint8_t* src  = data + offBits + static_cast<size_t>(row) * rowBytes;
+		uint8_t* dst        = &outBgra[(static_cast<size_t>(dstRow) * width) * 4];
+		for (int col = 0; col < width; ++col)
+		{
+			if (bpp == 8)
+			{
+				const uint8_t idx = src[col];
+				if (idx >= clrUsed)
+				{
+					dst[0] = dst[1] = dst[2] = 0;
+				}
+				else
+				{
+					const uint8_t* pe = palette + static_cast<size_t>(idx) * 4;
+					dst[0]            = pe[0]; // B
+					dst[1]            = pe[1]; // G
+					dst[2]            = pe[2]; // R
+				}
+				dst[3] = 0xff;
+			}
+			else
+			{
+				const uint8_t* px = src + static_cast<size_t>(col) * srcBpp;
+				dst[0]            = px[0]; // B
+				dst[1]            = px[1]; // G
+				dst[2]            = px[2]; // R
+				dst[3]            = (srcBpp == 4) ? px[3] : 0xff;
+			}
+			dst += 4;
+		}
+	}
+
+	outWidth  = width;
+	outHeight = height;
+	return true;
+}
 } // namespace
 #endif // !_WIN32
 
@@ -411,48 +513,55 @@ bool CN3Texture::LoadFromFile(const std::string& szFileName)
 		}
 #else  // _WIN32
 		// Non-DXT image formats go through D3DX on Windows, which has no POSIX
-		// equivalent; TGA - the only non-DXT format the shipped assets
-		// actually use (sky/moon phases, some UI art) - is decoded directly
-		// instead of pulling in a general-purpose image library (T6.2 scope,
-		// narrowed to what's really needed).
-		FileReader tgaFile;
-		if (!tgaFile.OpenExisting(szFullPath))
+		// equivalent; the non-DXT formats the shipped assets actually use - TGA
+		// (clouds, moon phases, some UI art) and BMP (sun disk/glow/flare) - are
+		// decoded directly instead of pulling in a general-purpose image library
+		// (T6.2 scope, narrowed to what's really needed). The decoder is picked
+		// by content ("BM" magic = BMP) so it works regardless of extension.
+		FileReader imgFile;
+		if (!imgFile.OpenExisting(szFullPath))
 		{
 			CLogWriter::Write("N3Texture - Can't open texture file({})", szFullPath);
 		}
 		else
 		{
+			const uint8_t* pBytes = static_cast<const uint8_t*>(imgFile.Memory());
+			const size_t nBytes   = static_cast<size_t>(imgFile.Size());
+			const bool bBmp       = (nBytes >= 2 && pBytes[0] == 'B' && pBytes[1] == 'M');
+
 			std::vector<uint8_t> pixelsBgra;
-			int nTgaWidth = 0, nTgaHeight = 0;
-			if (!DecodeTga(static_cast<const uint8_t*>(tgaFile.Memory()),
-					static_cast<size_t>(tgaFile.Size()), pixelsBgra, nTgaWidth, nTgaHeight))
+			int nImgWidth = 0, nImgHeight = 0;
+			const bool bDecoded = bBmp
+									  ? DecodeBmp(pBytes, nBytes, pixelsBgra, nImgWidth, nImgHeight)
+									  : DecodeTga(pBytes, nBytes, pixelsBgra, nImgWidth, nImgHeight);
+			if (!bDecoded)
 			{
-				CLogWriter::Write("N3Texture - unsupported or corrupt TGA ({})", szFullPath);
+				CLogWriter::Write("N3Texture - unsupported or corrupt image ({})", szFullPath);
 			}
 			else
 			{
-				HRESULT rval = RHIDevice()->CreateTexture(static_cast<UINT>(nTgaWidth),
-					static_cast<UINT>(nTgaHeight), 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_MANAGED,
+				HRESULT rval = RHIDevice()->CreateTexture(static_cast<UINT>(nImgWidth),
+					static_cast<UINT>(nImgHeight), 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_MANAGED,
 					&m_lpTexture);
 				if (rval == D3D_OK && m_lpTexture != nullptr)
 				{
 					D3DLOCKED_RECT LR;
 					m_lpTexture->LockRect(0, &LR, nullptr, 0);
-					for (int row = 0; row < nTgaHeight; ++row)
+					for (int row = 0; row < nImgHeight; ++row)
 					{
 						std::memcpy(static_cast<uint8_t*>(LR.pBits) + static_cast<size_t>(row) * LR.Pitch,
-							&pixelsBgra[static_cast<size_t>(row) * nTgaWidth * 4],
-							static_cast<size_t>(nTgaWidth) * 4);
+							&pixelsBgra[static_cast<size_t>(row) * nImgWidth * 4],
+							static_cast<size_t>(nImgWidth) * 4);
 					}
 					m_lpTexture->UnlockRect(0);
 
-					m_Header.nWidth  = nTgaWidth;
-					m_Header.nHeight = nTgaHeight;
+					m_Header.nWidth  = nImgWidth;
+					m_Header.nHeight = nImgHeight;
 					m_Header.Format  = D3DFMT_A8R8G8B8;
 				}
 				else
 				{
-					CLogWriter::Write("N3Texture - CreateTexture failed for TGA ({})", szFullPath);
+					CLogWriter::Write("N3Texture - CreateTexture failed for image ({})", szFullPath);
 				}
 			}
 		}
