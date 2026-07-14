@@ -1225,11 +1225,15 @@ void RHIDeviceGL::ApplyUniforms(const gltr::FVFLayout& layout)
 	bool bFog = (value != 0);
 	if (bFog)
 	{
-		// Only the linear mode the engine uses is implemented.
+		// The only fog the engine uses is the camera's distance fog (N3Camera::
+		// Apply), which it requests as EXP2 but always pairs with linear
+		// FOGSTART/FOGEND (0.75*far .. far). The shader implements the linear
+		// ramp, so any active fog mode maps onto it - this fades distant terrain
+		// into the horizon instead of leaving a hard far-clip edge.
 		DWORD tableMode = D3DFOG_NONE, vertexMode = D3DFOG_NONE;
 		GetRenderState(D3DRS_FOGTABLEMODE, &tableMode);
 		GetRenderState(D3DRS_FOGVERTEXMODE, &vertexMode);
-		bFog = (tableMode == D3DFOG_LINEAR || vertexMode == D3DFOG_LINEAR);
+		bFog = (tableMode != D3DFOG_NONE || vertexMode != D3DFOG_NONE);
 	}
 	gl::Uniform1i(m_Locs.fogEnable, bFog ? 1 : 0);
 	if (bFog)

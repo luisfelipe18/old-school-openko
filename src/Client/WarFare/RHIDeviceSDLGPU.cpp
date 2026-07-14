@@ -489,7 +489,11 @@ void RHIDeviceSDLGPU::SnapshotUniforms(const gltr::FVFLayout& layout, VSUniforms
 		fs.alphaTest[1] = static_cast<float>(ref & 0xFF) / 255.0f;
 	}
 
-	// --- Fog (linear only, like the GL backend) ---
+	// --- Fog (linear ramp over FOGSTART..FOGEND, like the GL backend) ---
+	// The engine only uses the camera's distance fog: requested as EXP2 but
+	// always paired with linear FOGSTART/FOGEND (0.75*far .. far). The shader
+	// applies the linear ramp, so any active fog mode maps onto it and fades
+	// distant terrain into the horizon instead of a hard far-clip edge.
 	GetRenderState(D3DRS_FOGENABLE, &value);
 	bool bFog = (value != 0);
 	if (bFog)
@@ -497,7 +501,7 @@ void RHIDeviceSDLGPU::SnapshotUniforms(const gltr::FVFLayout& layout, VSUniforms
 		DWORD tableMode = D3DFOG_NONE, vertexMode = D3DFOG_NONE;
 		GetRenderState(D3DRS_FOGTABLEMODE, &tableMode);
 		GetRenderState(D3DRS_FOGVERTEXMODE, &vertexMode);
-		bFog = (tableMode == D3DFOG_LINEAR || vertexMode == D3DFOG_LINEAR);
+		bFog = (tableMode != D3DFOG_NONE || vertexMode != D3DFOG_NONE);
 	}
 	fs.fogParams[2] = bFog ? 1.0f : 0.0f;
 	if (bFog)
