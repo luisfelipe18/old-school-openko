@@ -42,6 +42,14 @@ void CN3Sky::Tick()
 
 void CN3Sky::Render()
 {
+	// The horizon glow is an untextured band that only looks right when it can
+	// blend into the camera's EXP2 distance fog at the far plane. Backends that
+	// don't render that fog (GL / SDL_GPU) would just show it as a hard grey
+	// stripe over the horizon, so skip it there and let terrain meet sky
+	// directly.
+	if (!RHIDevice()->SupportsDistanceFog())
+		return;
+
 	// Set up a rotation matrix to orient the billboard towards the camera.
 	__Matrix44 matWorld;
 	__Vector3 vDir = s_CameraData.vEye - s_CameraData.vAt; // Camera direction

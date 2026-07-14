@@ -127,6 +127,16 @@ struct IRHIDevice
 	// pixel centre, so that -0.5 shifts everything ~1px and misaligns quad edges
 	// (a faint seam plus a slightly-offset HUD). Only the D3D9 backend needs it.
 	virtual bool NeedsHalfPixelOffset() const { return false; }
+
+	// --- Distance fog ---------------------------------------------------------
+	// The camera drives EXP2 distance fog (N3Camera::Apply), and the sky's
+	// horizon glow (CN3Sky) is drawn as an untextured band meant to blend with
+	// that fog at the far plane. Only the D3D9 backend implements EXP2 fog; the
+	// GL / SDL_GPU / Null backends do not, so on them the band has nothing to
+	// blend into and reads as a hard grey stripe across the horizon. Backends
+	// that actually render the camera's distance fog return true so the glow is
+	// only drawn where it belongs.
+	virtual bool SupportsDistanceFog() const { return false; }
 };
 
 #ifndef D3D_OK
