@@ -127,6 +127,13 @@ struct __ResrcInfo
 	int nTexture_Loaded_OtherSize = 0; // Other size
 };
 
+// Sentinel value for __Options::iViewDist meaning "unlimited view distance":
+// the camera far plane is pushed far out and distance fog is disabled, so the
+// terrain draws all the way to where it actually ends instead of being clipped
+// into the horizon haze. See CGameEng::Tick and the F10 view-distance slider.
+inline constexpr int VIEWDIST_INFINITE = 100000;
+inline constexpr int VIEWDIST_MAX      = 8192; // largest finite value the slider offers
+
 struct __Options
 {
 	int iUseShadow        = 1;

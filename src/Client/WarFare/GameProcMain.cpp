@@ -219,6 +219,7 @@ CGameProcMain::~CGameProcMain()
 
 	delete m_pLightMgr;
 	delete m_pGMFont;
+	delete m_pViewDistFont;
 }
 
 void CGameProcMain::Release()
@@ -760,6 +761,7 @@ void CGameProcMain::Render()
 
 	CGameProcedure::Render();      // UI 나 그밖의 기본적인 것들 렌더링..
 	GMPanelRender();               // GM tools overlay (J), drawn on top of the UI
+	ViewDistPanelRender();         // view-distance slider, shown while F10/help is open
 	if (m_pWarMessage)
 		m_pWarMessage->RenderMessage();
 	if (s_pGameCursor)
@@ -1073,6 +1075,131 @@ void CGameProcMain::GMPanelRender()
 		m_pGMFont->DrawText(x, y, dwColor, 0);
 		y += fLineH;
 	}
+	CUIManager::RenderStateRestore();
+}
+
+// ---------------------------------------------------------------------------
+// View-distance slider: shown centred at the bottom of the screen while the
+// Help window (F10) is open. Drag it to set the render distance; the far end
+// of the track means "unlimited" (terrain draws to its real edge instead of
+// clipping into the horizon haze). Available to every player, not just GMs.
+// ---------------------------------------------------------------------------
+namespace
+{
+// The slider track, in logical screen pixels, derived from the viewport.
+RECT ViewDistTrackRect()
+{
+	const int iScreenW = static_cast<int>(CN3Base::s_CameraData.vp.Width);
+	const int iScreenH = static_cast<int>(CN3Base::s_CameraData.vp.Height);
+	constexpr int W = 360, H = 10;
+	const int x = (iScreenW - W) / 2;
+	const int y = iScreenH - 44;
+	return RECT { x, y, x + W, y + H };
+}
+
+// Fraction of the track past which the value snaps to "unlimited".
+constexpr float VIEWDIST_INF_ZONE = 0.96f;
+} // namespace
+
+void CGameProcMain::ViewDistPanelHandleInput()
+{
+	if (m_pUIHelp == nullptr || !m_pUIHelp->IsVisible() || s_pLocalInput == nullptr)
+	{
+		m_bViewDistDragging = false;
+		return;
+	}
+
+	const uint32_t dwFlags = s_pLocalInput->MouseGetFlag();
+	const POINT ptCur      = s_pLocalInput->MouseGetPos();
+	const RECT rcTrack     = ViewDistTrackRect();
+
+	// Grab the handle if a click lands on the track (with a vertical margin so
+	// it's easy to hit); keep following the cursor's X until the button is up.
+	RECT rcHit     = rcTrack;
+	rcHit.top     -= 10;
+	rcHit.bottom  += 10;
+	if ((dwFlags & MOUSE_LBCLICK) && PtInRect(&rcHit, ptCur))
+		m_bViewDistDragging = true;
+	if (!(dwFlags & MOUSE_LBDOWN))
+		m_bViewDistDragging = false;
+
+	if (!m_bViewDistDragging)
+		return;
+
+	const float fTrackW = static_cast<float>(rcTrack.right - rcTrack.left);
+	float f = (static_cast<float>(ptCur.x) - rcTrack.left) / (fTrackW > 1.0f ? fTrackW : 1.0f);
+	f       = std::clamp(f, 0.0f, 1.0f);
+
+	if (f >= VIEWDIST_INF_ZONE)
+	{
+		CN3Base::s_Options.iViewDist = VIEWDIST_INFINITE;
+	}
+	else
+	{
+		const float g = f / VIEWDIST_INF_ZONE; // 0..1 over the finite range
+		int v         = 256 + static_cast<int>(std::lround(g * (VIEWDIST_MAX - 256)));
+		v             = (v / 64) * 64; // snap to 64-unit steps
+		CN3Base::s_Options.iViewDist = std::clamp(v, 256, VIEWDIST_MAX);
+	}
+}
+
+void CGameProcMain::ViewDistPanelRender()
+{
+	if (m_pUIHelp == nullptr || !m_pUIHelp->IsVisible())
+		return;
+
+	if (m_pViewDistFont == nullptr)
+	{
+		const std::string szFontID = fmt::format_text_resource(IDS_FONT_ID);
+		m_pViewDistFont            = new CDFont(szFontID, 13, D3DFONT_BOLD);
+		m_pViewDistFont->InitDeviceObjects(s_lpD3DDev);
+		m_pViewDistFont->RestoreDeviceObjects();
+	}
+
+	const int iViewDist  = CN3Base::s_Options.iViewDist;
+	const bool bInfinite = (iViewDist >= VIEWDIST_INFINITE);
+
+	const RECT rcTrack   = ViewDistTrackRect();
+	const float fTrackW  = static_cast<float>(rcTrack.right - rcTrack.left);
+	const float fTrackH  = static_cast<float>(rcTrack.bottom - rcTrack.top);
+
+	// Handle fraction along the track.
+	float f;
+	if (bInfinite)
+		f = 1.0f;
+	else
+		f = (static_cast<float>(iViewDist - 256) / static_cast<float>(VIEWDIST_MAX - 256)) * VIEWDIST_INF_ZONE;
+
+	// Panel background behind the label + track.
+	GMPanelDrawRect(static_cast<float>(rcTrack.left) - 14.0f, static_cast<float>(rcTrack.top) - 30.0f,
+		fTrackW + 28.0f, 52.0f, D3DCOLOR_ARGB(0xC0, 0x00, 0x00, 0x00));
+
+	// Track base, then the bright filled portion up to the handle.
+	GMPanelDrawRect(static_cast<float>(rcTrack.left), static_cast<float>(rcTrack.top), fTrackW, fTrackH,
+		D3DCOLOR_ARGB(0xFF, 0x40, 0x40, 0x48));
+	const D3DCOLOR crFill = bInfinite ? D3DCOLOR_ARGB(0xFF, 0x80, 0xE0, 0xFF)
+									  : D3DCOLOR_ARGB(0xFF, 0x60, 0xC0, 0x70);
+	GMPanelDrawRect(
+		static_cast<float>(rcTrack.left), static_cast<float>(rcTrack.top), fTrackW * f, fTrackH, crFill);
+
+	// Handle.
+	const float fHandleX = static_cast<float>(rcTrack.left) + fTrackW * f;
+	GMPanelDrawRect(fHandleX - 4.0f, static_cast<float>(rcTrack.top) - 5.0f, 8.0f, fTrackH + 10.0f,
+		D3DCOLOR_ARGB(0xFF, 0xF0, 0xF0, 0xF0));
+
+	// Label above the track.
+	std::string szLabel;
+	if (bInfinite)
+		szLabel = "Distancia de vision: INFINITO  (arrastra / F10)";
+	else
+		szLabel = fmt::format("Distancia de vision: {}  (arrastra / F10)", iViewDist);
+
+	CUIManager::RenderStateSet();
+	const float fTextX = static_cast<float>(rcTrack.left);
+	const float fTextY = static_cast<float>(rcTrack.top) - 24.0f;
+	m_pViewDistFont->SetText(szLabel);
+	m_pViewDistFont->DrawText(fTextX + 1.0f, fTextY + 1.0f, 0xFF000000, 0);
+	m_pViewDistFont->DrawText(fTextX, fTextY, bInfinite ? 0xFF90E0FF : 0xFFFFF080, 0);
 	CUIManager::RenderStateRestore();
 }
 
@@ -1576,6 +1703,8 @@ void CGameProcMain::ProcessLocalInput(uint32_t dwMouseFlags)
 	{
 		this->CommandCameraChange();                 // 카메라 시점 바꾸기..
 	}
+
+	ViewDistPanelHandleInput(); // drag the view-distance slider while F10/help is open
 
 	// 삼인칭일때 홈, 엔드키로 카메로 올리고 내리기..
 	if (s_pEng->ViewPoint() == VP_THIRD_PERSON)

@@ -88,6 +88,13 @@ public:
 	std::vector<int> m_GMPanelIDs;              // NPC IDs shown (matching filter), nearest first
 	std::string m_szGMPanelFilter;             // name search text (e.g. "antares"), lower-case
 
+	// View-distance slider, shown at the bottom of the screen while the Help
+	// window (F10) is open. Lets any player drag the render distance, with the
+	// far end of the track meaning "unlimited" (VIEWDIST_INFINITE). See
+	// GameProcMain.cpp.
+	class CDFont* m_pViewDistFont = nullptr;
+	bool m_bViewDistDragging      = false;
+
 	//..
 	BOOL m_bLoadComplete;         // 로딩이 완료되었나??
 
@@ -345,6 +352,9 @@ public:
 	void GMPanelRebuildList(); // refresh m_GMPanelIDs from the present NPCs, nearest first
 	void GMPanelRender();      // draw the text overlay (from Render)
 	void GMPanelDrawRect(float x, float y, float w, float h, uint32_t color); // translucent bg
+
+	void ViewDistPanelHandleInput(); // slider drag while F10/help is open (from Tick)
+	void ViewDistPanelRender();      // draw the view-distance slider (from Render)
 	void GMPanelTeleportTo(int iNpcID);
 
 	void Init() override;    // UI 와 UI 리소스등을 읽는다.

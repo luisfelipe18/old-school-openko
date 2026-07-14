@@ -70,7 +70,6 @@ public:
 	static class CGameProcLogIn_1098* s_pProcLogIn_1098; // "classic" login scene (moon/character 3D backdrop)
 	static class CGameProcLogIn_1298* s_pProcLogIn_1298; // default login scene
 	static bool s_bUseClassicLoginUI;                    // true once toggled to the 1098 variant
-	static class CDFont* s_pLoginVariantToggleFont;
 
 	static class CGameProcNationSelect* s_pProcNationSelect;
 	static class CGameProcCharacterCreate* s_pProcCharacterCreate;

@@ -84,7 +84,6 @@ CGameProcedure* CGameProcedure::s_pProcLogIn                     = nullptr;
 CGameProcLogIn_1098* CGameProcedure::s_pProcLogIn_1098           = nullptr;
 CGameProcLogIn_1298* CGameProcedure::s_pProcLogIn_1298           = nullptr;
 bool CGameProcedure::s_bUseClassicLoginUI                        = false;
-CDFont* CGameProcedure::s_pLoginVariantToggleFont                = nullptr;
 CGameProcNationSelect* CGameProcedure::s_pProcNationSelect       = nullptr;
 CGameProcCharacterCreate* CGameProcedure::s_pProcCharacterCreate = nullptr;
 CGameProcCharacterSelect* CGameProcedure::s_pProcCharacterSelect = nullptr;
@@ -429,9 +428,7 @@ void CGameProcedure::StaticMemberRelease()
 	s_pProcLogIn_1098 = nullptr;
 	delete s_pProcLogIn_1298;
 	s_pProcLogIn_1298 = nullptr;
-	delete s_pLoginVariantToggleFont;
-	s_pLoginVariantToggleFont = nullptr;
-	s_pProcLogIn              = nullptr; // 로그인 프로시져
+	s_pProcLogIn      = nullptr; // 로그인 프로시져
 	delete s_pProcNationSelect;
 	s_pProcNationSelect = nullptr;    // 나라 선택
 	delete s_pProcCharacterSelect;
@@ -709,16 +706,60 @@ void CGameProcedure::ProcActiveSet(CGameProcedure* pProc)
 
 namespace
 {
-// Bottom-left toggle drawn directly on the two login scenes (no .ksc asset -
-// it only exists here). RenderLines/DFont are the same primitives the rest
-// of the engine uses for screen-space overlays (see CUICmdList's selection
-// border and CPlayerOther's clan nametag).
+// Small square toggle in the bottom-left corner of the two login scenes (no
+// .ksc asset - it only exists here). A filled square whose colour indicates
+// state, no text.
 RECT LoginVariantToggleRect()
 {
-	constexpr int W = 190, H = 22, MARGIN = 10;
-	const int y = static_cast<int>(CN3Base::s_CameraData.vp.Height) - H - MARGIN;
-	RECT rc { MARGIN, y, MARGIN + W, y + H };
+	constexpr int SIZE = 16, MARGIN = 8;
+	const int y = static_cast<int>(CN3Base::s_CameraData.vp.Height) - SIZE - MARGIN;
+	RECT rc { MARGIN, y, MARGIN + SIZE, y + SIZE };
 	return rc;
+}
+
+// Filled screen-space rectangle (same primitive as CGameProcMain::GMPanelDrawRect).
+void FillRect2D(const RECT& rc, D3DCOLOR color)
+{
+	IRHIDevice* pDev = CN3Base::RHIDevice();
+	if (pDev == nullptr)
+		return;
+
+	__VertexTransformedColor v[4] = {
+		{ (float) rc.left,  (float) rc.top,    0.9f, 1.0f, color },
+		{ (float) rc.right, (float) rc.top,    0.9f, 1.0f, color },
+		{ (float) rc.right, (float) rc.bottom, 0.9f, 1.0f, color },
+		{ (float) rc.left,  (float) rc.bottom, 0.9f, 1.0f, color },
+	};
+
+	DWORD dwZ = 0, dwFog = 0, dwAlpha = 0, dwSrc = 0, dwDest = 0, dwFVF = 0, dwCOP = 0, dwCA1 = 0;
+	pDev->GetRenderState(D3DRS_ZENABLE, &dwZ);
+	pDev->GetRenderState(D3DRS_FOGENABLE, &dwFog);
+	pDev->GetRenderState(D3DRS_ALPHABLENDENABLE, &dwAlpha);
+	pDev->GetRenderState(D3DRS_SRCBLEND, &dwSrc);
+	pDev->GetRenderState(D3DRS_DESTBLEND, &dwDest);
+	pDev->GetTextureStageState(0, D3DTSS_COLOROP, &dwCOP);
+	pDev->GetTextureStageState(0, D3DTSS_COLORARG1, &dwCA1);
+	pDev->GetFVF(&dwFVF);
+
+	pDev->SetRenderState(D3DRS_ZENABLE, FALSE);
+	pDev->SetRenderState(D3DRS_FOGENABLE, FALSE);
+	pDev->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+	pDev->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
+	pDev->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+	pDev->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
+	pDev->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_DIFFUSE);
+	pDev->SetFVF(FVF_TRANSFORMEDCOLOR);
+
+	pDev->DrawPrimitiveUP(D3DPT_TRIANGLEFAN, 2, v, sizeof(__VertexTransformedColor));
+
+	pDev->SetRenderState(D3DRS_ZENABLE, dwZ);
+	pDev->SetRenderState(D3DRS_FOGENABLE, dwFog);
+	pDev->SetRenderState(D3DRS_ALPHABLENDENABLE, dwAlpha);
+	pDev->SetRenderState(D3DRS_SRCBLEND, dwSrc);
+	pDev->SetRenderState(D3DRS_DESTBLEND, dwDest);
+	pDev->SetTextureStageState(0, D3DTSS_COLOROP, dwCOP);
+	pDev->SetTextureStageState(0, D3DTSS_COLORARG1, dwCA1);
+	pDev->SetFVF(dwFVF);
 }
 } // namespace
 
@@ -752,22 +793,13 @@ void CGameProcedure::TickLoginVariantToggle()
 
 void CGameProcedure::RenderLoginVariantToggle()
 {
-	if (s_pLoginVariantToggleFont == nullptr)
-	{
-		std::string szFontID      = fmt::format_text_resource(IDS_FONT_ID);
-		s_pLoginVariantToggleFont = new CDFont(szFontID, 12);
-		s_pLoginVariantToggleFont->InitDeviceObjects(s_lpD3DDev);
-		s_pLoginVariantToggleFont->RestoreDeviceObjects();
-	}
-
+	// Small filled square, no text; green when the classic (1098) login is on,
+	// grey when off. Clicking it toggles (TickLoginVariantToggle).
 	const RECT rc          = LoginVariantToggleRect();
-	const D3DCOLOR crState = s_bUseClassicLoginUI ? D3DCOLOR_XRGB(120, 230, 140) : D3DCOLOR_XRGB(190, 190, 190);
-	RenderLines(rc, crState);
-
-	const std::string szLabel = s_bUseClassicLoginUI ? "Classic login: ON" : "Classic login: OFF";
-	s_pLoginVariantToggleFont->SetText(szLabel);
-	s_pLoginVariantToggleFont->DrawText(
-		static_cast<float>(rc.left) + 8.0f, static_cast<float>(rc.top) + 3.0f, crState, 0);
+	const D3DCOLOR crFill  = s_bUseClassicLoginUI ? D3DCOLOR_ARGB(220, 90, 200, 120)
+												  : D3DCOLOR_ARGB(160, 110, 110, 120);
+	FillRect2D(rc, crFill);
+	RenderLines(rc, D3DCOLOR_XRGB(230, 230, 230)); // light border for visibility
 }
 
 void CGameProcedure::ReConnect()

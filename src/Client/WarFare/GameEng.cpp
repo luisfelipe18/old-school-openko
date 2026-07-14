@@ -251,7 +251,20 @@ void CGameEng::Tick(const D3DCOLOR* crDiffuses, // Diffuse 라이트 색깔.. 3 
 			m_fFPDeltaCur = m_fFPDeltaToReach;
 	}
 
-	m_pActiveCam->m_Data.fFP = s_Options.iViewDist * m_fFPDeltaCur;
+	// View distance -> camera far plane. In the unlimited mode the far plane is
+	// pushed way out and distance fog is turned off, so the terrain draws all
+	// the way to its real edge instead of clipping into the horizon haze. (A
+	// finite-but-large value keeps depth precision usable.)
+	if (s_Options.iViewDist >= VIEWDIST_INFINITE)
+	{
+		m_pActiveCam->m_Data.fFP = 16384.0f * m_fFPDeltaCur;
+		m_pActiveCam->m_bFogUse  = FALSE;
+	}
+	else
+	{
+		m_pActiveCam->m_Data.fFP = s_Options.iViewDist * m_fFPDeltaCur;
+		m_pActiveCam->m_bFogUse  = TRUE;
+	}
 
 	m_pActiveCam->m_FogColor = crFog; // 안개색을 맞춘다..
 	m_pActiveCam->Tick();             // 적용및 사면체등등의 값들을 계산..

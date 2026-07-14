@@ -84,12 +84,15 @@ void LoadGameOptions()
 	if (CN3Base::s_Options.iViewColorDepth != 16 && CN3Base::s_Options.iViewColorDepth != 32)
 		CN3Base::s_Options.iViewColorDepth = 32;
 
-	// Load the viewport's draw distance
+	// Load the viewport's draw distance. The historical cap was 512, which
+	// clips the terrain into the horizon haze very close to the player; allow
+	// far larger values (up to VIEWDIST_MAX, or VIEWDIST_INFINITE for the
+	// unlimited mode) so the in-game F10 slider can persist a bigger horizon.
 	CN3Base::s_Options.iViewDist = ini.GetInt("ViewPort", "Distance", 512);
-	if (CN3Base::s_Options.iViewDist < 256)
-		CN3Base::s_Options.iViewDist = 256;
-	if (CN3Base::s_Options.iViewDist > 512)
-		CN3Base::s_Options.iViewDist = 512;
+	if (CN3Base::s_Options.iViewDist >= VIEWDIST_INFINITE)
+		CN3Base::s_Options.iViewDist = VIEWDIST_INFINITE;
+	else
+		CN3Base::s_Options.iViewDist = std::clamp(CN3Base::s_Options.iViewDist, 256, VIEWDIST_MAX);
 
 	// Load the max distance for sound effects
 	CN3Base::s_Options.iEffectSndDist = ini.GetInt("Sound", "Distance", 48);
