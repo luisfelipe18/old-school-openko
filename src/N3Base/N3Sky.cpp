@@ -58,9 +58,34 @@ void CN3Sky::Render()
 	RHIDevice()->SetFVF(
 		FVF_XYZCOLOR); // D3DFVF_XYZ | D3DFVF_DIFFUSE - Spreads the texture around the x, y, z vertices.
 
+	// This band carries its whole shape in the per-vertex colour: the front
+	// quad fades from opaque fog colour at the horizon to fully transparent
+	// above it (the alpha gradient IS the horizon glow). CN3SkyMng::Render
+	// leaves the stage pulling colour/alpha from D3DTA_TEXTURE, but there is no
+	// texture here - an unbound stage samples opaque white, which discards the
+	// alpha gradient and leaves a flat, hard-edged block across the horizon.
+	// Drive both colour and alpha straight from the diffuse vertex colour so the
+	// gradient actually renders; save/restore so the star/moon/sun/cloud drawn
+	// afterwards keep the stage state they expect.
+	DWORD dwColorOp = 0, dwColorArg1 = 0, dwAlphaOp = 0, dwAlphaArg1 = 0;
+	RHIDevice()->GetTextureStageState(0, D3DTSS_COLOROP, &dwColorOp);
+	RHIDevice()->GetTextureStageState(0, D3DTSS_COLORARG1, &dwColorArg1);
+	RHIDevice()->GetTextureStageState(0, D3DTSS_ALPHAOP, &dwAlphaOp);
+	RHIDevice()->GetTextureStageState(0, D3DTSS_ALPHAARG1, &dwAlphaArg1);
+
+	RHIDevice()->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
+	RHIDevice()->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_DIFFUSE);
+	RHIDevice()->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
+	RHIDevice()->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_DIFFUSE);
+
 	// Draws the front and bottom billboard.
 	RHIDevice()->DrawPrimitiveUP(D3DPT_TRIANGLEFAN, 2, m_Bottom, sizeof(m_Bottom[0]));
 	RHIDevice()->DrawPrimitiveUP(D3DPT_TRIANGLEFAN, 2, m_vFronts, sizeof(m_vFronts[0]));
+
+	RHIDevice()->SetTextureStageState(0, D3DTSS_COLOROP, dwColorOp);
+	RHIDevice()->SetTextureStageState(0, D3DTSS_COLORARG1, dwColorArg1);
+	RHIDevice()->SetTextureStageState(0, D3DTSS_ALPHAOP, dwAlphaOp);
+	RHIDevice()->SetTextureStageState(0, D3DTSS_ALPHAARG1, dwAlphaArg1);
 }
 
 void CN3Sky::Init()
