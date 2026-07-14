@@ -8,6 +8,7 @@
 
 #include <spdlog/spdlog.h>
 
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <string>
@@ -446,14 +447,12 @@ RHIDeviceGL::RHIDeviceGL(SDL_Window* pWindow, bool bVSync) : m_pWindow(pWindow)
 	gl::Viewport(0, 0, m_iWinPixelW, m_iWinPixelH);
 	gl::PixelStorei(gl::UNPACK_ALIGNMENT, 1);
 
-	// F9 diagnostics (docs/PORT_POSIX_PLAN.md): the reported "faint vertical
-	// line / HUD slightly off the top-left corner" would surface as a mismatch
-	// between the option resolution, the window's logical (points) size and its
-	// framebuffer (pixels) size. The engine assumes all three are equal (no
-	// Hi-DPI); log them so a Retina Mac that disagrees is obvious in the client
-	// log without needing a debugger.
+	// HiDPI: the engine works in logical (points) coordinates; everything the
+	// device applies to the window framebuffer is scaled by this density.
 	int wPoints = 0, hPoints = 0;
 	SDL_GetWindowSize(pWindow, &wPoints, &hPoints);
+	if (wPoints > 0 && m_iWinPixelW > 0)
+		m_fPixelDensity = static_cast<float>(m_iWinPixelW) / static_cast<float>(wPoints);
 	spdlog::info(
 		"RHIDeviceGL geometry: option={}x{} window(points)={}x{} framebuffer(pixels)={}x{} "
 		"displayScale={:.3f} pixelDensity={:.3f}",
@@ -647,10 +646,11 @@ void RHIDeviceGL::SeedD3DDefaults()
 		SetSamplerState(stage, D3DSAMP_BORDERCOLOR, 0);
 	}
 
-	// Default viewport: the whole window (what D3D gives a fresh device).
+	// Default viewport: the whole window (what D3D gives a fresh device),
+	// recorded in logical units like every game SetViewport call.
 	D3DVIEWPORT9 viewport = {};
-	viewport.Width        = static_cast<DWORD>(m_iWinPixelW);
-	viewport.Height       = static_cast<DWORD>(m_iWinPixelH);
+	viewport.Width  = static_cast<DWORD>(std::lround(m_iWinPixelW / m_fPixelDensity));
+	viewport.Height = static_cast<DWORD>(std::lround(m_iWinPixelH / m_fPixelDensity));
 	viewport.MinZ         = 0.0f;
 	viewport.MaxZ         = 1.0f;
 	SetViewport(&viewport);
@@ -691,7 +691,12 @@ HRESULT RHIDeviceGL::Present()
 	// toggle, window-manager resizes); the cached pixel size feeds the
 	// Y-flip in SetViewport/SetScissorRect and the RHW mapping, so refresh
 	// it once per frame rather than trusting the size captured at init.
+	// The pixel density can change too (window dragged between displays).
 	SDL_GetWindowSizeInPixels(m_pWindow, &m_iWinPixelW, &m_iWinPixelH);
+	int wPoints = 0, hPoints = 0;
+	SDL_GetWindowSize(m_pWindow, &wPoints, &hPoints);
+	if (wPoints > 0 && m_iWinPixelW > 0)
+		m_fPixelDensity = static_cast<float>(m_iWinPixelW) / static_cast<float>(wPoints);
 
 	return RHIDeviceNull::Present(); // keep the present counter for diagnostics
 }
@@ -1036,9 +1041,15 @@ void RHIDeviceGL::ApplyFixedState()
 	GetRenderState(D3DRS_SCISSORTESTENABLE, &value);
 	if (value)
 	{
-		const RECT rc = ScissorRect();
+		// Scissor rects come from the engine in logical units.
+		const RECT rc        = ScissorRect();
+		const float fDensity = TargetDensity();
+		const auto iLeft     = static_cast<gl::Int>(std::lround(rc.left * fDensity));
+		const auto iRight    = static_cast<gl::Int>(std::lround(rc.right * fDensity));
+		const auto iTop      = static_cast<gl::Int>(std::lround(rc.top * fDensity));
+		const auto iBottom   = static_cast<gl::Int>(std::lround(rc.bottom * fDensity));
 		gl::Enable(gl::SCISSOR_TEST);
-		gl::Scissor(rc.left, m_iWinPixelH - rc.bottom, rc.right - rc.left, rc.bottom - rc.top);
+		gl::Scissor(iLeft, m_iWinPixelH - iBottom, iRight - iLeft, iBottom - iTop);
 	}
 	else
 	{
@@ -1048,24 +1059,31 @@ void RHIDeviceGL::ApplyFixedState()
 
 void RHIDeviceGL::ApplyViewport(bool bPreTransformed)
 {
+	const float fDensity = TargetDensity();
+
 	if (bPreTransformed)
 	{
-		// XYZRHW vertices are already in render-target pixels; D3D applies no
-		// viewport transform to them, so map through the full window.
+		// XYZRHW vertices are in logical units; D3D applies no viewport
+		// transform to them, so map through the full window: the shader
+		// divides by the LOGICAL size while the GL viewport covers the whole
+		// PHYSICAL framebuffer, which is exactly the HiDPI upscale.
 		gl::Viewport(0, 0, m_iWinPixelW, m_iWinPixelH);
 		gl::DepthRange(0.0, 1.0);
 		if (m_Locs.viewportSize >= 0)
-			gl::Uniform2f(m_Locs.viewportSize, static_cast<float>(m_iWinPixelW),
-				static_cast<float>(m_iWinPixelH));
+			gl::Uniform2f(m_Locs.viewportSize, static_cast<float>(m_iWinPixelW) / fDensity,
+				static_cast<float>(m_iWinPixelH) / fDensity);
 		return;
 	}
 
+	// The recorded D3D viewport is logical; the GL viewport is physical.
 	D3DVIEWPORT9 vp = {};
 	GetViewport(&vp);
+	const auto x = static_cast<gl::Int>(std::lround(vp.X * fDensity));
+	const auto w = static_cast<gl::Sizei>(std::lround(vp.Width * fDensity));
+	const auto h = static_cast<gl::Sizei>(std::lround(vp.Height * fDensity));
 	const gl::Int y =
-		m_iWinPixelH - static_cast<gl::Int>(vp.Y) - static_cast<gl::Int>(vp.Height);
-	gl::Viewport(static_cast<gl::Int>(vp.X), y, static_cast<gl::Sizei>(vp.Width),
-		static_cast<gl::Sizei>(vp.Height));
+		m_iWinPixelH - static_cast<gl::Int>(std::lround(vp.Y * fDensity)) - static_cast<gl::Int>(h);
+	gl::Viewport(x, y, w, h);
 	gl::DepthRange(vp.MinZ, vp.MaxZ);
 }
 

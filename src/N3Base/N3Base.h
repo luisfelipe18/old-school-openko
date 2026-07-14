@@ -200,6 +200,13 @@ public:
 	static float s_fFrmPerSec;               // Frame Per Second
 	static float s_fSecPerFrm;               // Second Per Frame = 1.0f/s_fFrmPerSec (Dino가 추가)
 
+	// HiDPI/Retina: physical framebuffer pixels per logical unit (1.0 on
+	// standard displays, 2.0 on Retina). The whole engine works in logical
+	// coordinates; the RHI backends scale to the framebuffer, and DFont
+	// rasterizes glyphs at this density so text is sharp at native
+	// resolution. Set once at startup from the real window.
+	static float s_fPixelDensity;
+
 #ifdef _N3GAME                               // 게임이 아닌 툴에서는 필요없다...
 	static CN3SndMgr s_SndMgr;
 #endif

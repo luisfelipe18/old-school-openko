@@ -63,7 +63,15 @@ public:
 	static class CUILoading* s_pUILoading;           // 로딩바..
 	static class CUIMessageBoxManager* s_pMsgBoxMgr; // MessageBox Manager
 
-	static class CGameProcLogIn* s_pProcLogIn;
+	// The login scene the game is currently showing/will return to. Both
+	// variants are always instantiated (below); this points at whichever is
+	// active, and is retyped to the common base so it can point at either.
+	static class CGameProcedure* s_pProcLogIn;
+	static class CGameProcLogIn_1098* s_pProcLogIn_1098; // "classic" login scene (moon/character 3D backdrop)
+	static class CGameProcLogIn_1298* s_pProcLogIn_1298; // default login scene
+	static bool s_bUseClassicLoginUI;                    // true once toggled to the 1098 variant
+	static class CDFont* s_pLoginVariantToggleFont;
+
 	static class CGameProcNationSelect* s_pProcNationSelect;
 	static class CGameProcCharacterCreate* s_pProcCharacterCreate;
 	static class CGameProcCharacterSelect* s_pProcCharacterSelect;
@@ -110,6 +118,18 @@ public:
 
 	static void ProcActiveSet(CGameProcedure* pProc);
 	static void ReConnect();
+
+	// Overridden by CGameProcLogIn_1098/_1298 (no-op elsewhere); called
+	// generically through s_pProcLogIn when a server connection closes.
+	virtual void ResetGameConnectionAttemptTimer()
+	{
+	}
+
+	// Bottom-left toggle on the login scenes that swaps between the two
+	// login variants (1298 default / 1098 classic) at runtime.
+	static void ToggleLoginVariant();
+	static void TickLoginVariantToggle();
+	static void RenderLoginVariantToggle();
 
 	static void ReportServerConnectionFailed(const std::string& szServerName, int iErrCode, bool bNeedQuitGame);
 	static void ReportServerConnectionClosed(bool bNeedQuitGame);

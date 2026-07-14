@@ -3,7 +3,9 @@
 
 #pragma once
 
-// Override the login scene
+// Which login scene shows on startup. Both variants are always compiled in;
+// a small toggle in the bottom-left corner of the login scene lets the
+// player switch between them at runtime, so this only picks the default.
 // Supported values: 1098, 1298
 #define LOGIN_SCENE_VERSION 1298
 

@@ -3,7 +3,6 @@
 
 #pragma once
 
-#if defined(LOGIN_SCENE_VERSION) && LOGIN_SCENE_VERSION == 1098
 #include <string>
 #include <vector>
 
@@ -103,7 +102,5 @@ public:
 	CUILogIn_1098();
 	~CUILogIn_1098() override;
 };
-
-#endif
 
 #endif // CLIENT_WARFARE_UILOGIN_1098_H

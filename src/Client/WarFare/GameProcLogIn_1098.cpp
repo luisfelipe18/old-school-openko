@@ -5,7 +5,6 @@
 #include <Platform/PlatformString.h> // lstrcpy / lstrcat
 #endif
 
-#if defined(LOGIN_SCENE_VERSION) && LOGIN_SCENE_VERSION == 1098
 #include "GameProcLogIn_1098.h"
 #include "GameEng.h"
 #include "UILogin_1098.h"
@@ -223,6 +222,8 @@ void CGameProcLogIn_1098::Tick() // 프로시져 인덱스를 리턴한다. 0 �
 		if (s_pSnd_BGM != nullptr)
 			s_pSnd_BGM->Stop();
 	}
+
+	TickLoginVariantToggle();
 }
 
 void CGameProcLogIn_1098::Render()
@@ -275,6 +276,7 @@ void CGameProcLogIn_1098::Render()
 	m_pChr->Render();               // 캐릭터 그리기...
 
 	CGameProcedure::Render();       // UI 나 그밖의 기본적인 것들 렌더링..
+	RenderLoginVariantToggle();
 
 	s_pEng->RHIDevice()->EndScene(); // 씬 렌더 시작...
 	s_pEng->Present(CN3Base::s_hWndBase);
@@ -553,4 +555,3 @@ void CGameProcLogIn_1098::ConnectToGameServer() // 고른 게임 서버에 접�
 		MsgSend_VersionCheck();
 	}
 }
-#endif

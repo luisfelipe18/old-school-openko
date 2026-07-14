@@ -50,6 +50,7 @@ public:
 	uint32_t m_dwReserved;
 
 	bool m_bVisible;
+	int m_iGlowLevel = 0;
 
 protected:
 	CN3Texture* m_pTexRef;
@@ -129,6 +130,7 @@ class CN3CPlugBase : public CN3BaseFileAccess
 public:
 	e_PlugType m_ePlugType;
 	bool m_bVisible;
+	int m_iGlowLevel = 0;
 	int m_nJointIndex;     // 붙는 Mesh 의 Joint Index.. 어느 조인트에 붙느냐.. 그것이 문제로다...
 	__Vector3 m_vPosition; // 붙는 Mesh 의 Offset Vector.
 	__Vector3 m_vScale;    // 붙는 Mesh 의 스케일.

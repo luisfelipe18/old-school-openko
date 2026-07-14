@@ -688,6 +688,9 @@ void CGameProcCharacterSelect::AddChrPart(
 		else
 			pPart->TexOverlapSet("");
 	}
+
+	if (pPart)
+		pPart->m_iGlowLevel = ItemUpgradeGlowLevel(pItemExt);
 }
 
 void CGameProcCharacterSelect::MsgRecv_DeleteChr(Packet& pkt)

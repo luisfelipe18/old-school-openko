@@ -24,6 +24,34 @@ const float CHR_LOD_CALCULATION_VALUES[MAX_CHR_LOD_DELTA][MAX_CHR_LOD] = {
 	//	{ 1.0f, 2.0f, 6.0f, 16.0f }
 };
 
+// Upgrade glow (+7 blinks, +8/+9/+10 shine progressively brighter). The value
+// is the emissive boost fed into the MODULATE2X main pass, so the perceived
+// brightness gain is roughly twice this on top of the scene lighting.
+static float GlowEmissiveBoost(int iGlowLevel)
+{
+	float fBoost = 0.0f;
+	switch (iGlowLevel)
+	{
+		case 7: // blinks: ramps from zero up to +15% brightness and back
+		{
+			float fPhase  = fmodf(CN3Base::TimeGet(), 1.6f) / 1.6f; // 0..1
+			float fTri    = (fPhase < 0.5f) ? (fPhase * 2.0f) : (2.0f - fPhase * 2.0f);
+			fBoost        = 0.075f * fTri;
+			break;
+		}
+		case 8: // steady +35%
+			fBoost = 0.175f;
+			break;
+		case 9: // steady +70%
+			fBoost = 0.35f;
+			break;
+		default: // +10: steady +110%
+			fBoost = (iGlowLevel >= 10) ? 0.55f : 0.0f;
+			break;
+	}
+	return fBoost;
+}
+
 CN3CPartSkins::CN3CPartSkins()
 {
 	m_dwType |= OBJ_CHARACTER_PART_SKINS;
@@ -208,14 +236,48 @@ void CN3CPart::Render(int nLOD)
 		RHIDevice()->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
 	}
 
-	RHIDevice()->SetMaterial(&m_Mtl);
 	IRHITexture* lpTex      = nullptr;
 	bool bUseTwoUV           = false;
 	if (m_pTexRef)
 		lpTex = m_pTexRef->Get();
+
+	// Upgrade glow: brighten the item itself instead of overlaying a white
+	// sheet. With the texture bound, halve diffuse/ambient and render with
+	// MODULATE2X so the final color is tex * (lighting + 2 * boost) - the
+	// texture keeps its detail and can exceed its fully lit brightness.
+	float fGlow = GlowEmissiveBoost(m_iGlowLevel);
+	_D3DMATERIAL9 mtlGlow;
+	if (fGlow > 0.0f)
+	{
+		mtlGlow = m_Mtl;
+		if (lpTex)
+		{
+			mtlGlow.Diffuse.r  *= 0.5f;
+			mtlGlow.Diffuse.g  *= 0.5f;
+			mtlGlow.Diffuse.b  *= 0.5f;
+			mtlGlow.Ambient.r  *= 0.5f;
+			mtlGlow.Ambient.g  *= 0.5f;
+			mtlGlow.Ambient.b  *= 0.5f;
+			mtlGlow.Emissive.r += fGlow;
+			mtlGlow.Emissive.g += fGlow;
+			mtlGlow.Emissive.b += fGlow * 0.9f;
+		}
+		else
+		{
+			mtlGlow.Emissive.r += fGlow * 2.0f;
+			mtlGlow.Emissive.g += fGlow * 2.0f;
+			mtlGlow.Emissive.b += fGlow * 1.8f;
+		}
+		RHIDevice()->SetMaterial(&mtlGlow);
+	}
+	else
+	{
+		RHIDevice()->SetMaterial(&m_Mtl);
+	}
+
 	if (lpTex)
 	{
-		RHIDevice()->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_MODULATE);
+		RHIDevice()->SetTextureStageState(0, D3DTSS_COLOROP, fGlow > 0.0f ? D3DTOP_MODULATE2X : D3DTOP_MODULATE);
 		RHIDevice()->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TEXTURE);
 		RHIDevice()->SetTextureStageState(0, D3DTSS_COLORARG2, D3DTA_DIFFUSE);
 		RHIDevice()->SetTexture(0, lpTex);
@@ -241,6 +303,9 @@ void CN3CPart::Render(int nLOD)
 	}
 
 	m_pSkinsRef->m_Skins[nLOD].Render(bUseTwoUV);
+
+	if (fGlow > 0.0f && lpTex)
+		RHIDevice()->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_MODULATE);
 
 	if (bUseTwoUV)
 	{
@@ -388,14 +453,48 @@ void CN3CPlugBase::Render(const __Matrix44& mtxParent, const __Matrix44& mtxJoin
 	mtx *= mtxParent;
 	RHIDevice()->SetTransform(D3DTS_WORLD, mtx.toD3D());
 
-	RHIDevice()->SetMaterial(&m_Mtl);
 	IRHITexture* lpTex      = nullptr;
 	bool bUseTwoUV           = false;
 	if (m_pTexRef)
 		lpTex = m_pTexRef->Get();
+
+	// Upgrade glow: brighten the item itself instead of overlaying a white
+	// sheet. With the texture bound, halve diffuse/ambient and render with
+	// MODULATE2X so the final color is tex * (lighting + 2 * boost) - the
+	// texture keeps its detail and can exceed its fully lit brightness.
+	float fGlow = GlowEmissiveBoost(m_iGlowLevel);
+	_D3DMATERIAL9 mtlGlow;
+	if (fGlow > 0.0f)
+	{
+		mtlGlow = m_Mtl;
+		if (lpTex)
+		{
+			mtlGlow.Diffuse.r  *= 0.5f;
+			mtlGlow.Diffuse.g  *= 0.5f;
+			mtlGlow.Diffuse.b  *= 0.5f;
+			mtlGlow.Ambient.r  *= 0.5f;
+			mtlGlow.Ambient.g  *= 0.5f;
+			mtlGlow.Ambient.b  *= 0.5f;
+			mtlGlow.Emissive.r += fGlow;
+			mtlGlow.Emissive.g += fGlow;
+			mtlGlow.Emissive.b += fGlow * 0.9f;
+		}
+		else
+		{
+			mtlGlow.Emissive.r += fGlow * 2.0f;
+			mtlGlow.Emissive.g += fGlow * 2.0f;
+			mtlGlow.Emissive.b += fGlow * 1.8f;
+		}
+		RHIDevice()->SetMaterial(&mtlGlow);
+	}
+	else
+	{
+		RHIDevice()->SetMaterial(&m_Mtl);
+	}
+
 	if (lpTex)
 	{
-		RHIDevice()->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_MODULATE);
+		RHIDevice()->SetTextureStageState(0, D3DTSS_COLOROP, fGlow > 0.0f ? D3DTOP_MODULATE2X : D3DTOP_MODULATE);
 		RHIDevice()->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TEXTURE);
 		RHIDevice()->SetTextureStageState(0, D3DTSS_COLORARG2, D3DTA_DIFFUSE);
 		RHIDevice()->SetTexture(0, lpTex);
@@ -430,6 +529,9 @@ void CN3CPlugBase::Render(const __Matrix44& mtxParent, const __Matrix44& mtxJoin
 		m_PMeshInst.RenderTwoUV();
 	else
 		m_PMeshInst.Render();
+
+	if (fGlow > 0.0f && lpTex)
+		RHIDevice()->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_MODULATE);
 
 	if (bUseTwoUV) // 텍스처 스테이지 두개로 렌더링한다...!!
 	{

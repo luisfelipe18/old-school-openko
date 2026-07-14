@@ -1763,6 +1763,8 @@ CN3CPlugBase* CPlayerBase::PlugSet(e_PlugPosition ePos, const std::string& szFN,
 	if (pPlug && nullptr == pItemBasic && nullptr == pItemExt)
 		pPlug->TexOverlapSet(""); // 기본 착용이면..
 
+	pPlug->m_iGlowLevel = ItemUpgradeGlowLevel(pItemExt);
+
 	//////////////////////////////////////////////////////////////////////////////////////////////////////////
 	//
 	// plug 효과 붙여라..^^
@@ -1937,6 +1939,9 @@ CN3CPart* CPlayerBase::PartSet(e_PartPosition ePos, const std::string& szFN, __T
 
 	if (pPart && nullptr == pItemBasic && nullptr == pItemExt)
 		pPart->TexOverlapSet(""); // 기본 착용이면..
+
+	if (pPart)
+		pPart->m_iGlowLevel = ItemUpgradeGlowLevel(pItemExt);
 
 	return pPart;
 }

@@ -830,6 +830,7 @@ HRESULT CDFont::SetFontColor(uint32_t dwColor)
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <filesystem>
 #include <vector>
 
@@ -931,17 +932,27 @@ FT_Face SharedFace()
 }
 
 // Points -> pixels at the fixed 96 DPI the Windows path uses (MulDiv(h,96,72)).
-FT_Face SizedFace(uint32_t dwFontHeight)
+// fScale rasterizes the face larger for HiDPI atlases (glyphs at physical
+// pixel density, quads drawn at logical size).
+FT_Face SizedFace(uint32_t dwFontHeight, float fScale = 1.0f)
 {
 	FT_Face pFace = SharedFace();
 	if (pFace == nullptr || dwFontHeight == 0)
 		return nullptr;
 
-	if (FT_Set_Char_Size(pFace, 0, static_cast<FT_F26Dot6>(dwFontHeight) * 64, FONT_DPI, FONT_DPI)
-		!= 0)
+	const auto charSize =
+		static_cast<FT_F26Dot6>(std::lround(static_cast<double>(dwFontHeight) * 64.0 * fScale));
+	if (FT_Set_Char_Size(pFace, 0, charSize, FONT_DPI, FONT_DPI) != 0)
 		return nullptr;
 
 	return pFace;
+}
+
+// HiDPI atlas scale: rasterize glyphs at the framebuffer's pixel density so
+// text is sharp at native resolution (1.0 on standard displays).
+float AtlasScale()
+{
+	return (CN3Base::s_fPixelDensity > 1.0f) ? CN3Base::s_fPixelDensity : 1.0f;
 }
 
 int LineHeight(FT_Face pFace)
@@ -1079,11 +1090,13 @@ std::u32string DecodeGameText(std::string_view szText)
 	return codepoints;
 }
 
+// Unhinted metrics to match the unhinted rasterization below; the fractional
+// advance is rounded (not truncated) so long runs don't squeeze together.
 int GlyphAdvance(FT_Face pFace, char32_t cp)
 {
-	if (FT_Load_Char(pFace, cp, FT_LOAD_DEFAULT) != 0)
+	if (FT_Load_Char(pFace, cp, FT_LOAD_DEFAULT | FT_LOAD_NO_HINTING) != 0)
 		return 0;
-	return static_cast<int>(pFace->glyph->advance.x >> 6);
+	return static_cast<int>((pFace->glyph->advance.x + 32) >> 6);
 }
 
 // Extent of the text as one line with '\n' stripped - the exact measure GDI's
@@ -1226,7 +1239,10 @@ HRESULT CDFont::SetText(const std::string& szText, uint32_t dwFlags)
 		return S_OK;
 	}
 
-	FT_Face pFace = SizedFace(m_dwFontHeight);
+	// HiDPI: the atlas is rasterized at physical pixel density and the quads
+	// are drawn at logical size (divided back by m_fTextScale below).
+	const float fAtlasScale = AtlasScale();
+	FT_Face pFace           = SizedFace(m_dwFontHeight, fAtlasScale);
 	if (pFace == nullptr || RHIDevice() == nullptr)
 		return E_FAIL;
 
@@ -1248,8 +1264,10 @@ HRESULT CDFont::SetText(const std::string& szText, uint32_t dwFlags)
 		iHalfCJK = size.cy;
 	iHalfCJK           = iHalfCJK / 2 + (iHalfCJK % 2);
 
-	const int iTexSizes[7] = { 32, 64, 128, 256, 512, 1024, 2048 };
-	m_dwTexWidth = m_dwTexHeight = iTexSizes[6];
+	// 4096 gives the HiDPI atlas headroom (glyphs cover 4x the texels at 2x
+	// density); every RHI backend guarantees at least 4096.
+	const int iTexSizes[8] = { 32, 64, 128, 256, 512, 1024, 2048, 4096 };
+	m_dwTexWidth = m_dwTexHeight = iTexSizes[7];
 	for (const int iTexSize : iTexSizes)
 	{
 		if (iExtent <= (iTexSize - iHalfCJK - size.cy - 1) * iTexSize)
@@ -1258,7 +1276,7 @@ HRESULT CDFont::SetText(const std::string& szText, uint32_t dwFlags)
 			break;
 		}
 	}
-	m_fTextScale = 1.0f; // s_DevCaps.MaxTextureWidth (4096) always fits 2048
+	m_fTextScale = fAtlasScale; // quads shrink the atlas back to logical size
 
 	// Recreate the texture only when the required size changed.
 	if (m_pTexture != nullptr)
@@ -1275,7 +1293,7 @@ HRESULT CDFont::SetText(const std::string& szText, uint32_t dwFlags)
 	if (m_pTexture == nullptr)
 	{
 		const HRESULT hr = RHIDevice()->CreateTexture(m_dwTexWidth, m_dwTexHeight, 1, 0,
-			D3DFMT_A4R4G4B4, D3DPOOL_MANAGED, &m_pTexture);
+			D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, &m_pTexture);
 		if (FAILED(hr))
 			return hr;
 	}
@@ -1308,8 +1326,9 @@ HRESULT CDFont::SetText(const std::string& szText, uint32_t dwFlags)
 		const float tx2     = static_cast<float>(x) / m_dwTexWidth;
 		const float ty2     = static_cast<float>(y + iLineHeight) / m_dwTexHeight;
 
-		const float w       = (tx2 - tx1) * m_dwTexWidth;
-		const float h       = (ty2 - ty1) * m_dwTexHeight;
+		// Atlas texels -> logical screen units (HiDPI shrinks by the density).
+		const float w       = (tx2 - tx1) * m_dwTexWidth / m_fTextScale;
+		const float h       = (ty2 - ty1) * m_dwTexHeight / m_fTextScale;
 
 		// D3D9-only half-pixel offset (see IRHIDevice::NeedsHalfPixelOffset).
 		const float fHP     = (RHIDevice() != nullptr && RHIDevice()->NeedsHalfPixelOffset()) ? 0.5f : 0.0f;
@@ -1345,7 +1364,7 @@ HRESULT CDFont::SetText(const std::string& szText, uint32_t dwFlags)
 			EmitRun();
 			sx     = x;
 			vtx_sx = 0.0f;
-			vtx_sy += static_cast<float>(iLineHeight);
+			vtx_sy += static_cast<float>(iLineHeight) / m_fTextScale;
 			continue;
 		}
 
@@ -1363,7 +1382,9 @@ HRESULT CDFont::SetText(const std::string& szText, uint32_t dwFlags)
 		}
 
 		// Rasterize the glyph at the pen, clipped to the texture.
-		if (FT_Load_Char(pFace, cp, FT_LOAD_RENDER) == 0)
+		// Unhinted rendering: keeps the glyph's true outline (macOS-style
+		// smoothing) instead of snapping stems to the pixel grid.
+		if (FT_Load_Char(pFace, cp, FT_LOAD_RENDER | FT_LOAD_NO_HINTING) == 0)
 		{
 			const FT_GlyphSlot pGlyph = pFace->glyph;
 			const FT_Bitmap& bitmap   = pGlyph->bitmap;
@@ -1391,20 +1412,21 @@ HRESULT CDFont::SetText(const std::string& szText, uint32_t dwFlags)
 	}
 	EmitRun();
 
-	// Upload: 4-bit alpha, white RGB - the exact A4R4G4B4 packing GDI used.
+	// Upload: full 8-bit alpha, white RGB (A8R8G8B8). The historical GDI path
+	// packed A4R4G4B4 (16 alpha levels), which visibly banded the AA edges.
 	D3DLOCKED_RECT lr {};
 	if (SUCCEEDED(m_pTexture->LockRect(0, &lr, nullptr, 0)))
 	{
 		for (uint32_t row = 0; row < m_dwTexHeight; ++row)
 		{
-			auto* pDst16 = reinterpret_cast<uint16_t*>(static_cast<uint8_t*>(lr.pBits)
+			auto* pDst32 = reinterpret_cast<uint32_t*>(static_cast<uint8_t*>(lr.pBits)
 													   + static_cast<size_t>(row) * lr.Pitch);
 			for (uint32_t col = 0; col < m_dwTexWidth; ++col)
 			{
-				const uint8_t byAlpha = alphaMap[static_cast<size_t>(row) * m_dwTexWidth + col]
-										>> 4;
-				pDst16[col] = (byAlpha > 0) ? static_cast<uint16_t>((byAlpha << 12) | 0x0fff)
-											: static_cast<uint16_t>(0);
+				const uint8_t byAlpha = alphaMap[static_cast<size_t>(row) * m_dwTexWidth + col];
+				pDst32[col] = (byAlpha > 0)
+								  ? ((static_cast<uint32_t>(byAlpha) << 24) | 0x00ffffffu)
+								  : 0u;
 			}
 		}
 		m_pTexture->UnlockRect(0);
@@ -1493,7 +1515,12 @@ HRESULT CDFont::DrawText(FLOAT sx, FLOAT sy, uint32_t dwColor, uint32_t dwFlags)
 	pDevice->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_TEXTURE);
 	pDevice->SetTextureStageState(0, D3DTSS_ALPHAARG2, D3DTA_DIFFUSE);
 
-	const DWORD dwFilter = (dwFlags & D3DFONT_FILTERED) ? D3DTEXF_LINEAR : D3DTEXF_POINT;
+	// HiDPI atlases sample linearly: the quad-to-texel mapping is only exactly
+	// 1:1 when the density is integral and positions align, and linear costs
+	// nothing when it is (samples land on texel centers).
+	const DWORD dwFilter = ((dwFlags & D3DFONT_FILTERED) || m_fTextScale != 1.0f)
+							   ? D3DTEXF_LINEAR
+							   : D3DTEXF_POINT;
 	pDevice->SetSamplerState(0, D3DSAMP_MINFILTER, dwFilter);
 	pDevice->SetSamplerState(0, D3DSAMP_MAGFILTER, dwFilter);
 
@@ -1524,7 +1551,10 @@ BOOL CDFont::GetTextExtent(const std::string& szString, int iStrLen, SIZE* pSize
 	if (pSize == nullptr)
 		return FALSE;
 
-	FT_Face pFace = SizedFace(m_dwFontHeight);
+	// Measure at the HiDPI atlas density and convert back to logical units so
+	// the reported extent matches the quads SetText actually emits.
+	const float fAtlasScale = AtlasScale();
+	FT_Face pFace           = SizedFace(m_dwFontHeight, fAtlasScale);
 	if (pFace == nullptr)
 	{
 		// No font: report zero width so word-wrap degrades like the T6.8 stub.
@@ -1538,7 +1568,9 @@ BOOL CDFont::GetTextExtent(const std::string& szString, int iStrLen, SIZE* pSize
 
 	const std::u32string codepoints =
 		DecodeGameText(std::string_view(szString).substr(0, static_cast<size_t>(iStrLen)));
-	*pSize = MeasureStripped(pFace, codepoints);
+	const SIZE physical = MeasureStripped(pFace, codepoints);
+	pSize->cx           = static_cast<LONG>(std::lround(physical.cx / fAtlasScale));
+	pSize->cy           = static_cast<LONG>(std::lround(physical.cy / fAtlasScale));
 	return TRUE;
 }
 
